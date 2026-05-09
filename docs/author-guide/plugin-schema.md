@@ -1,6 +1,6 @@
 # Plugin Schema Reference
 
-Plugin manifests (`.github/plugin/plugin.json`) define a Copilot plugin — a bundle of prompts, instructions, chat modes, agents, and skills — in the format introduced by [`github/awesome-copilot` PR #717](https://github.com/github/awesome-copilot/pull/717). Prompt Registry consumes this format alongside the older `.collection.yml` format, and extends it with MCP server support and display preferences.
+Plugin manifests (`.github/plugin/plugin.json`) define a Copilot plugin — a bundle of prompts, instructions, agents, and skills — in the format introduced by [`github/awesome-copilot` PR #717](https://github.com/github/awesome-copilot/pull/717). Prompt Registry consumes this format alongside the older `.collection.yml` format, and extends it with MCP server support and display preferences.
 
 Source of truth: [`schemas/plugin.schema.json`](../../schemas/plugin.schema.json).
 
@@ -46,8 +46,7 @@ my-plugin/
     { "kind": "skill",       "path": "./skills/resource-health" },
     { "kind": "agent",       "path": "./agents/architect.md" },
     { "kind": "prompt",      "path": "./prompts/review.prompt.md" },
-    { "kind": "instruction", "path": "./instructions/style.instructions.md" },
-    { "kind": "chat-mode",   "path": "./chatmodes/debug.chatmode.md" }
+    { "kind": "instruction", "path": "./instructions/style.instructions.md" }
   ],
 
   // B) Upstream awesome-copilot arrays (directory-based)
@@ -99,7 +98,6 @@ my-plugin/
 |--------|-----------------------------------------|--------------|
 | `prompt` | `prompt` | `./prompts/*.prompt.md` |
 | `instruction` | `instructions` | `./instructions/*.instructions.md` |
-| `chat-mode` | `chatmode` | `./chatmodes/*.chatmode.md` |
 | `agent` | `agent` | `./agents/*.md` or `./agents/<name>/AGENT.md` |
 | `skill` | `skill` | `./skills/<name>/SKILL.md` |
 

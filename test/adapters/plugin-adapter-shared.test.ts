@@ -132,7 +132,7 @@ suite('plugin-adapter-shared', () => {
 
   suite('calculateBreakdown()', () => {
     test('counts items by kind', () => {
-      const items: PluginItem[] = [
+      const items = [
         { kind: 'agent', path: './agents/a.md' },
         { kind: 'skill', path: './skills/s' },
         { kind: 'skill', path: './skills/s2' },

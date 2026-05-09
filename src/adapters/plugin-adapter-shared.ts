@@ -60,7 +60,7 @@ export interface PluginManifest {
 }
 
 export interface PluginItem {
-  kind: 'agent' | 'skill' | 'prompt' | 'instruction' | 'chat-mode';
+  kind: 'agent' | 'skill' | 'prompt' | 'instruction';
   path: string;
 }
 
@@ -142,7 +142,7 @@ export function extractMcpServers(manifest: PluginManifest): Record<string, unkn
  * @param items
  * @param mcpServers
  */
-export function calculateBreakdown(items: PluginItem[], mcpServers?: Record<string, unknown>): Record<string, number> {
+export function calculateBreakdown(items: Array<{ kind: string }>, mcpServers?: Record<string, unknown>): Record<string, number> {
   const breakdown = { prompts: 0, instructions: 0, chatmodes: 0, agents: 0, skills: 0, mcpServers: mcpServers ? Object.keys(mcpServers).length : 0 };
   for (const item of items) {
     switch (item.kind) {
