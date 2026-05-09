@@ -24,11 +24,11 @@ my-plugin/
 
 ```json
 {
-  "id": "azure-cloud-development",        // Required. Lowercase, numbers, hyphens only
+  "id": "azure-cloud-development",        // Optional. Lowercase, numbers, hyphens only
   "name": "Azure Cloud Development",      // Required. Human-readable (max 100 chars)
-  "description": "Azure cloud dev tools", // Required. What the plugin does (max 500 chars)
+  "description": "Azure cloud dev tools", // Optional. What the plugin does (max 500 chars)
   "version": "1.0.0",                     // Optional. Semantic version
-  "author": {                             // Optional. String or object
+  "author": {                             // Optional. String ("Jane Doe") or object
     "name": "Cloud Team",
     "url": "https://example.com",
     "email": "cloud@example.com"
@@ -37,6 +37,7 @@ my-plugin/
   "repository": "https://github.com/org/repo",  // Optional
   "homepage": "https://example.com/docs", // Optional
   "tags": ["azure", "cloud"],             // Optional. For discoverability
+  "keywords": ["azure", "cloud"],         // Optional. Alias for tags (upstream format)
 
   // Two ways to list content — pick one:
 
@@ -56,7 +57,18 @@ my-plugin/
     "./skills/diagnose-failure"
   ],
 
-  // Optional MCP server configurations (same shape as collection-schema.md)
+  // MCP server configurations — two equivalent formats, pick one:
+
+  // Format A) Top-level mcpServers (compatible with collection format)
+  "mcpServers": {
+    "azure-tools": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${bundlePath}/server.js"]
+    }
+  },
+
+  // Format B) Nested under mcp.items (Prompt Registry native format)
   "mcp": {
     "items": {
       "azure-tools": {
@@ -97,9 +109,11 @@ When you use the `agents` / `skills` arrays instead of `items`, the adapter reso
   2. **Directory with `AGENT.md`** (`./agents/advisor/` containing `AGENT.md`) — one agent, all files archived, id = directory name.
   3. **Flat directory** (`./agents/` containing multiple `.md` files, no `AGENT.md`) — one agent per `.md` file (`README.md` is skipped).
 
-## MCP Server Duplicate Detection
+## MCP Server Support
 
-MCP servers declared under `mcp.items` follow the same identity + duplicate-detection rules as collections. See the [MCP section of Collection Schema](./collection-schema.md#mcp-server-duplicate-detection).
+Both `mcpServers` (top-level, collection-format compatible) and `mcp.items` (nested, Prompt Registry native) are supported. If both are present, `mcpServers` takes precedence. The adapter stores MCP server configurations in the `deployment-manifest.yml` under the `mcpServers` key, where `McpServerManager` picks them up at install time.
+
+MCP servers declared under either format follow the same identity + duplicate-detection rules as collections. See the [MCP section of Collection Schema](./collection-schema.md#mcp-server-duplicate-detection).
 
 ## Validation
 

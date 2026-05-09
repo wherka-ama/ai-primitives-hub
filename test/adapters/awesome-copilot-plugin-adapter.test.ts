@@ -7,7 +7,6 @@
 import * as assert from 'node:assert';
 import * as yaml from 'js-yaml';
 import nock from 'nock';
-import yauzl from 'yauzl';
 import {
   AwesomeCopilotPluginAdapter,
 } from '../../src/adapters/awesome-copilot-plugin-adapter';
@@ -15,45 +14,9 @@ import {
   Bundle,
   RegistrySource,
 } from '../../src/types/registry';
-
-/**
- * Extract all entries from a ZIP buffer into a map of path → contents (string).
- * Useful for verifying generated bundle archives in tests.
- * @param buffer - ZIP file as a Buffer
- */
-function extractZipBuffer(buffer: Buffer): Promise<Map<string, string>> {
-  return new Promise((resolve, reject) => {
-    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
-      if (err || !zipfile) {
-        reject(err || new Error('Failed to open ZIP'));
-        return;
-      }
-      const entries = new Map<string, string>();
-      zipfile.readEntry();
-      zipfile.on('entry', (entry) => {
-        if (/\/$/.test(entry.fileName)) {
-          zipfile.readEntry();
-          return;
-        }
-        zipfile.openReadStream(entry, (streamErr, readStream) => {
-          if (streamErr || !readStream) {
-            reject(streamErr || new Error('Failed to read entry'));
-            return;
-          }
-          const chunks: Buffer[] = [];
-          readStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-          readStream.on('end', () => {
-            entries.set(entry.fileName, Buffer.concat(chunks).toString('utf8'));
-            zipfile.readEntry();
-          });
-          readStream.on('error', reject);
-        });
-      });
-      zipfile.on('end', () => resolve(entries));
-      zipfile.on('error', reject);
-    });
-  });
-}
+import {
+  extractZipBuffer,
+} from '../helpers/zip-test-helpers';
 
 suite('AwesomeCopilotPluginAdapter', () => {
   const mockSource: RegistrySource = {
@@ -262,7 +225,7 @@ suite('AwesomeCopilotPluginAdapter', () => {
       assert.deepStrictEqual(bundles[0].tags, ['testing', 'csharp']);
       assert.strictEqual(bundles[0].size, '3 items');
       assert.deepStrictEqual((bundles[0] as any).breakdown, {
-        prompts: 0, instructions: 0, chatmodes: 0, agents: 1, skills: 2
+        prompts: 0, instructions: 0, chatmodes: 0, agents: 1, skills: 2, mcpServers: 0
       });
     });
 
@@ -691,6 +654,163 @@ suite('AwesomeCopilotPluginAdapter', () => {
       const url = adapter.getDownloadUrl('my-plugin');
 
       assert.strictEqual(url, adapter.getManifestUrl('my-plugin'));
+    });
+  });
+
+  suite('MCP server support', () => {
+    test('downloadBundle includes mcpServers in deployment-manifest.yml when plugin has mcpServers', async () => {
+      const mockBundle: Bundle = {
+        id: 'mcp-plugin',
+        name: 'MCP Plugin',
+        version: '1.0.0',
+        description: 'Plugin with MCP server',
+        author: 'test-owner',
+        sourceId: 'awesome-plugin-test',
+        environments: ['general'],
+        tags: ['mcp'],
+        lastUpdated: '2025-01-01T00:00:00Z',
+        size: '0 items',
+        dependencies: [],
+        license: 'MIT',
+        manifestUrl: 'https://example.com/manifest.json',
+        downloadUrl: 'https://example.com/bundle.zip'
+      };
+      (mockBundle as any).pluginDir = 'mcp-plugin';
+      (mockBundle as any).pluginItems = [];
+      // Attach MCP servers as parsePlugin() would
+      (mockBundle as any).mcpServers = {
+        'my-mcp-server': { type: 'stdio', command: 'node', args: ['server.js'] }
+      };
+
+      // No items to resolve, so no content fetches needed
+      nock('https://raw.githubusercontent.com')
+        .get('/test-owner/awesome-copilot/main/plugins/mcp-plugin/.github/plugin/plugin.json')
+        .reply(200, JSON.stringify({
+          name: 'mcp-plugin',
+          description: 'Plugin with MCP server',
+          mcpServers: { 'my-mcp-server': { type: 'stdio', command: 'node', args: ['server.js'] } }
+        }));
+
+      const adapter = new AwesomeCopilotPluginAdapter(mockSource);
+      const buffer = await adapter.downloadBundle(mockBundle);
+      const entries = await extractZipBuffer(buffer);
+      const manifestYaml = entries.get('deployment-manifest.yml');
+      assert.ok(manifestYaml, 'deployment-manifest.yml must be present');
+
+      const manifest = yaml.load(manifestYaml) as any;
+      assert.ok(manifest.mcpServers, 'mcpServers must be present in deployment manifest');
+      assert.ok(manifest.mcpServers['my-mcp-server'], 'specific server must be present');
+      assert.strictEqual(manifest.mcpServers['my-mcp-server'].command, 'node');
+    });
+
+    test('fetchBundles exposes mcpServers on bundle when plugin has mcpServers', async () => {
+      nock('https://api.github.com')
+        .get('/repos/test-owner/awesome-copilot/contents/plugins?ref=main')
+        .reply(200, [
+          { name: 'mcp-enabled-plugin', type: 'dir', path: 'plugins/mcp-enabled-plugin' }
+        ]);
+
+      nock('https://raw.githubusercontent.com')
+        .get('/test-owner/awesome-copilot/main/plugins/mcp-enabled-plugin/.github/plugin/plugin.json')
+        .reply(200, JSON.stringify({
+          id: 'mcp-enabled-plugin',
+          name: 'mcp-enabled-plugin',
+          description: 'Plugin with MCP server',
+          tags: [],
+          mcpServers: {
+            'context-server': { type: 'http', url: 'https://api.example.com/mcp' }
+          }
+        }));
+
+      const adapter = new AwesomeCopilotPluginAdapter(mockSource);
+      const bundles = await adapter.fetchBundles();
+
+      assert.strictEqual(bundles.length, 1);
+      assert.ok((bundles[0] as any).mcpServers, 'mcpServers must be attached to bundle');
+      assert.ok((bundles[0] as any).mcpServers['context-server']);
+    });
+
+    test('fetchBundles includes mcp.items servers (our nested format)', async () => {
+      nock('https://api.github.com')
+        .get('/repos/test-owner/awesome-copilot/contents/plugins?ref=main')
+        .reply(200, [
+          { name: 'nested-mcp-plugin', type: 'dir', path: 'plugins/nested-mcp-plugin' }
+        ]);
+
+      nock('https://raw.githubusercontent.com')
+        .get('/test-owner/awesome-copilot/main/plugins/nested-mcp-plugin/.github/plugin/plugin.json')
+        .reply(200, JSON.stringify({
+          id: 'nested-mcp-plugin',
+          name: 'nested-mcp-plugin',
+          description: 'Plugin with nested MCP',
+          mcp: { items: { 'nested-server': { type: 'stdio', command: 'python3', args: ['-m', 'mcp'] } } }
+        }));
+
+      const adapter = new AwesomeCopilotPluginAdapter(mockSource);
+      const bundles = await adapter.fetchBundles();
+
+      assert.strictEqual(bundles.length, 1);
+      const mcpServers = (bundles[0] as any).mcpServers;
+      assert.ok(mcpServers, 'mcpServers must be attached');
+      assert.ok(mcpServers['nested-server']);
+      assert.strictEqual(mcpServers['nested-server'].command, 'python3');
+    });
+
+    test('fetchBundles does not attach mcpServers when plugin has none', async () => {
+      nock('https://api.github.com')
+        .get('/repos/test-owner/awesome-copilot/contents/plugins?ref=main')
+        .reply(200, [
+          { name: 'no-mcp-plugin', type: 'dir', path: 'plugins/no-mcp-plugin' }
+        ]);
+
+      nock('https://raw.githubusercontent.com')
+        .get('/test-owner/awesome-copilot/main/plugins/no-mcp-plugin/.github/plugin/plugin.json')
+        .reply(200, JSON.stringify({
+          id: 'no-mcp-plugin',
+          name: 'no-mcp-plugin',
+          description: 'Plugin without MCP'
+        }));
+
+      const adapter = new AwesomeCopilotPluginAdapter(mockSource);
+      const bundles = await adapter.fetchBundles();
+
+      assert.strictEqual(bundles.length, 1);
+      assert.ok(!(bundles[0] as any).mcpServers, 'mcpServers must NOT be attached when absent');
+    });
+
+    test('deployment manifest uses yaml.dump (no escaping bugs with special chars)', async () => {
+      const mockBundle: Bundle = {
+        id: 'special-plugin',
+        name: 'Special: Plugin & "Quoted"',
+        version: '1.0.0',
+        description: 'Has special chars',
+        author: 'test-owner',
+        sourceId: 'awesome-plugin-test',
+        environments: ['general'],
+        tags: ['a', 'b'],
+        lastUpdated: '2025-01-01T00:00:00Z',
+        size: '0 items',
+        dependencies: [],
+        license: 'MIT',
+        manifestUrl: 'https://example.com/manifest.json',
+        downloadUrl: 'https://example.com/bundle.zip'
+      };
+      (mockBundle as any).pluginDir = 'special-plugin';
+      (mockBundle as any).pluginItems = [];
+
+      nock('https://raw.githubusercontent.com')
+        .get('/test-owner/awesome-copilot/main/plugins/special-plugin/.github/plugin/plugin.json')
+        .reply(200, JSON.stringify({ name: 'Special: Plugin & "Quoted"', description: 'Has special chars' }));
+
+      const adapter = new AwesomeCopilotPluginAdapter(mockSource);
+      const buffer = await adapter.downloadBundle(mockBundle);
+      const entries = await extractZipBuffer(buffer);
+      const manifestYaml = entries.get('deployment-manifest.yml');
+      assert.ok(manifestYaml);
+
+      // yaml.dump should produce valid YAML parseable back to the original value
+      const parsed = yaml.load(manifestYaml) as any;
+      assert.strictEqual(parsed.name, 'Special: Plugin & "Quoted"');
     });
   });
 });

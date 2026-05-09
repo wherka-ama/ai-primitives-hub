@@ -7,7 +7,6 @@
 import * as assert from 'node:assert';
 import * as path from 'node:path';
 import * as yaml from 'js-yaml';
-import yauzl from 'yauzl';
 import {
   LocalAwesomeCopilotPluginAdapter,
 } from '../../src/adapters/local-awesome-copilot-plugin-adapter';
@@ -15,46 +14,11 @@ import {
   Bundle,
   RegistrySource,
 } from '../../src/types/registry';
+import {
+  extractZipBuffer,
+} from '../helpers/zip-test-helpers';
 
 const FIXTURES_DIR = path.resolve(__dirname, '../fixtures/local-awesome-plugins');
-
-/**
- * Extract all entries from a ZIP buffer into a map of path → contents.
- * @param buffer - ZIP file as a Buffer
- */
-function extractZipBuffer(buffer: Buffer): Promise<Map<string, string>> {
-  return new Promise((resolve, reject) => {
-    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
-      if (err || !zipfile) {
-        reject(err || new Error('Failed to open ZIP'));
-        return;
-      }
-      const entries = new Map<string, string>();
-      zipfile.readEntry();
-      zipfile.on('entry', (entry) => {
-        if (/\/$/.test(entry.fileName)) {
-          zipfile.readEntry();
-          return;
-        }
-        zipfile.openReadStream(entry, (streamErr, readStream) => {
-          if (streamErr || !readStream) {
-            reject(streamErr || new Error('Failed to read entry'));
-            return;
-          }
-          const chunks: Buffer[] = [];
-          readStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-          readStream.on('end', () => {
-            entries.set(entry.fileName, Buffer.concat(chunks).toString('utf8'));
-            zipfile.readEntry();
-          });
-          readStream.on('error', reject);
-        });
-      });
-      zipfile.on('end', () => resolve(entries));
-      zipfile.on('error', reject);
-    });
-  });
-}
 
 suite('LocalAwesomeCopilotPluginAdapter', () => {
   const mockSource: RegistrySource = {
@@ -89,9 +53,9 @@ suite('LocalAwesomeCopilotPluginAdapter', () => {
       const adapter = new LocalAwesomeCopilotPluginAdapter(mockSource);
       const bundles = await adapter.fetchBundles();
 
-      assert.strictEqual(bundles.length, 6);
+      assert.strictEqual(bundles.length, 7);
       const bundleIds = bundles.map((b: Bundle) => b.id).toSorted();
-      assert.deepStrictEqual(bundleIds, ['no-items-plugin', 'oracle-style-plugin', 'python-dev', 'skills-plugin', 'test-plugin', 'upstream-plugin']);
+      assert.deepStrictEqual(bundleIds, ['mcp-plugin', 'no-items-plugin', 'oracle-style-plugin', 'python-dev', 'skills-plugin', 'test-plugin', 'upstream-plugin']);
     });
 
     test('should parse plugin.json correctly', async () => {
@@ -167,7 +131,7 @@ suite('LocalAwesomeCopilotPluginAdapter', () => {
 
       assert.ok(metadata.name);
       assert.ok(metadata.description.includes('plugin'));
-      assert.strictEqual(metadata.bundleCount, 6);
+      assert.strictEqual(metadata.bundleCount, 7);
     });
   });
 
@@ -178,7 +142,7 @@ suite('LocalAwesomeCopilotPluginAdapter', () => {
 
       assert.strictEqual(result.valid, true);
       assert.strictEqual(result.errors.length, 0);
-      assert.strictEqual(result.bundlesFound, 6);
+      assert.strictEqual(result.bundlesFound, 7);
     });
 
     test('should fail validation for non-existent directory', async () => {
@@ -211,7 +175,7 @@ suite('LocalAwesomeCopilotPluginAdapter', () => {
       assert.deepStrictEqual(upstreamPlugin.tags, ['java', 'testing']);
       assert.strictEqual(upstreamPlugin.size, '2 items');
       assert.deepStrictEqual((upstreamPlugin as any).breakdown, {
-        prompts: 0, instructions: 0, chatmodes: 0, agents: 1, skills: 1
+        prompts: 0, instructions: 0, chatmodes: 0, agents: 1, skills: 1, mcpServers: 0
       });
     });
 
@@ -283,6 +247,57 @@ suite('LocalAwesomeCopilotPluginAdapter', () => {
 
       assert.ok(url.startsWith('file://'));
       assert.ok(url.includes('test-plugin/.github/plugin/plugin.json'));
+    });
+  });
+
+  suite('MCP server support', () => {
+    test('fetchBundles attaches mcpServers to bundle when plugin has mcpServers', async () => {
+      const adapter = new LocalAwesomeCopilotPluginAdapter(mockSource);
+      const bundles = await adapter.fetchBundles();
+
+      const mcpPlugin = bundles.find((b: Bundle) => b.id === 'mcp-plugin');
+      assert.ok(mcpPlugin, 'mcp-plugin must be discovered');
+      const mcpServers = (mcpPlugin as any).mcpServers;
+      assert.ok(mcpServers, 'mcpServers must be attached to bundle');
+      assert.ok(mcpServers['context-server'], 'context-server must be present');
+      assert.strictEqual(mcpServers['context-server'].command, 'node');
+    });
+
+    test('fetchBundles does not attach mcpServers for plugins without MCP', async () => {
+      const adapter = new LocalAwesomeCopilotPluginAdapter(mockSource);
+      const bundles = await adapter.fetchBundles();
+
+      const skillsPlugin = bundles.find((b: Bundle) => b.id === 'skills-plugin');
+      assert.ok(skillsPlugin);
+      assert.ok(!(skillsPlugin as any).mcpServers, 'mcpServers must NOT be set when absent');
+    });
+
+    test('downloadBundle includes mcpServers in deployment-manifest.yml', async () => {
+      const adapter = new LocalAwesomeCopilotPluginAdapter(mockSource);
+      const bundles = await adapter.fetchBundles();
+
+      const mcpPlugin = bundles.find((b: Bundle) => b.id === 'mcp-plugin');
+      assert.ok(mcpPlugin);
+
+      const buffer = await adapter.downloadBundle(mcpPlugin);
+      const entries = await extractZipBuffer(buffer);
+      const manifestYaml = entries.get('deployment-manifest.yml');
+      assert.ok(manifestYaml, 'deployment-manifest.yml must be present');
+
+      const manifest = yaml.load(manifestYaml) as any;
+      assert.ok(manifest.mcpServers, 'mcpServers must appear in deployment manifest');
+      assert.ok(manifest.mcpServers['context-server'], 'specific server must be present');
+      assert.strictEqual(manifest.mcpServers['context-server'].command, 'node');
+    });
+
+    test('breakdown includes mcpServers count for plugin with MCP', async () => {
+      const adapter = new LocalAwesomeCopilotPluginAdapter(mockSource);
+      const bundles = await adapter.fetchBundles();
+
+      const mcpPlugin = bundles.find((b: Bundle) => b.id === 'mcp-plugin');
+      assert.ok(mcpPlugin);
+      const breakdown = (mcpPlugin as any).breakdown;
+      assert.strictEqual(breakdown.mcpServers, 1, 'breakdown.mcpServers must be 1');
     });
   });
 });

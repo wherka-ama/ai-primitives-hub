@@ -6,37 +6,16 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
+  PluginManifest,
+} from '../adapters/plugin-adapter-shared';
+import {
   SchemaValidator,
 } from '../services/schema-validator';
-
-interface PluginItem {
-  kind: string;
-  path: string;
-}
-
-interface Plugin {
-  id?: string;
-  name?: string;
-  description?: string;
-  tags?: string[];
-  items?: PluginItem[];
-  version?: string;
-  author?: string | { name: string; url?: string; email?: string };
-  display?: {
-    ordering?: string;
-    // eslint-disable-next-line @typescript-eslint/naming-convention -- external JSON field
-    show_badge?: boolean;
-  };
-  external?: boolean;
-  repository?: string;
-  homepage?: string;
-  license?: string;
-}
 
 interface PluginValidationResult {
   errors: string[];
   warnings: string[];
-  plugin: Plugin | null;
+  plugin: PluginManifest | null;
 }
 
 /**
@@ -189,11 +168,11 @@ export class ValidatePluginsCommand {
   ): Promise<PluginValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
-    let plugin: Plugin | null = null;
+    let plugin: PluginManifest | null = null;
 
     try {
       const content = fs.readFileSync(pluginJsonPath, 'utf8');
-      plugin = JSON.parse(content) as Plugin;
+      plugin = JSON.parse(content) as PluginManifest;
 
       if (!plugin || typeof plugin !== 'object') {
         errors.push('Empty or invalid JSON file');

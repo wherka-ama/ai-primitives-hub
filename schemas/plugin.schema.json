@@ -5,10 +5,7 @@
   "description": "Schema for Copilot plugin manifest files (plugin.json). Compatible with github/awesome-copilot plugin format and extended with Prompt Registry features (MCP servers, display preferences).",
   "type": "object",
   "required": [
-    "id",
-    "name",
-    "description",
-    "items"
+    "name"
   ],
   "properties": {
     "id": {
@@ -93,6 +90,27 @@
     "path": {
       "type": "string",
       "description": "Path of this plugin within the repository (e.g., plugins/azure-cloud-development)"
+    },
+    "agents": {
+      "type": "array",
+      "description": "Upstream awesome-copilot format: agent path references (alternative to items array)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skills": {
+      "type": "array",
+      "description": "Upstream awesome-copilot format: skill path references (alternative to items array)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "description": "Keywords for discovery (alternative to tags, used by upstream format)",
+      "items": {
+        "type": "string"
+      }
     },
     "itemCount": {
       "type": "integer",

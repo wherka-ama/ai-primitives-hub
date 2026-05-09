@@ -1297,11 +1297,10 @@ suite('SchemaValidator', () => {
       assert.strictEqual(result.valid, true, `Errors: ${result.errors.join(', ')}`);
     });
 
-    test('should reject plugin missing id', async () => {
-      const invalid = { name: 'No ID', description: 'Missing id', items: [] };
-      const result = await validator.validatePlugin(invalid);
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.errors.some((e) => e.includes('id')));
+    test('should accept plugin without id (id is optional)', async () => {
+      const plugin = { name: 'No ID', description: 'Missing id', items: [] };
+      const result = await validator.validatePlugin(plugin);
+      assert.strictEqual(result.valid, true, `Unexpected errors: ${result.errors.join(', ')}`);
     });
 
     test('should reject plugin missing name', async () => {
@@ -1311,18 +1310,16 @@ suite('SchemaValidator', () => {
       assert.ok(result.errors.some((e) => e.includes('name')));
     });
 
-    test('should reject plugin missing description', async () => {
-      const invalid = { id: 'no-desc', name: 'No Desc', items: [] };
-      const result = await validator.validatePlugin(invalid);
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.errors.some((e) => e.includes('description')));
+    test('should accept plugin without description (description is optional)', async () => {
+      const plugin = { id: 'no-desc', name: 'No Desc', items: [] };
+      const result = await validator.validatePlugin(plugin);
+      assert.strictEqual(result.valid, true, `Unexpected errors: ${result.errors.join(', ')}`);
     });
 
-    test('should reject plugin missing items', async () => {
-      const invalid = { id: 'no-items', name: 'No Items', description: 'Missing items' };
-      const result = await validator.validatePlugin(invalid);
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.errors.some((e) => e.includes('items')));
+    test('should accept plugin without items (items is optional, upstream format uses agents/skills)', async () => {
+      const plugin = { id: 'no-items', name: 'No Items', description: 'Missing items', agents: ['./agents/a'] };
+      const result = await validator.validatePlugin(plugin);
+      assert.strictEqual(result.valid, true, `Unexpected errors: ${result.errors.join(', ')}`);
     });
 
     test('should reject invalid id pattern', async () => {

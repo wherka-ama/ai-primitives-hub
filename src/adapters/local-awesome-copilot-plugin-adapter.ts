@@ -34,6 +34,7 @@ import {
 } from 'node:fs/promises';
 import * as path from 'node:path';
 import archiver from 'archiver';
+import * as yaml from 'js-yaml';
 import {
   Bundle,
   RegistrySource,
@@ -48,6 +49,8 @@ import {
   createDeploymentManifest,
   derivePluginItems,
   deriveSimpleItemId,
+  extractAuthorName,
+  extractMcpServers,
   inferEnvironments,
   PluginItem,
   PluginManifest,
@@ -55,7 +58,6 @@ import {
   stripLeadingDotSlash,
   stripMdExtension,
   toPosixPath,
-  toYaml,
 } from './plugin-adapter-shared';
 import {
   RepositoryAdapter,
@@ -145,6 +147,7 @@ export class LocalAwesomeCopilotPluginAdapter extends RepositoryAdapter {
     try {
       const pluginDir = (bundle as any).pluginDir || bundle.id;
       let pluginItems: PluginItem[] = (bundle as any).pluginItems || [];
+      let mcpServers: Record<string, unknown> | undefined = (bundle as any).mcpServers;
 
       if (pluginItems.length === 0) {
         const pluginJsonPath = path.join(
@@ -153,12 +156,13 @@ export class LocalAwesomeCopilotPluginAdapter extends RepositoryAdapter {
         const jsonContent = await readFile(pluginJsonPath, 'utf8');
         const manifest = JSON.parse(jsonContent) as PluginManifest;
         pluginItems = derivePluginItems(manifest);
+        mcpServers = mcpServers ?? extractMcpServers(manifest);
       }
 
       const resolved = await this.resolveItemsToFiles(pluginDir, pluginItems);
       this.logger.debug(`Resolved ${pluginItems.length} items into ${resolved.length} deployable files`);
 
-      const buffer = await this.createBundleArchive(bundle, resolved);
+      const buffer = await this.createBundleArchive(bundle, resolved, mcpServers);
       this.logger.debug(`Archive created: ${buffer.length} bytes`);
       return buffer;
     } catch (error) {
@@ -293,7 +297,8 @@ export class LocalAwesomeCopilotPluginAdapter extends RepositoryAdapter {
       }
 
       const items = derivePluginItems(manifest);
-      const breakdown = calculateBreakdown(items);
+      const mcpServers = extractMcpServers(manifest);
+      const breakdown = calculateBreakdown(items, mcpServers);
       const stats = await stat(pluginJsonPath);
       const tags = manifest.tags || manifest.keywords || [];
 
@@ -301,8 +306,8 @@ export class LocalAwesomeCopilotPluginAdapter extends RepositoryAdapter {
         id: pluginId,
         name: manifest.name || pluginDir,
         version: manifest.version || '1.0.0',
-        description: manifest.description,
-        author: manifest.author?.name || 'Local Developer',
+        description: manifest.description || '',
+        author: extractAuthorName(manifest.author) || 'Local Developer',
         repository: this.source.url,
         tags,
         environments: inferEnvironments(tags),
@@ -318,6 +323,9 @@ export class LocalAwesomeCopilotPluginAdapter extends RepositoryAdapter {
       (bundle as any).pluginDir = pluginDir;
       (bundle as any).pluginItems = items;
       (bundle as any).breakdown = breakdown;
+      if (mcpServers) {
+        (bundle as any).mcpServers = mcpServers;
+      }
 
       return bundle;
     } catch (error) {
@@ -468,7 +476,8 @@ export class LocalAwesomeCopilotPluginAdapter extends RepositoryAdapter {
 
   private async createBundleArchive(
     bundle: Bundle,
-    resolved: ResolvedPluginFile[]
+    resolved: ResolvedPluginFile[],
+    mcpServers?: Record<string, unknown>
   ): Promise<Buffer> {
     this.logger.debug(`Creating archive for plugin: ${bundle.name}`);
 
@@ -493,8 +502,8 @@ export class LocalAwesomeCopilotPluginAdapter extends RepositoryAdapter {
       // Append manifest + files, then finalize.
       void (async () => {
         try {
-          const manifest = createDeploymentManifest(bundle, resolved);
-          archive.append(toYaml(manifest), { name: 'deployment-manifest.yml' });
+          const manifest = createDeploymentManifest(bundle, resolved, mcpServers);
+          archive.append(yaml.dump(manifest), { name: 'deployment-manifest.yml' });
 
           const addedPaths = new Set<string>();
           for (const res of resolved) {

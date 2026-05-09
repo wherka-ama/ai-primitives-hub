@@ -18,7 +18,7 @@ import {
 export interface PluginManifest {
   id?: string;
   name: string;
-  description: string;
+  description?: string;
   path?: string;
   tags?: string[];
   keywords?: string[];
@@ -30,6 +30,12 @@ export interface PluginManifest {
   agents?: string[];
   /** Upstream format: skill path refs. */
   skills?: string[];
+  /** MCP server configurations — top-level (collection-format compat). */
+  mcpServers?: Record<string, unknown>;
+  /** MCP server configurations — nested under `mcp.items` (our format). */
+  mcp?: {
+    items?: Record<string, unknown>;
+  };
   featured?: boolean;
   display?: {
     ordering?: string;
@@ -39,7 +45,8 @@ export interface PluginManifest {
   external?: boolean;
   repository?: string;
   homepage?: string;
-  author?: { name: string; url?: string };
+  /** Author — string (upstream) or object with name/url/email (our format). */
+  author?: string | { name: string; url?: string; email?: string };
   license?: string;
   source?: { source: string; repo: string; path: string };
 }
@@ -93,11 +100,35 @@ export function mapKindToType(kind: string): ContentType {
 }
 
 /**
+ * Extract the author name from a manifest's `author` field.
+ * Handles both string (upstream format) and object (our format).
+ * @param author
+ */
+export function extractAuthorName(author: PluginManifest['author'] | undefined): string | undefined {
+  if (!author) {
+    return undefined;
+  }
+  return typeof author === 'string' ? author : author.name;
+}
+
+/**
+ * Extract MCP servers from a manifest, supporting both formats:
+ * - `mcpServers` (top-level, collection-format compat)
+ * - `mcp.items` (nested, our format)
+ * @param manifest
+ */
+export function extractMcpServers(manifest: PluginManifest): Record<string, unknown> | undefined {
+  const servers = manifest.mcpServers || manifest.mcp?.items;
+  return servers && Object.keys(servers).length > 0 ? servers : undefined;
+}
+
+/**
  * Count items by kind for the marketplace breakdown view.
  * @param items
+ * @param mcpServers
  */
-export function calculateBreakdown(items: PluginItem[]): Record<string, number> {
-  const breakdown = { prompts: 0, instructions: 0, chatmodes: 0, agents: 0, skills: 0 };
+export function calculateBreakdown(items: PluginItem[], mcpServers?: Record<string, unknown>): Record<string, number> {
+  const breakdown = { prompts: 0, instructions: 0, chatmodes: 0, agents: 0, skills: 0, mcpServers: mcpServers ? Object.keys(mcpServers).length : 0 };
   for (const item of items) {
     switch (item.kind) {
       case 'prompt': {
@@ -211,43 +242,6 @@ export function titleCase(str: string): string {
     .join(' ');
 }
 
-/**
- * Minimal YAML serializer used for `deployment-manifest.yml`.
- *
- * The extension only emits a small, well-known shape (`{ id, name, version, ...,
- * prompts: [{ id, name, ... }] }`), so we avoid pulling in a full YAML library.
- * @param obj
- * @param indent
- */
-export function toYaml(obj: any, indent = 0): string {
-  const pad = '  '.repeat(indent);
-  let result = '';
-  for (const [key, value] of Object.entries(obj)) {
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        result += `${pad}${key}: []\n`;
-      } else if (typeof value[0] === 'object') {
-        result += `${pad}${key}:\n`;
-        for (const item of value) {
-          const lines = toYaml(item, indent + 2).split('\n').filter((l) => l.trim());
-          if (lines.length > 0) {
-            result += `${pad}  - ${lines[0].trim()}\n`;
-            for (let i = 1; i < lines.length; i++) {
-              result += `${pad}    ${lines[i].trim()}\n`;
-            }
-          }
-        }
-      } else {
-        result += `${pad}${key}: [${value.map((v) => `"${v}"`).join(', ')}]\n`;
-      }
-    } else if (typeof value === 'object' && value !== null) {
-      result += `${pad}${key}:\n${toYaml(value, indent + 1)}`;
-    } else {
-      result += `${pad}${key}: ${JSON.stringify(value)}\n`;
-    }
-  }
-  return result;
-}
 
 /** Shape of one entry in a deployment manifest's `prompts` array. */
 interface ManifestPrompt {
@@ -271,13 +265,15 @@ function pickDescriptionPrefix(kind: ResolvedPluginFile['kind']): string {
 
 /**
  * Build the deployment manifest object for the given bundle + resolved files.
- * Pure function — output is shaped to be consumed by {@link toYaml}.
+ * The result is intended to be serialized with `yaml.dump()` by the caller.
  * @param bundle
  * @param resolved
+ * @param mcpServers - Optional MCP server configurations to include in the manifest.
  */
 export function createDeploymentManifest(
   bundle: Bundle,
-  resolved: ResolvedPluginFile[]
+  resolved: ResolvedPluginFile[],
+  mcpServers?: Record<string, unknown>
 ): Record<string, unknown> {
   const prompts: ManifestPrompt[] = resolved.map((res) => {
     const displayName = titleCase(res.id.replace(/-/g, ' '));
@@ -301,6 +297,7 @@ export function createDeploymentManifest(
     repository: bundle.repository,
     license: bundle.license,
     tags: bundle.tags,
-    prompts
+    prompts,
+    ...(mcpServers && Object.keys(mcpServers).length > 0 ? { mcpServers } : {})
   };
 }

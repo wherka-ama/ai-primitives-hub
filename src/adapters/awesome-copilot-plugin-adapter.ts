@@ -21,6 +21,7 @@ import {
   promisify,
 } from 'node:util';
 import archiver from 'archiver';
+import * as yaml from 'js-yaml';
 import * as vscode from 'vscode';
 import {
   Bundle,
@@ -36,13 +37,14 @@ import {
   createDeploymentManifest,
   derivePluginItems,
   deriveSimpleItemId,
+  extractAuthorName,
+  extractMcpServers,
   inferEnvironments,
   PluginItem,
   PluginManifest,
   ResolvedPluginFile,
   stripLeadingDotSlash,
   stripMdExtension,
-  toYaml,
 } from './plugin-adapter-shared';
 import {
   RepositoryAdapter,
@@ -146,18 +148,20 @@ export class AwesomeCopilotPluginAdapter extends RepositoryAdapter {
     try {
       const pluginDir = (bundle as any).pluginDir || bundle.id;
       const pluginItems: PluginItem[] = (bundle as any).pluginItems || [];
+      let mcpServers: Record<string, unknown> | undefined = (bundle as any).mcpServers;
 
       if (pluginItems.length === 0) {
         const pluginJsonUrl = this.buildRawUrl(`${this.config.pluginsPath}/${pluginDir}/.github/plugin/plugin.json`);
         const jsonContent = await this.fetchUrl(pluginJsonUrl);
         const manifest = JSON.parse(jsonContent) as PluginManifest;
         pluginItems.push(...derivePluginItems(manifest));
+        mcpServers = mcpServers ?? extractMcpServers(manifest);
       }
 
       const resolved = await this.resolveItemsToFiles(pluginDir, pluginItems);
       this.logger.debug(`Resolved ${pluginItems.length} items into ${resolved.length} deployable files`);
 
-      const buffer = await this.createBundleArchive(bundle, resolved);
+      const buffer = await this.createBundleArchive(bundle, resolved, mcpServers);
       this.logger.debug(`Archive created: ${buffer.length} bytes`);
       return buffer;
     } catch (error) {
@@ -266,15 +270,16 @@ export class AwesomeCopilotPluginAdapter extends RepositoryAdapter {
       }
 
       const items = derivePluginItems(manifest);
-      const breakdown = calculateBreakdown(items);
+      const mcpServers = extractMcpServers(manifest);
+      const breakdown = calculateBreakdown(items, mcpServers);
       const tags = manifest.tags || manifest.keywords || [];
 
       const bundle: Bundle = {
         id: pluginId,
         name: manifest.name || pluginDir,
         version: manifest.version || '1.0.0',
-        description: manifest.description,
-        author: manifest.author?.name || this.extractRepoOwner(),
+        description: manifest.description || '',
+        author: extractAuthorName(manifest.author) || this.extractRepoOwner(),
         repository: manifest.repository || this.source.url,
         tags,
         environments: inferEnvironments(tags),
@@ -290,6 +295,9 @@ export class AwesomeCopilotPluginAdapter extends RepositoryAdapter {
       (bundle as any).pluginDir = pluginDir;
       (bundle as any).pluginItems = items;
       (bundle as any).breakdown = breakdown;
+      if (mcpServers) {
+        (bundle as any).mcpServers = mcpServers;
+      }
 
       return bundle;
     } catch (error) {
@@ -424,7 +432,8 @@ export class AwesomeCopilotPluginAdapter extends RepositoryAdapter {
 
   private async createBundleArchive(
     bundle: Bundle,
-    resolved: ResolvedPluginFile[]
+    resolved: ResolvedPluginFile[],
+    mcpServers?: Record<string, unknown>
   ): Promise<Buffer> {
     this.logger.debug(`Creating archive for plugin: ${bundle.name}`);
 
@@ -448,8 +457,8 @@ export class AwesomeCopilotPluginAdapter extends RepositoryAdapter {
 
       void (async () => {
         try {
-          const manifest = createDeploymentManifest(bundle, resolved);
-          archive.append(toYaml(manifest), { name: 'deployment-manifest.yml' });
+          const manifest = createDeploymentManifest(bundle, resolved, mcpServers);
+          archive.append(yaml.dump(manifest), { name: 'deployment-manifest.yml' });
 
           const addedPaths = new Set<string>();
           for (const res of resolved) {
@@ -570,18 +579,20 @@ export class AwesomeCopilotPluginAdapter extends RepositoryAdapter {
     return undefined;
   }
 
-  private async fetchUrl(url: string, redirectDepth = 0): Promise<string> {
+  private async fetchUrl(url: string, redirectDepth = 0, withAuth = true): Promise<string> {
     const { MAX_REDIRECTS } = AwesomeCopilotPluginAdapter;
     if (redirectDepth >= MAX_REDIRECTS) {
       throw new Error(`Maximum redirect depth (${MAX_REDIRECTS}) exceeded`);
     }
 
-    const token = await this.getAuthenticationToken();
     const headers: Record<string, string> = {
       'User-Agent': 'VSCode-Prompt-Registry'
     };
-    if (token) {
-      headers.Authorization = `token ${token}`;
+    if (withAuth) {
+      const token = await this.getAuthenticationToken();
+      if (token) {
+        headers.Authorization = `token ${token}`;
+      }
     }
 
     return new Promise((resolve, reject) => {
@@ -589,7 +600,9 @@ export class AwesomeCopilotPluginAdapter extends RepositoryAdapter {
         if (res.statusCode === 301 || res.statusCode === 302) {
           const redirectUrl = res.headers.location;
           if (redirectUrl) {
-            this.fetchUrl(redirectUrl, redirectDepth + 1).then(resolve).catch(reject);
+            // Strip Authorization header when redirect leaves GitHub domains (FN1)
+            const isSameOrigin = redirectUrl.includes('github.com') || redirectUrl.includes('githubusercontent.com');
+            this.fetchUrl(redirectUrl, redirectDepth + 1, isSameOrigin).then(resolve).catch(reject);
             return;
           }
         }
