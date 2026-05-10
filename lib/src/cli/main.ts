@@ -359,7 +359,8 @@ const readPackageVersion = (): string => {
 
 /**
  * CLI binary entry: only place where process.exit/console.error are
- * permitted (spec §14.2 invariant #3).
+ * permitted (spec §14.2 invariant #3). ESLint rule from Phase 2
+ * iter 9 enforces this for every other file under src/cli/.
  */
 if (require.main === module) {
   main(process.argv.slice(2))
@@ -369,3 +370,9 @@ if (require.main === module) {
       process.exit(1);
     });
 }
+
+/**
+ * Legacy entry point for bin scripts.
+ * @deprecated Use main() directly.
+ */
+export const mainWithArgv = main;
