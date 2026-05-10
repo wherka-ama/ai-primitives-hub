@@ -7,12 +7,12 @@ import {
   it,
 } from 'vitest';
 import {
-  EtagStore,
-} from '../src/infra/github/etag-store';
-import {
   type FetchLike,
   GitHubClient,
 } from '../src/infra/github/client';
+import {
+  EtagStore,
+} from '../src/infra/github/etag-store';
 import {
   staticTokenProvider,
 } from '../src/infra/github/token';

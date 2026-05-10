@@ -24,12 +24,6 @@ import type {
 import type {
   FileSystem,
 } from '../../ports/filesystem';
-import {
-  AwesomeCopilotBundleResolver,
-} from './awesome-copilot-resolver';
-import {
-  GitHubBundleResolver,
-} from './github-resolver';
 import type {
   HttpClient,
   TokenProvider,
@@ -37,6 +31,12 @@ import type {
 import type {
   BundleResolver,
 } from '../../ports/source-resolver';
+import {
+  AwesomeCopilotBundleResolver,
+} from './awesome-copilot-resolver';
+import {
+  GitHubBundleResolver,
+} from './github-resolver';
 import {
   LocalAwesomeCopilotBundleResolver,
   LocalSkillsBundleResolver,

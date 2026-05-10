@@ -8,12 +8,12 @@
 
 import * as crypto from 'node:crypto';
 import {
+  harvest,
+} from '../harvest/harvester';
+import {
   Bm25Engine,
   type FieldTokens,
 } from './bm25-engine';
-import {
-  harvest,
-} from '../harvest/harvester';
 import {
   tokenize,
 } from './tokenizer';

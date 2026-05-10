@@ -7,12 +7,12 @@ import {
 import type {
   Target,
 } from '../src/domain/install';
-import type {
-  ExtractedFiles,
-} from '../src/install/extractor';
 import {
   UserScopeWriter,
 } from '../src/infra/writers/user-scope-writer';
+import type {
+  ExtractedFiles,
+} from '../src/install/extractor';
 
 describe('UserScopeWriter', () => {
   const mockFs = {

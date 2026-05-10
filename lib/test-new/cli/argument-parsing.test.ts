@@ -4,16 +4,26 @@
  * Tests for parseCsv validation with PrimitiveKind enum values and
  * collectRepeated flag validation.
  */
-import { describe, it, expect } from 'vitest';
-import { parseCsvKinds, parseCsv, parseCsvEnum } from '../../src/cli/framework/parsers';
-import { PRIMITIVE_KINDS } from '../../src/domain/primitive/types';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  parseCsv,
+  parseCsvEnum,
+  parseCsvKinds,
+} from '../../src/cli/framework/parsers';
+import {
+  PRIMITIVE_KINDS,
+} from '../../src/domain/primitive/types';
 
 describe('CLI Argument Parsing - Fix 1: Type Assertion Bug', () => {
   describe('parseCsvKinds with PrimitiveKind validation', () => {
     it('should accept valid PrimitiveKind values', () => {
       const validKinds = 'prompt,agent,skill';
       const parsed = parseCsvKinds(validKinds);
-      
+
       expect(parsed).toEqual(['prompt', 'agent', 'skill']);
       // All parsed values should be valid PrimitiveKind
       for (const kind of parsed!) {
@@ -28,7 +38,7 @@ describe('CLI Argument Parsing - Fix 1: Type Assertion Bug', () => {
 
     it('should reject invalid PrimitiveKind values with error', () => {
       const invalidKinds = 'prompt,invalid-kind,agent';
-      
+
       expect(() => parseCsvKinds(invalidKinds)).toThrow(
         /Invalid PrimitiveKind value\(s\): invalid-kind/
       );
@@ -96,17 +106,17 @@ describe('CLI Argument Parsing - Fix 2: collectRepeated Flag Validation', () => 
   describe('collectRepeated', () => {
     it('should collect repeated flags with values', () => {
       const argv = ['--extra-source', 'source1', '--extra-source', 'source2'];
-      const collect = (argv: string[], flag: string): string[] => {
+      const collect = (args: string[], flag: string): string[] => {
         const out: string[] = [];
-        for (let i = 0; i < argv.length; i += 1) {
-          if (argv[i] === flag) {
-            if (i + 1 >= argv.length) {
+        for (let i = 0; i < args.length; i += 1) {
+          if (args[i] === flag) {
+            if (i + 1 >= args.length) {
               throw new Error(
-                `Flag ${flag} appears at end of arguments without a value. ` +
-                `Usage: ${flag} <value> [${flag} <value> ...]`
+                `Flag ${flag} appears at end of arguments without a value. `
+                + `Usage: ${flag} <value> [${flag} <value> ...]`
               );
             }
-            out.push(argv[i + 1]);
+            out.push(args[i + 1]);
           }
         }
         return out;
@@ -117,17 +127,17 @@ describe('CLI Argument Parsing - Fix 2: collectRepeated Flag Validation', () => 
 
     it('should throw error for trailing flag without value', () => {
       const argv = ['--extra-source', 'source1', '--extra-source'];
-      const collect = (argv: string[], flag: string): string[] => {
+      const collect = (args: string[], flag: string): string[] => {
         const out: string[] = [];
-        for (let i = 0; i < argv.length; i += 1) {
-          if (argv[i] === flag) {
-            if (i + 1 >= argv.length) {
+        for (let i = 0; i < args.length; i += 1) {
+          if (args[i] === flag) {
+            if (i + 1 >= args.length) {
               throw new Error(
-                `Flag ${flag} appears at end of arguments without a value. ` +
-                `Usage: ${flag} <value> [${flag} <value> ...]`
+                `Flag ${flag} appears at end of arguments without a value. `
+                + `Usage: ${flag} <value> [${flag} <value> ...]`
               );
             }
-            out.push(argv[i + 1]);
+            out.push(args[i + 1]);
           }
         }
         return out;
@@ -139,17 +149,17 @@ describe('CLI Argument Parsing - Fix 2: collectRepeated Flag Validation', () => 
 
     it('should handle flag with empty string value', () => {
       const argv = ['--extra-source', 'source1', '--extra-source', ''];
-      const collect = (argv: string[], flag: string): string[] => {
+      const collect = (args: string[], flag: string): string[] => {
         const out: string[] = [];
-        for (let i = 0; i < argv.length; i += 1) {
-          if (argv[i] === flag) {
-            if (i + 1 >= argv.length) {
+        for (let i = 0; i < args.length; i += 1) {
+          if (args[i] === flag) {
+            if (i + 1 >= args.length) {
               throw new Error(
-                `Flag ${flag} appears at end of arguments without a value. ` +
-                `Usage: ${flag} <value> [${flag} <value> ...]`
+                `Flag ${flag} appears at end of arguments without a value. `
+                + `Usage: ${flag} <value> [${flag} <value> ...]`
               );
             }
-            out.push(argv[i + 1]);
+            out.push(args[i + 1]);
           }
         }
         return out;
@@ -160,17 +170,17 @@ describe('CLI Argument Parsing - Fix 2: collectRepeated Flag Validation', () => 
 
     it('should handle flag followed by another flag (not a value)', () => {
       const argv = ['--extra-source', 'source1', '--extra-source', '--other-flag'];
-      const collect = (argv: string[], flag: string): string[] => {
+      const collect = (args: string[], flag: string): string[] => {
         const out: string[] = [];
-        for (let i = 0; i < argv.length; i += 1) {
-          if (argv[i] === flag) {
-            if (i + 1 >= argv.length) {
+        for (let i = 0; i < args.length; i += 1) {
+          if (args[i] === flag) {
+            if (i + 1 >= args.length) {
               throw new Error(
-                `Flag ${flag} appears at end of arguments without a value. ` +
-                `Usage: ${flag} <value> [${flag} <value> ...]`
+                `Flag ${flag} appears at end of arguments without a value. `
+                + `Usage: ${flag} <value> [${flag} <value> ...]`
               );
             }
-            out.push(argv[i + 1]);
+            out.push(args[i + 1]);
           }
         }
         return out;
@@ -182,17 +192,17 @@ describe('CLI Argument Parsing - Fix 2: collectRepeated Flag Validation', () => 
 
     it('should return empty array when flag not present', () => {
       const argv = ['--other-flag', 'value'];
-      const collect = (argv: string[], flag: string): string[] => {
+      const collect = (args: string[], flag: string): string[] => {
         const out: string[] = [];
-        for (let i = 0; i < argv.length; i += 1) {
-          if (argv[i] === flag) {
-            if (i + 1 >= argv.length) {
+        for (let i = 0; i < args.length; i += 1) {
+          if (args[i] === flag) {
+            if (i + 1 >= args.length) {
               throw new Error(
-                `Flag ${flag} appears at end of arguments without a value. ` +
-                `Usage: ${flag} <value> [${flag} <value> ...]`
+                `Flag ${flag} appears at end of arguments without a value. `
+                + `Usage: ${flag} <value> [${flag} <value> ...]`
               );
             }
-            out.push(argv[i + 1]);
+            out.push(args[i + 1]);
           }
         }
         return out;

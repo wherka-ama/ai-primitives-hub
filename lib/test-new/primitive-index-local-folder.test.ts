@@ -9,11 +9,11 @@ import {
   it,
 } from 'vitest';
 import {
-  harvest,
-} from '../src/infra/harvest/harvester';
-import {
   LocalFolderBundleProvider,
 } from '../src/infra/harvest/bundle-providers/local-folder';
+import {
+  harvest,
+} from '../src/infra/harvest/harvester';
 
 function writeBundle(root: string, id: string): void {
   const dir = path.join(root, id);

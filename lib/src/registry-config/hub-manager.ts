@@ -21,11 +21,11 @@ import {
   ActiveHubStore,
 } from '../infra/stores/active-hub-store';
 import {
-  type HubResolver,
-} from './hub-resolver';
-import {
   HubStore,
 } from '../infra/stores/yaml-hub-store';
+import {
+  type HubResolver,
+} from './hub-resolver';
 
 export interface HubInfo {
   id: string;

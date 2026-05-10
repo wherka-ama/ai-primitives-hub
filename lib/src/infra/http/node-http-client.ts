@@ -14,7 +14,7 @@ import type {
  * Production HTTP client using global fetch (Node 18+).
  */
 export class NodeHttpClient implements HttpClient {
-  async fetch(req: HttpRequest): Promise<HttpResponse> {
+  public async fetch(req: HttpRequest): Promise<HttpResponse> {
     const resp = await globalThis.fetch(req.url, {
       method: req.method ?? 'GET',
       headers: req.headers,

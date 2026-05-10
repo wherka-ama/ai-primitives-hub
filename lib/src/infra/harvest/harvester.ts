@@ -5,16 +5,16 @@
  * identical code runs from the extension, the CLI, or a skill.
  */
 
-import {
-  extractFromFile,
-  extractMcpPrimitives,
-} from './extractor';
 import type {
   BundleManifest,
   BundleProvider,
   BundleRef,
   Primitive,
 } from '../search/types';
+import {
+  extractFromFile,
+  extractMcpPrimitives,
+} from './extractor';
 
 /**
  * Options for harvesting primitives.

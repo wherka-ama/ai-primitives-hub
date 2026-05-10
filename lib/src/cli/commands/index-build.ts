@@ -9,17 +9,17 @@
  */
 import * as path from 'node:path';
 import {
-  PrimitiveIndex,
-} from '../../infra/search/primitive-index';
-import {
   LocalFolderBundleProvider,
 } from '../../infra/harvest/bundle-providers/local-folder';
 import {
-  saveIndex,
-} from '../../infra/stores/json-index-store';
+  PrimitiveIndex,
+} from '../../infra/search/primitive-index';
 import type {
   IndexStats,
 } from '../../infra/search/types';
+import {
+  saveIndex,
+} from '../../infra/stores/json-index-store';
 import {
   type CommandDefinition,
   type Context,

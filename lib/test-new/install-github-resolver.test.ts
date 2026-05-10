@@ -4,12 +4,12 @@ import {
   it,
 } from 'vitest';
 import {
-  GitHubBundleResolver,
-} from '../src/infra/resolvers/github-resolver';
-import {
   envTokenProvider,
   NULL_TOKEN_PROVIDER,
 } from '../src/infra/github/token';
+import {
+  GitHubBundleResolver,
+} from '../src/infra/resolvers/github-resolver';
 import {
   generateSourceId,
 } from '../src/install/source-id';

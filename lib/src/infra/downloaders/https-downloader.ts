@@ -16,12 +16,6 @@ import {
   type Installable,
 } from '../../domain/install';
 import {
-  AssetFetcher,
-} from '../github/asset-fetcher';
-import {
-  type FetchLike,
-} from '../github/client';
-import {
   type BundleDownloader,
   type DownloadResult,
 } from '../../install/downloader';
@@ -29,6 +23,12 @@ import {
   type HttpClient,
   type TokenProvider,
 } from '../../ports/http';
+import {
+  AssetFetcher,
+} from '../github/asset-fetcher';
+import {
+  type FetchLike,
+} from '../github/client';
 
 /**
  * HttpsBundleDownloader — fetches a bundle's bytes and integrity-checks them.

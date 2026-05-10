@@ -12,12 +12,11 @@
  */
 import * as path from 'node:path';
 import {
-  envTokenProvider,
-} from '../../install/http';
+  NodeHttpClient,
+} from '../../infra/http/node-http-client';
 import {
-  type HttpClient,
-  type TokenProvider,
-} from '../../ports/http';
+  ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
 import {
   readLockfile,
   upsertEntry,
@@ -26,8 +25,8 @@ import {
   writeLockfile,
 } from '../../infra/stores/json-lockfile-store';
 import {
-  NodeHttpClient,
-} from '../../infra/http/node-http-client';
+  envTokenProvider,
+} from '../../install/http';
 import {
   generateSourceId,
 } from '../../install/source-id';
@@ -35,8 +34,9 @@ import {
   readTargets,
 } from '../../install/target-store';
 import {
-  ActiveHubStore,
-} from '../../infra/stores/active-hub-store';
+  type HttpClient,
+  type TokenProvider,
+} from '../../ports/http';
 import {
   type ActivationOutcome,
   CompositeHubResolver,

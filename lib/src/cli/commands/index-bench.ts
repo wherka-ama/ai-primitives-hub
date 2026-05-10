@@ -10,13 +10,13 @@
 // eslint-disable-next-line local/no-framework-imports -- bounded sync read of the gold-set file; refactoring loadIndex+gold to async ctx.fs is tracked separately.
 import * as fs from 'node:fs';
 import {
+  defaultIndexFile,
+} from '../../infra/harvest/default-paths';
+import {
   type BenchCase,
   renderBenchReportMarkdown,
   runBench,
 } from '../../infra/search/bench';
-import {
-  defaultIndexFile,
-} from '../../infra/harvest/default-paths';
 import {
   loadIndex,
 } from '../../infra/stores/json-index-store';

@@ -14,21 +14,17 @@ import type {
   Target,
 } from '../../domain/install';
 import {
-  checksumFiles,
-} from '../../install/checksum';
+  HttpsBundleDownloader,
+} from '../../infra/downloaders/https-downloader';
+import {
+  YauzlBundleExtractor,
+} from '../../infra/extractors/yauzl-extractor';
+import {
+  NodeHttpClient,
+} from '../../infra/http/node-http-client';
 import {
   GitHubBundleResolver,
 } from '../../infra/resolvers/github-resolver';
-import {
-  type HttpClient,
-  type TokenProvider,
-} from '../../ports/http';
-import {
-  envTokenProvider,
-} from '../../install/http';
-import {
-  HttpsBundleDownloader,
-} from '../../infra/downloaders/https-downloader';
 import {
   readLocalBundle,
 } from '../../infra/resolvers/local-resolver';
@@ -41,16 +37,23 @@ import {
   writeLockfile,
 } from '../../infra/stores/json-lockfile-store';
 import {
-  validateManifest,
-} from '../../install/manifest-validator';
-import {
-  NodeHttpClient,
-} from '../../infra/http/node-http-client';
+  FileTreeTargetWriter,
+  type TargetWriter,
+} from '../../infra/writers/file-tree-writer';
 import {
   type RepositoryCommitMode,
   RepositoryScopeWriter,
   RepositoryScopeWriterAdapter,
 } from '../../infra/writers/repo-scope-writer';
+import {
+  checksumFiles,
+} from '../../install/checksum';
+import {
+  envTokenProvider,
+} from '../../install/http';
+import {
+  validateManifest,
+} from '../../install/manifest-validator';
 import {
   parseBundleSpec,
 } from '../../install/spec-parser';
@@ -61,12 +64,9 @@ import {
   readTargets,
 } from '../../install/target-store';
 import {
-  FileTreeTargetWriter,
-  type TargetWriter,
-} from '../../infra/writers/file-tree-writer';
-import {
-  YauzlBundleExtractor,
-} from '../../infra/extractors/yauzl-extractor';
+  type HttpClient,
+  type TokenProvider,
+} from '../../ports/http';
 import {
   type CommandDefinition,
   type Context,

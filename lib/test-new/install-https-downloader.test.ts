@@ -7,15 +7,18 @@ import type {
   Installable,
 } from '../src/domain/install';
 import {
-  sha256Hex,
-} from '../src/install/downloader';
+  HttpsBundleDownloader,
+} from '../src/infra/downloaders/https-downloader';
 import {
   envTokenProvider,
   NULL_TOKEN_PROVIDER,
 } from '../src/infra/github/token';
 import {
-  HttpsBundleDownloader,
-} from '../src/infra/downloaders/https-downloader';
+  sha256Hex,
+} from '../src/install/downloader';
+import type {
+  HttpResponse,
+} from '../src/ports/http';
 import {
   RecordingHttpClient,
 } from './install-http.test';

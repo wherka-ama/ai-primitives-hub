@@ -7,12 +7,10 @@
  */
 import * as path from 'node:path';
 import type {
-  ValidationResult,
   ObjectValidationResult,
+  ValidationResult,
   ValidationRules,
 } from './types';
-
-export { ValidationResult, ObjectValidationResult };
 
 /**
  * Default validation rules for collections.
@@ -245,3 +243,5 @@ export function validateCollectionObject(
 
   return { ok: errors.length === 0, errors };
 }
+
+export { type ValidationResult, type ObjectValidationResult } from './types';

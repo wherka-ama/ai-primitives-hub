@@ -22,6 +22,10 @@ import type {
   Target,
 } from '../domain/install';
 import type {
+  TargetWriter,
+  TargetWriteResult,
+} from '../infra/writers/file-tree-writer';
+import type {
   BundleDownloader,
 } from './downloader';
 import type {
@@ -34,10 +38,6 @@ import {
 import type {
   BundleResolver,
 } from './resolver';
-import type {
-  TargetWriter,
-  TargetWriteResult,
-} from '../infra/writers/file-tree-writer';
 
 /**
  * Pipeline events emitted during install.
@@ -138,9 +138,9 @@ export class InstallPipeline {
     let download;
     try {
       download = await this.opts.downloader.download(installable);
-    } catch (cause) {
+    } catch (downloadError) {
       throw new InstallPipelineError(
-        `download failed: ${(cause as Error).message}`,
+        `download failed: ${(downloadError as Error).message}`,
         'NETWORK.DOWNLOAD_FAILED',
         'download'
       );
@@ -152,9 +152,9 @@ export class InstallPipeline {
     let files;
     try {
       files = await this.opts.extractor.extract(download.bytes);
-    } catch (cause) {
+    } catch (extractError) {
       throw new InstallPipelineError(
-        `extract failed: ${(cause as Error).message}`,
+        `extract failed: ${(extractError as Error).message}`,
         'BUNDLE.EXTRACT_FAILED',
         'extract'
       );
@@ -169,8 +169,8 @@ export class InstallPipeline {
         expectedId: spec.bundleId,
         expectedVersion: spec.bundleVersion
       });
-    } catch (cause) {
-      const e = cause as { code?: string; message: string };
+    } catch (validateError) {
+      const e = validateError as { code?: string; message: string };
       throw new InstallPipelineError(
         e.message,
         e.code ?? 'BUNDLE.MANIFEST_INVALID',
@@ -185,9 +185,9 @@ export class InstallPipeline {
     try {
       const writer = this.opts.writerFactory(target);
       writeResult = await writer.write(target, files);
-    } catch (cause) {
+    } catch (writeError) {
       throw new InstallPipelineError(
-        `write failed: ${(cause as Error).message}`,
+        `write failed: ${(writeError as Error).message}`,
         'FS.WRITE_FAILED',
         'write'
       );

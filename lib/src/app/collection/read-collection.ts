@@ -9,13 +9,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as yaml from 'js-yaml';
 import type {
+  AllCollectionsResult,
   Collection,
   FileValidationResult,
-  AllCollectionsResult,
 } from '../../domain/collection/types';
 import {
-  validateCollectionObject,
   normalizeRepoRelativePath,
+  validateCollectionObject,
 } from '../../domain/collection/validate';
 
 /**

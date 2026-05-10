@@ -22,11 +22,11 @@ import type {
   Target,
 } from '../../domain/install';
 import type {
-  FileSystem,
-} from '../../ports/filesystem';
-import type {
   ExtractedFiles,
 } from '../../install/extractor';
+import type {
+  FileSystem,
+} from '../../ports/filesystem';
 import type {
   TargetWriter,
   TargetWriteResult,

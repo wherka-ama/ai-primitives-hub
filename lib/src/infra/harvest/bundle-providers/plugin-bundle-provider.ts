@@ -19,20 +19,20 @@ import type {
   HubSourceSpec,
   PluginManifest,
 } from '../../../domain';
+import {
+  BlobCache,
+} from '../../github/blob-cache';
+import type {
+  GitHubClient,
+} from '../../github/client';
+import type {
+  EtagStore,
+} from '../../github/etag-store';
 import type {
   BundleManifest,
   BundleProvider,
   BundleRef,
 } from '../../search/types';
-import {
-  BlobCache,
-} from '../../github/blob-cache';
-import type {
-  EtagStore,
-} from '../../github/etag-store';
-import type {
-  GitHubClient,
-} from '../../github/client';
 import {
   extractPluginMcpServers,
 } from '../plugin-manifest';
@@ -96,7 +96,7 @@ export class AwesomeCopilotPluginBundleProvider implements BundleProvider {
     const rawUrl = `https://raw.githubusercontent.com/${this.opts.spec.owner}/${this.opts.spec.repo}/${this.opts.spec.branch}/${relPath}`;
     const bytes = await this.opts.cache.getOrFetch(entry.blobSha, async () => {
       const req = new Request(rawUrl);
-      const res = await this.opts.client['fetchImpl'](req);
+      const res = await this.opts.client.fetchImpl(req);
       if (!res.ok) {
         throw new Error(`Failed to fetch ${rawUrl}: ${res.statusText}`);
       }

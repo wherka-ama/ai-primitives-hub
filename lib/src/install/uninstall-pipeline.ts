@@ -15,9 +15,6 @@ import type {
   Target,
 } from '../domain/install';
 import type {
-  FileSystem,
-} from '../ports/filesystem';
-import type {
   LockfileEntry,
 } from '../infra/stores/json-lockfile-store';
 import {
@@ -28,6 +25,9 @@ import {
 import type {
   TargetWriter,
 } from '../infra/writers/file-tree-writer';
+import type {
+  FileSystem,
+} from '../ports/filesystem';
 
 /**
  * Options for uninstall pipeline.
@@ -107,15 +107,15 @@ export class UninstallPipeline {
 
   /**
    * Plan uninstall by resolving lockfile entry.
-   * @param bundleId - Bundle ID to uninstall.
+   * @param id - Bundle ID to uninstall.
    * @returns Uninstall plan.
    */
-  public async plan(bundleId: string): Promise<UninstallPlan> {
+  public async plan(id: string): Promise<UninstallPlan> {
     const lock = await readLockfile(this.lockfile, this.fs);
-    const entry = lock.entries.find((e) => e.bundleId === bundleId && e.target === this.target.name);
+    const entry = lock.entries.find((e) => e.bundleId === id && e.target === this.target.name);
 
     return {
-      bundleId,
+      bundleId: id,
       filesToRemove: entry?.files ?? [],
       lockfileEntry: entry ?? null
     };
@@ -123,15 +123,15 @@ export class UninstallPipeline {
 
   /**
    * Execute uninstall by removing files and updating lockfile.
-   * @param bundleId - Bundle ID to uninstall.
+   * @param id - Bundle ID to uninstall.
    * @returns Uninstall result.
    */
-  public async run(bundleId: string): Promise<UninstallResult> {
-    const plan = await this.plan(bundleId);
+  public async run(id: string): Promise<UninstallResult> {
+    const plan = await this.plan(id);
 
     if (plan.lockfileEntry === null) {
       return {
-        bundleId,
+        bundleId: id,
         removed: [],
         skipped: []
       };
@@ -146,7 +146,7 @@ export class UninstallPipeline {
     await writeLockfile(this.lockfile, nextLock, this.fs);
 
     return {
-      bundleId,
+      bundleId: id,
       removed: result.removed,
       skipped: result.skipped
     };

@@ -13,13 +13,13 @@ import {
 import type {
   PrimitiveIndex,
 } from '../../infra/search/primitive-index';
+import type {
+  Shortlist,
+} from '../../infra/search/types';
 import {
   loadIndex,
   saveIndex,
 } from '../../infra/stores/json-index-store';
-import type {
-  Shortlist,
-} from '../../infra/search/types';
 import {
   type CommandDefinition,
   type Context,

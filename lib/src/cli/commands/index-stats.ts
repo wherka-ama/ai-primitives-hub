@@ -9,12 +9,12 @@
 import {
   defaultIndexFile,
 } from '../../infra/harvest/default-paths';
-import {
-  loadIndex,
-} from '../../infra/stores/json-index-store';
 import type {
   IndexStats,
 } from '../../infra/search/types';
+import {
+  loadIndex,
+} from '../../infra/stores/json-index-store';
 import {
   type CommandDefinition,
   type Context,

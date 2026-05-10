@@ -31,24 +31,17 @@ import {
   type Installable,
 } from '../domain/install';
 import {
-  AssetFetcher,
-} from '../infra/github/asset-fetcher';
-import {
-  type ExtractedFiles,
-} from '../install/extractor';
-import {
-  type HttpClient,
-  type TokenProvider,
-} from '../ports/http';
-import {
   HttpsBundleDownloader,
 } from '../infra/downloaders/https-downloader';
 import {
+  YauzlBundleExtractor,
+} from '../infra/extractors/yauzl-extractor';
+import {
+  AssetFetcher,
+} from '../infra/github/asset-fetcher';
+import {
   readLocalBundle,
 } from '../infra/resolvers/local-resolver';
-import {
-  validateManifest,
-} from '../install/manifest-validator';
 import {
   SourceDispatcher,
 } from '../infra/resolvers/resolver-registry';
@@ -56,11 +49,18 @@ import {
   FileTreeTargetWriter,
 } from '../infra/writers/file-tree-writer';
 import {
-  YauzlBundleExtractor,
-} from '../infra/extractors/yauzl-extractor';
+  type ExtractedFiles,
+} from '../install/extractor';
+import {
+  validateManifest,
+} from '../install/manifest-validator';
 import type {
   FileSystem,
 } from '../ports/filesystem';
+import {
+  type HttpClient,
+  type TokenProvider,
+} from '../ports/http';
 
 export interface ProfileActivatorDeps {
   /** Filesystem abstraction. */

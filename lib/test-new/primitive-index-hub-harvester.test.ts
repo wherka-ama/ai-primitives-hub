@@ -48,8 +48,8 @@ function makeFetch(repos: Map<string, { sha: string; tree: { path: string; sha: 
         const owner = pathMatch[1];
         const repoName = pathMatch[2];
         const relPath = pathMatch[3];
-        const key = `${owner}/${repoName}`;
-        const repoData = repos.get(key);
+        const rawKey = `${owner}/${repoName}`;
+        const repoData = repos.get(rawKey);
         if (repoData) {
           const entry = repoData.tree.find((t) => t.path === relPath);
           if (entry) {
@@ -59,17 +59,17 @@ function makeFetch(repos: Map<string, { sha: string; tree: { path: string; sha: 
             }
           }
         }
-        return new Response(JSON.stringify({ message: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+        return Response.json({ message: 'not found' }, { status: 404, headers: { 'content-type': 'application/json' } });
       }
     }
     const m = url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)(.*)$/);
     if (!m) {
       return jsonResp({ message: 'no repo' }, 404);
     }
-    const key = `${m[1]}/${m[2]}`;
-    const repo = repos.get(key);
+    const repoKey = `${m[1]}/${m[2]}`;
+    const repo = repos.get(repoKey);
     if (!repo) {
-      return jsonResp({ message: `unknown ${key}` }, 404);
+      return jsonResp({ message: `unknown ${repoKey}` }, 404);
     }
     if (/\/commits\/[^/]+$/.test(m[3])) {
       return jsonResp({ sha: repo.sha });
@@ -96,9 +96,9 @@ function makeFetch(repos: Map<string, { sha: string; tree: { path: string; sha: 
         const owner = pathMatch[1];
         const repoName = pathMatch[2];
         const relPath = pathMatch[3];
-        const key = `${owner}/${repoName}`;
-        const repoData = repos.get(key);
-        console.log('DEBUG mock: key =', key, 'repoData =', !!repoData);
+        const rawKey = `${owner}/${repoName}`;
+        const repoData = repos.get(rawKey);
+        console.log('DEBUG mock: key =', rawKey, 'repoData =', !!repoData);
         if (repoData) {
           const entry = repoData.tree.find((t) => t.path === relPath);
           console.log('DEBUG mock: relPath =', relPath, 'entry =', !!entry);
@@ -110,7 +110,7 @@ function makeFetch(repos: Map<string, { sha: string; tree: { path: string; sha: 
             }
           }
         }
-        return new Response(JSON.stringify({ message: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+        return Response.json({ message: 'not found' }, { status: 404, headers: { 'content-type': 'application/json' } });
       }
     }
     return jsonResp({ message: `unexpected ${m[3]}` }, 500);

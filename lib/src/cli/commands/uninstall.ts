@@ -18,6 +18,10 @@ import {
   writeLockfile,
 } from '../../infra/stores/json-lockfile-store';
 import {
+  FileTreeTargetWriter,
+  type TargetWriter,
+} from '../../infra/writers/file-tree-writer';
+import {
   type RepositoryCommitMode,
   RepositoryScopeWriter,
   RepositoryScopeWriterAdapter,
@@ -28,10 +32,6 @@ import {
 import {
   readTargets,
 } from '../../install/target-store';
-import {
-  FileTreeTargetWriter,
-  type TargetWriter,
-} from '../../infra/writers/file-tree-writer';
 import {
   UninstallPipeline,
 } from '../../install/uninstall-pipeline';

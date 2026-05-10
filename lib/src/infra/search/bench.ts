@@ -12,11 +12,11 @@
  */
 
 import type {
-  SearchQuery,
-} from './types';
-import type {
   PrimitiveIndex,
 } from './primitive-index';
+import type {
+  SearchQuery,
+} from './types';
 
 export interface BenchCase {
   id: string;

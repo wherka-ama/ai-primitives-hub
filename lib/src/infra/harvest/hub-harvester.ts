@@ -21,34 +21,44 @@ import type {
 import type {
   TokenProvider,
 } from '../../ports/http';
-
-export type HubHarvestEvent =
-  | { kind: 'source-start'; sourceId: string }
-  | { kind: 'source-skip'; sourceId: string; commitSha: string; reason: string }
-  | { kind: 'source-done'; sourceId: string; commitSha: string; primitives: number; ms: number }
-  | { kind: 'source-error'; sourceId: string; error: string };
+import {
+  BlobCache,
+} from '../github/blob-cache';
+import {
+  GitHubClient,
+} from '../github/client';
+import {
+  EtagStore,
+} from '../github/etag-store';
+import {
+  staticTokenProvider,
+} from '../github/token';
+import {
+  PrimitiveIndex,
+} from '../search/primitive-index';
+import type {
+  IndexStats,
+  Primitive,
+} from '../search/types';
+import {
+  saveIndex,
+} from '../stores/json-index-store';
+import {
+  GitHubSingleBundleProvider,
+} from './bundle-providers/github-bundle-provider';
+import {
+  AwesomeCopilotPluginBundleProvider,
+} from './bundle-providers/plugin-bundle-provider';
 import {
   defaultHubCacheDir,
   defaultIndexFile,
 } from './default-paths';
 import {
-  BlobCache,
-} from '../github/blob-cache';
-import {
-  AssetFetcher,
-} from '../github/asset-fetcher';
-import {
-  EtagStore,
-} from '../github/etag-store';
-import {
   parseExtraSource,
 } from './extra-source';
 import {
-  GitHubClient,
-} from '../github/client';
-import {
-  staticTokenProvider,
-} from '../github/token';
+  harvestBundle,
+} from './harvester';
 import {
   parseHubConfig,
 } from './hub-config-parser';
@@ -56,37 +66,22 @@ import {
   saveIndexWithIntegrity,
 } from './integrity';
 import {
-  redactToken,
-  resolveGithubToken,
-} from './token-provider';
-import {
-  saveIndex,
-} from '../stores/json-index-store';
-import type {
-  IndexStats,
-} from '../search/types';
-import {
-  harvestBundle,
-} from './harvester';
-import {
-  PrimitiveIndex,
-} from '../search/primitive-index';
-import type {
-  Primitive,
-} from '../search/types';
-import {
   HarvestProgressLog,
   type ProgressSummary,
 } from './progress-log';
 import {
+  redactToken,
+  resolveGithubToken,
+} from './token-provider';
+import {
   resolveCommitSha,
 } from './tree-enumerator';
-import {
-  GitHubSingleBundleProvider,
-} from './bundle-providers/github-bundle-provider';
-import {
-  AwesomeCopilotPluginBundleProvider,
-} from './bundle-providers/plugin-bundle-provider';
+
+export type HubHarvestEvent =
+  | { kind: 'source-start'; sourceId: string }
+  | { kind: 'source-skip'; sourceId: string; commitSha: string; reason: string }
+  | { kind: 'source-done'; sourceId: string; commitSha: string; primitives: number; ms: number }
+  | { kind: 'source-error'; sourceId: string; error: string };
 
 /**
  * Parameters for resolving hub sources.
@@ -368,7 +363,6 @@ async function runHarvester(
   opts: HubHarvestPipelineOptions
 ): Promise<{ index: any; totalMs: number; done: number; error: number; skip: number; primitives: number; wallMs: number }> {
   const cache = new BlobCache(path.join(cacheDir, 'blobs'));
-  const blobs = new AssetFetcher({ tokens: tokenProvider });
   const etagStore = await EtagStore.open(path.join(cacheDir, 'etags.json'));
   const harvester = new HubHarvester({
     sources, client, cache, etagStore,

@@ -4,12 +4,12 @@
  */
 
 import type {
+  PrimitiveIndex,
+} from '../../infra/search/primitive-index';
+import type {
   Primitive,
   Shortlist,
 } from '../../infra/search/types';
-import type {
-  PrimitiveIndex,
-} from '../../infra/search/primitive-index';
 
 export interface HubProfileBundleRef {
   id: string;

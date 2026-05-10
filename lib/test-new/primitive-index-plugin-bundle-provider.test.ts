@@ -92,7 +92,7 @@ describe('plugin-bundle-provider', () => {
             }
           }
         }
-        return new Response(JSON.stringify({ message: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+        return Response.json({ message: 'not found' }, { status: 404, headers: { 'content-type': 'application/json' } });
       }
       throw new Error(`unexpected URL: ${url}`);
     };
@@ -190,7 +190,7 @@ describe('plugin-bundle-provider', () => {
             return new Response(new Uint8Array(Buffer.from(manifest, 'utf8')), { status: 200, headers: { 'content-type': 'text/plain' } });
           }
         }
-        return new Response(JSON.stringify({ message: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+        return Response.json({ message: 'not found' }, { status: 404, headers: { 'content-type': 'application/json' } });
       }
       throw new Error(`unexpected URL: ${url}`);
     };

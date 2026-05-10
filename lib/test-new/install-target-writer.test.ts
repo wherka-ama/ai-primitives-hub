@@ -8,14 +8,14 @@ import type {
   Target,
 } from '../src/domain/install';
 import {
-  filesFromRecord,
-} from '../src/install/extractor';
-import {
   expandPath,
   FileTreeTargetWriter,
   resolveLayout,
   type WriterFs,
 } from '../src/infra/writers/file-tree-writer';
+import {
+  filesFromRecord,
+} from '../src/install/extractor';
 
 interface RecordingFs extends WriterFs {
   writes: Map<string, string>;

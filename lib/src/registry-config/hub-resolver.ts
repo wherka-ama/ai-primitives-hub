@@ -18,13 +18,13 @@ import {
   type HubReference,
   isHubConfig,
 } from '../domain/registry';
+import type {
+  FileSystem,
+} from '../ports/filesystem';
 import {
   type HttpClient,
   type TokenProvider,
 } from '../ports/http';
-import type {
-  FileSystem,
-} from '../ports/filesystem';
 
 export interface ResolvedHub {
   config: HubConfig;

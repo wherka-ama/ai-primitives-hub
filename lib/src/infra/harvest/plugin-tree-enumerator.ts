@@ -27,11 +27,11 @@ import {
   BlobCache,
 } from '../github/blob-cache';
 import type {
-  EtagStore,
-} from '../github/etag-store';
-import type {
   GitHubClient,
 } from '../github/client';
+import type {
+  EtagStore,
+} from '../github/etag-store';
 import {
   derivePluginItems,
   parsePluginManifest,
@@ -275,22 +275,22 @@ async function fetchManifestBytes(
 ): Promise<string> {
   const url = `/repos/${owner}/${repo}/git/blobs/${sha}`;
   if (cache) {
-    const bytes = await cache.getOrFetch(sha, async () => {
-      const res = await client.getJson<{ encoding: string; content: string; sha: string }>(url);
-      return res.encoding === 'base64'
-        ? Buffer.from(res.content, 'base64')
-        : Buffer.from(res.content, 'utf8');
+    const cachedBytes = await cache.getOrFetch(sha, async () => {
+      const cachedRes = await client.getJson<{ encoding: string; content: string; sha: string }>(url);
+      return cachedRes.encoding === 'base64'
+        ? Buffer.from(cachedRes.content, 'base64')
+        : Buffer.from(cachedRes.content, 'utf8');
     });
     // Skip empty cached data (stale from previous test runs)
-    if (bytes.length === 0) {
-      const res = await client.getJson<{ encoding: string; content: string; sha: string }>(url);
-      const freshBytes = res.encoding === 'base64'
-        ? Buffer.from(res.content, 'base64')
-        : Buffer.from(res.content, 'utf8');
+    if (cachedBytes.length === 0) {
+      const freshRes = await client.getJson<{ encoding: string; content: string; sha: string }>(url);
+      const freshBytes = freshRes.encoding === 'base64'
+        ? Buffer.from(freshRes.content, 'base64')
+        : Buffer.from(freshRes.content, 'utf8');
       await cache.put(sha, freshBytes);
       return freshBytes.toString('utf8');
     }
-    return bytes.toString('utf8');
+    return cachedBytes.toString('utf8');
   }
   // Fallback: direct fetch without cache
   const res = await client.getJson<{ encoding: string; content: string; sha: string }>(url);

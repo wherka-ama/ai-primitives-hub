@@ -15,7 +15,6 @@ export type HubSourceType = 'github' | 'awesome-copilot' | 'awesome-copilot-plug
 /**
  * A parsed-and-normalised hub source.
  * Produced by parseHubConfig and consumed by the harvester pipeline.
- *
  * @deprecated Use HubSourceSpec from domain/hub/types.ts directly.
  * This re-export is for backward compatibility during migration.
  */

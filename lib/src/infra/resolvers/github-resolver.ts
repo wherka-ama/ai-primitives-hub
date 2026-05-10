@@ -14,15 +14,15 @@ import {
   type Installable,
 } from '../../domain/install';
 import {
+  generateSourceId,
+} from '../../install/source-id';
+import {
   type HttpClient,
   type TokenProvider,
 } from '../../ports/http';
 import {
   type BundleResolver,
 } from '../../ports/source-resolver';
-import {
-  generateSourceId,
-} from '../../install/source-id';
 
 /**
  * Minimal shape of GitHub's `/releases` API response (subset we use).

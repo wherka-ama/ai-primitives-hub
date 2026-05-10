@@ -10,12 +10,12 @@
  */
 import * as path from 'node:path';
 import {
+  BlobCache,
+} from '../../infra/github/blob-cache';
+import {
   defaultHubCacheDir,
   defaultProgressFile,
 } from '../../infra/harvest/default-paths';
-import {
-  BlobCache,
-} from '../../infra/github/blob-cache';
 import {
   type BundleState,
   HarvestProgressLog,

@@ -19,18 +19,18 @@ import {
   type Installable,
 } from '../../domain/install';
 import {
+  generateSourceId,
+} from '../../install/source-id';
+import {
+  buildZip,
+} from '../../install/zip-writer';
+import {
   type HttpClient,
   type TokenProvider,
 } from '../../ports/http';
 import {
   type BundleResolver,
 } from '../../ports/source-resolver';
-import {
-  generateSourceId,
-} from '../../install/source-id';
-import {
-  buildZip,
-} from '../../install/zip-writer';
 
 function resolveManifestVersion(spec: BundleSpec): string {
   if (spec.bundleVersion === 'latest') {

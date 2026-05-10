@@ -8,6 +8,10 @@ import type {
   Target,
 } from '../src/domain/install';
 import {
+  FileTreeTargetWriter,
+  type WriterFs,
+} from '../src/infra/writers/file-tree-writer';
+import {
   MemoryBundleDownloader,
 } from '../src/install/downloader';
 import {
@@ -25,10 +29,6 @@ import {
 import {
   MapBundleResolver,
 } from '../src/install/resolver';
-import {
-  FileTreeTargetWriter,
-  type WriterFs,
-} from '../src/infra/writers/file-tree-writer';
 
 const target: Target = { name: 'dev', type: 'vscode', scope: 'user', path: '/tmp/v' };
 

@@ -20,12 +20,12 @@
  */
 
 import type {
+  PrimitiveIndex,
+} from './primitive-index';
+import type {
   Primitive,
   SearchQuery,
 } from './types';
-import type {
-  PrimitiveIndex,
-} from './primitive-index';
 
 export interface RelevancePattern {
   /** RegExp source matched against primitive.title (case-insensitive). */

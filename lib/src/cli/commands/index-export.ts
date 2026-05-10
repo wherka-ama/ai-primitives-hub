@@ -15,11 +15,11 @@ import {
   dump as toYaml,
 } from 'js-yaml';
 import {
-  defaultIndexFile,
-} from '../../infra/harvest/default-paths';
-import {
   exportShortlistAsProfile,
 } from '../../app/search/export-profile';
+import {
+  defaultIndexFile,
+} from '../../infra/harvest/default-paths';
 import {
   loadIndex,
 } from '../../infra/stores/json-index-store';

@@ -24,6 +24,12 @@ import {
   type BundleSpec,
   type Installable,
 } from '../../domain/install';
+import {
+  generateSourceId,
+} from '../../install/source-id';
+import {
+  buildZip,
+} from '../../install/zip-writer';
 import type {
   FileSystem,
 } from '../../ports/filesystem';
@@ -34,12 +40,6 @@ import {
 import {
   type BundleResolver,
 } from '../../ports/source-resolver';
-import {
-  generateSourceId,
-} from '../../install/source-id';
-import {
-  buildZip,
-} from '../../install/zip-writer';
 
 /* eslint-disable @typescript-eslint/naming-convention -- GitHub API */
 interface ContentsEntry {

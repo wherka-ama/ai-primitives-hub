@@ -8,14 +8,11 @@ import {
   GitHubClient,
 } from '../src/infra/github/client';
 import {
-  enumeratePluginRepo,
-} from '../src/infra/harvest/plugin-tree-enumerator';
-import {
   staticTokenProvider,
 } from '../src/infra/github/token';
 import {
-  BlobCache,
-} from '../src/infra/github/blob-cache';
+  enumeratePluginRepo,
+} from '../src/infra/harvest/plugin-tree-enumerator';
 
 function jsonResponse(body: unknown, headers: Record<string, string> = {}): Response {
   return Response.json(body, {

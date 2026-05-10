@@ -70,7 +70,6 @@ import {
 } from './commands/index-search';
 import {
   createIndexShortlistCommand,
-  type IndexShortlistSubcommand,
 } from './commands/index-shortlist';
 import {
   createIndexStatsCommand,
@@ -122,7 +121,6 @@ import type {
 } from './framework/output';
 import {
   parseCsv,
-  parseCsvKinds,
 } from './framework/parsers';
 import {
   createProductionContext,
@@ -266,62 +264,107 @@ const parseArgs = (argv: string[]): {
   verbose?: boolean;
 } => {
   const positional: string[] = [];
-  let output: OutputFormat | undefined = undefined;
-  let collectionFile: string | undefined = undefined;
-  let version: string | undefined = undefined;
-  let outDir: string | undefined = undefined;
-  let outFile: string | undefined = undefined;
-  let repoSlug: string | undefined = undefined;
-  let changedPath: string | undefined = undefined;
-  let markdown: string | undefined = undefined;
-  let markdownPath: string | undefined = undefined;
-  let skillName: string | undefined = undefined;
-  let description: string | undefined = undefined;
-  let skillsDir: string | undefined = undefined;
+  let output: OutputFormat | undefined;
+  let collectionFile: string | undefined;
+  let version: string | undefined;
+  let outDir: string | undefined;
+  let outFile: string | undefined;
+  let repoSlug: string | undefined;
+  let changedPath: string | undefined;
+  let markdown: string | undefined;
+  let markdownPath: string | undefined;
+  let skillName: string | undefined;
+  let description: string | undefined;
+  let skillsDir: string | undefined;
   let verbose = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === '-o' || arg === '--output') {
-      output = argv[i + 1] as OutputFormat;
-      i += 1;
-    } else if (arg === '--collection-file') {
-      collectionFile = argv[i + 1];
-      i += 1;
-    } else if (arg === '--version') {
-      version = argv[i + 1];
-      i += 1;
-    } else if (arg === '--out-dir') {
-      outDir = argv[i + 1];
-      i += 1;
-    } else if (arg === '--out' || arg === '--out-file') {
-      outFile = argv[i + 1];
-      i += 1;
-    } else if (arg === '--repo-slug') {
-      repoSlug = argv[i + 1];
-      i += 1;
-    } else if (arg === '--changed-path') {
-      changedPath = argv[i + 1];
-      i += 1;
-    } else if (arg === '--markdown') {
-      markdown = argv[i + 1];
-      i += 1;
-    } else if (arg === '--markdown-path') {
-      markdownPath = argv[i + 1];
-      i += 1;
-    } else if (arg === '--skill-name') {
-      skillName = argv[i + 1];
-      i += 1;
-    } else if (arg === '--description') {
-      description = argv[i + 1];
-      i += 1;
-    } else if (arg === '--skills-dir') {
-      skillsDir = argv[i + 1];
-      i += 1;
-    } else if (arg === '-v' || arg === '--verbose') {
-      verbose = true;
-    } else if (!arg.startsWith('-')) {
-      positional.push(arg);
+    switch (arg) {
+      case '-o':
+      case '--output': {
+        output = argv[i + 1] as OutputFormat;
+        i += 1;
+
+        break;
+      }
+      case '--collection-file': {
+        collectionFile = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--version': {
+        version = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--out-dir': {
+        outDir = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--out':
+      case '--out-file': {
+        outFile = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--repo-slug': {
+        repoSlug = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--changed-path': {
+        changedPath = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--markdown': {
+        markdown = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--markdown-path': {
+        markdownPath = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--skill-name': {
+        skillName = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--description': {
+        description = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '--skills-dir': {
+        skillsDir = argv[i + 1];
+        i += 1;
+
+        break;
+      }
+      case '-v':
+      case '--verbose': {
+        verbose = true;
+
+        break;
+      }
+      default: { if (!arg.startsWith('-')) {
+        positional.push(arg);
+      }
+      }
     }
   }
 
@@ -362,11 +405,15 @@ const readPackageVersion = (): string => {
  * permitted (spec §14.2 invariant #3). ESLint rule from Phase 2
  * iter 9 enforces this for every other file under src/cli/.
  */
+
 if (require.main === module) {
   main(process.argv.slice(2))
+    // eslint-disable-next-line unicorn/no-process-exit -- CLI entry point
     .then((code) => process.exit(code))
     .catch((err) => {
+      // eslint-disable-next-line no-console -- CLI entry point
       console.error(err);
+      // eslint-disable-next-line unicorn/no-process-exit -- CLI entry point
       process.exit(1);
     });
 }

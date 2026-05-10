@@ -13,11 +13,11 @@
  */
 
 import type {
-  EtagStore,
-} from '../github/etag-store';
-import type {
   GitHubClient,
 } from '../github/client';
+import type {
+  EtagStore,
+} from '../github/etag-store';
 
 export interface TreeEntry {
   path: string;
