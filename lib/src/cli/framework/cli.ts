@@ -185,14 +185,20 @@ export const runCli = async (argv: string[], opts: RunCliOptions): Promise<numbe
     enableCapture: false,
     enableColors: false,
     definitions: () => cli.definitions(),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment -- clipanion internal API accepts any
     definition: (c: any) => cli.definition(c),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- clipanion internal API accepts any
     error: (e: any, o: any) => cli.error(e, o),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- clipanion internal API accepts any
     format: (c: any) => cli.format(c),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- clipanion internal API accepts any
     process: (input: any, subContext: any) => cli.process({
       input,
       context: { ...clipanionCtx, ...(subContext as object) }
     }),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- clipanion internal API accepts any
     run: (input: any, subContext: any) => cli.run(input, { ...clipanionCtx, ...subContext }),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- clipanion internal API accepts any
     usage: (c: any, o: any) => cli.usage(c, o)
   };
 

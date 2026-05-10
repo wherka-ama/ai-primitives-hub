@@ -6,12 +6,12 @@
  * (the in-memory test double) remains in this file.
  */
 import type {
-  BundleResolver,
-} from '../ports/source-resolver';
-import type {
   BundleSpec,
   Installable,
 } from '../domain/install';
+import type {
+  BundleResolver,
+} from '../ports/source-resolver';
 
 export type {
   BundleResolver,

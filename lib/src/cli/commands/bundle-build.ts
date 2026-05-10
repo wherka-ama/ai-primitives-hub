@@ -18,9 +18,11 @@
 // bounded usage is the single createWriteStream call inside
 // createDeterministicZip; iter 25 (Phase 5 install downloads) is the natural
 // moment to add Context.fs.createWriteStream.
-// eslint-disable-next-line local/no-framework-imports -- bounded createWriteStream for archiver
+// eslint-disable-next-line local/no-framework-imports -- bounded fs ops for archiver: createWriteStream, existsSync, unlinkSync
 import {
   createWriteStream,
+  existsSync,
+  unlinkSync,
 } from 'node:fs';
 import * as path from 'node:path';
 import archiver from 'archiver';
@@ -204,22 +206,22 @@ const createDeterministicZip = (input: {
   return new Promise((resolve, reject) => {
     const output = createWriteStream(input.zipPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
-    
+
     // Flag to prevent double-cleanup if both output and archive error handlers fire
     let cleaned = false;
-    
+
     // Cleanup function to remove partially written zip on error
     const cleanup = () => {
-      if (cleaned) return;
+      if (cleaned) {
+        return;
+      }
       cleaned = true;
       try {
         // Use destroy() instead of close() for error cleanup - it aborts the stream
         // immediately without waiting for buffered data to flush
         output.destroy();
-        // eslint-disable-next-line local/no-framework-imports -- bounded cleanup for archiver error
-        const fs = require('node:fs');
-        if (fs.existsSync(input.zipPath)) {
-          fs.unlinkSync(input.zipPath);
+        if (existsSync(input.zipPath)) {
+          unlinkSync(input.zipPath);
         }
       } catch {
         // Ignore cleanup errors

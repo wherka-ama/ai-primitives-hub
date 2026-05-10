@@ -6,13 +6,13 @@
  * Only `renderError` lives here, because it depends on `Context` (a CLI
  * concept) for stderr output.
  */
-import type {
-  Context,
-} from './context';
 import {
   isRegistryError,
   RegistryError,
 } from '../../domain/errors';
+import type {
+  Context,
+} from './context';
 
 export type {
   RegistryErrorNamespace,

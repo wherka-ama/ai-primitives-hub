@@ -72,7 +72,7 @@ export const createIndexShortlistCommand = (
           }
           case 'remove': { return runRemove(ctx, fmt, idx, indexPath, opts);
           }
-          case 'list': { return runList(ctx, fmt, idx);
+          case 'list': { return Promise.resolve(runList(ctx, fmt, idx));
           }
         }
       } catch (cause) {
@@ -172,11 +172,11 @@ const runRemove = async (
   return 0;
 };
 
-const runList = async (
+const runList = (
   ctx: Context,
   fmt: OutputFormat,
   idx: PrimitiveIndex
-): Promise<number> => {
+): number => {
   const shortlists = idx.listShortlists();
   formatOutput({
     ctx, command: 'index.shortlist', output: fmt, status: 'ok',

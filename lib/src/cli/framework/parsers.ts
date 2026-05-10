@@ -6,8 +6,12 @@
  * @module cli/framework/parsers
  */
 
-import type { PrimitiveKind } from '../../domain/primitive/types';
-import { PRIMITIVE_KINDS } from '../../domain/primitive/types';
+import type {
+  PrimitiveKind,
+} from '../../domain/primitive/types';
+import {
+  PRIMITIVE_KINDS,
+} from '../../domain/primitive/types';
 
 /**
  * Parse a comma-separated string into an array of trimmed strings.
@@ -40,15 +44,15 @@ export const parseCsvEnum = <T extends string>(
   if (parsed === undefined) {
     return undefined;
   }
-  
+
   const invalid = parsed.filter((v) => !enumValues.includes(v as T));
   if (invalid.length > 0) {
     throw new Error(
-      `Invalid ${enumName} value(s): ${invalid.join(', ')}. ` +
-      `Valid values: ${enumValues.join(', ')}`
+      `Invalid ${enumName} value(s): ${invalid.join(', ')}. `
+      + `Valid values: ${enumValues.join(', ')}`
     );
   }
-  
+
   return parsed as T[];
 };
 

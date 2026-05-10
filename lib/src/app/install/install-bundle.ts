@@ -11,6 +11,11 @@ import type {
   BundleSpec,
   Target,
 } from '../../domain/install';
+import {
+  type InstallOutcome,
+  InstallPipeline,
+  type PipelineEvent,
+} from '../../install/pipeline';
 import type {
   BundleDownloader,
 } from '../../ports/bundle-downloader';
@@ -23,11 +28,6 @@ import type {
 import type {
   TargetWriter,
 } from '../../ports/target-writer';
-import {
-  InstallPipeline,
-  type InstallOutcome,
-  type PipelineEvent,
-} from '../../install/pipeline';
 
 export interface InstallBundleInput {
   spec: BundleSpec;

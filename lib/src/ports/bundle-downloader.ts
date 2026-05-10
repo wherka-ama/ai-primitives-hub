@@ -25,7 +25,7 @@ export interface BundleDownloader {
    * Download the bundle referenced by `installable`.
    * @param installable Resolved Installable from the resolver.
    * @returns DownloadResult with bytes and SHA-256.
-   * @throws On network failure or integrity mismatch.
+   * @throws {Error} On network failure or integrity mismatch.
    */
   download(installable: Installable): Promise<DownloadResult>;
 }

@@ -300,6 +300,7 @@ const createHubCommandDefinition = (
   tokens?: TokenProvider,
   defaultOutput?: string
 ): CommandClass => {
+  // eslint-disable-next-line new-cap -- hubCommandClass IS a constructor; it's called as such; the lint rule incorrectly flags extends expressions
   class ConfiguredCommand extends (hubCommandClass as any) {
     public execute(): Promise<number | void> {
       this.commandContext = { ctx, http, tokens };

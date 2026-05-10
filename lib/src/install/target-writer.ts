@@ -29,8 +29,8 @@ import type {
   ExtractedFiles,
 } from '../ports/bundle-extractor';
 import type {
-  TargetWriteResult,
   TargetWriter,
+  TargetWriteResult,
 } from '../ports/target-writer';
 
 export type {
@@ -59,11 +59,6 @@ export interface TargetRemoveResult {
   /** Files not found (skipped). */
   skipped: string[];
 }
-
-/**
- * @deprecated Use {@link TargetWriter} from `../ports/target-writer` directly.
- * This re-exported interface stays here for backward compatibility.
- */
 
 /**
  * Mapping from a primitive kind to a relative subdirectory.
@@ -164,6 +159,7 @@ const DEFAULT_LAYOUT_BY_TYPE: Record<Target['type'], (t: Target) => TargetLayout
   // copilot-cli is user-scope only. Base: ~/.copilot (not ~/.config/github-copilot).
   // Skills go to skills/ (Agent Skills standard — SKILL.md + resources).
   // agents/: NOT routed — Copilot CLI agents are plugin-distributed, not user-level files.
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- target type identifier must use kebab-case to match TargetType discriminant
   'copilot-cli': (t: Target): TargetLayout => ({
     baseDir: t.path ?? '${HOME}/.copilot',
     kindRoutes: {

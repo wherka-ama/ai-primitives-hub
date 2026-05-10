@@ -6,12 +6,12 @@
  * and `sha256Hex` remain in this file.
  */
 import type {
+  Installable,
+} from '../domain/install';
+import type {
   BundleDownloader,
   DownloadResult,
 } from '../ports/bundle-downloader';
-import type {
-  Installable,
-} from '../domain/install';
 
 export type {
   BundleDownloader,

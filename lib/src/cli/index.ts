@@ -123,13 +123,13 @@ import {
 import {
   runCli,
 } from './framework/cli';
+import type {
+  OutputFormat,
+} from './framework/output';
 import {
   parseCsv,
   parseCsvKinds,
 } from './framework/parsers';
-import type {
-  OutputFormat,
-} from './framework/output';
 import {
   createProductionContext,
 } from './framework/production-context';
@@ -139,7 +139,7 @@ import {
  * @param argv Argument vector to scan.
  * @param flag Flag name including the leading `--`.
  * @returns Captured values in order; empty when the flag never appears.
- * @throws Error if a flag appears at the end of argv without a value.
+ * @throws {Error} If a flag appears at the end of argv without a value.
  */
 const collectRepeated = (argv: string[], flag: string): string[] => {
   const out: string[] = [];
@@ -147,8 +147,8 @@ const collectRepeated = (argv: string[], flag: string): string[] => {
     if (argv[i] === flag) {
       if (i + 1 >= argv.length) {
         throw new Error(
-          `Flag ${flag} appears at end of arguments without a value. ` +
-          `Usage: ${flag} <value> [${flag} <value> ...]`
+          `Flag ${flag} appears at end of arguments without a value. `
+          + `Usage: ${flag} <value> [${flag} <value> ...]`
         );
       }
       out.push(argv[i + 1]);
@@ -308,16 +308,16 @@ const runLegacyBin = async (script: string, argv: string[]): Promise<number> => 
   const cp = await import('node:child_process');
   // From dist/cli/index.js, lib/bin/<script> sits at ../../bin/<script>.
   const scriptPath = path.resolve(__dirname, '..', '..', 'bin', script);
-  
+
   // Fix 7: Check if script exists before attempting to run it
   if (!fs.existsSync(scriptPath)) {
     throw new Error(
-      `Legacy script not found: ${scriptPath}\n` +
-      `The script may have been removed or renamed. ` +
-      `Check the deprecation shims in lib/bin/ for the current migration status.`
+      `Legacy script not found: ${scriptPath}\n`
+      + `The script may have been removed or renamed. `
+      + `Check the deprecation shims in lib/bin/ for the current migration status.`
     );
   }
-  
+
   const proc = cp.spawnSync('node', [scriptPath, ...argv], {
     stdio: 'inherit'
   });
@@ -539,14 +539,14 @@ function applyQuietOverride(baseCtx: ReturnType<typeof createProductionContext>,
   // Check for -q flag only if it's not followed by a value (i.e., it's not being used as --q for query)
   const qIndex = argv.indexOf('-q');
   const qIsQuiet = qIndex !== -1 && (qIndex === argv.length - 1 || argv[qIndex + 1].startsWith('-'));
-  
+
   // Fix 9: Deprecate -q for query, require --query
   // If -q is followed by a non-flag value, it's being used as --q (query), which is deprecated
   if (qIndex !== -1 && !qIsQuiet) {
     // eslint-disable-next-line no-console -- CLI entry only
     console.warn('warning: -q with a value is deprecated for query. Use --query instead. -q is reserved for quiet mode.');
   }
-  
+
   return (quiet || qIsQuiet)
     ? { ...baseCtx, stdout: { write: (): void => undefined } }
     : baseCtx;

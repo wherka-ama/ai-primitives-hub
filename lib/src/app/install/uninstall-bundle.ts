@@ -9,17 +9,17 @@
 import type {
   Target,
 } from '../../domain/install';
+import {
+  UninstallPipeline,
+  type UninstallPlan,
+  type UninstallResult,
+} from '../../install/uninstall-pipeline';
 import type {
   FileSystem,
 } from '../../ports/filesystem';
 import type {
   TargetWriter,
 } from '../../ports/target-writer';
-import {
-  UninstallPipeline,
-  type UninstallPlan,
-  type UninstallResult,
-} from '../../install/uninstall-pipeline';
 
 export interface UninstallBundleInput {
   bundleId?: string;

@@ -11,7 +11,9 @@
  * CLI command pipes those into stderr; tests can capture them.
  * @module primitive-index/hub-harvest-pipeline
  */
-import { readFile } from 'node:fs/promises';
+import {
+  readFile,
+} from 'node:fs/promises';
 import * as path from 'node:path';
 import type {
   HubSourceSpec,
