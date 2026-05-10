@@ -35,11 +35,13 @@ describe('domain barrel shape', () => {
       expect(ownKeys).toStrictEqual([
         'DEFAULT_LOCAL_HUB_ID',
         'PRIMITIVE_KINDS',
+        'RegistryError',
         'TARGET_TYPES',
         'isHubConfig',
         'isHubReference',
         'isProfile',
         'isProfileBundle',
+        'isRegistryError',
         'isRegistrySource',
         'isTarget',
         'sanitizeHubId'

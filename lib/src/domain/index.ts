@@ -56,3 +56,14 @@ export type {
   ProfileActivationState,
 } from './registry';
 export { isProfile, isProfileBundle } from './registry';
+
+// Domain error type (T2: moved from cli/framework for layer independence).
+export type {
+  RegistryErrorJson,
+  RegistryErrorNamespace,
+  RegistryErrorOptions,
+} from './errors';
+export {
+  isRegistryError,
+  RegistryError,
+} from './errors';
