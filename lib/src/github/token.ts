@@ -15,20 +15,16 @@
  * fully synchronous and dependency-free.
  * @module github/token
  */
+import type {
+  TokenProvider,
+} from '../ports/http';
 import {
   isGitHubHost,
 } from './url';
 
-/** Supplies an auth token (or null) for a given host. */
-export interface TokenProvider {
-  /**
-   * Resolve a token for a host. Implementations may consult env
-   * vars, a credentials file, or shell out to `gh`.
-   * @param host Lower-case hostname.
-   * @returns Token string or null when no auth is available.
-   */
-  getToken(host: string): Promise<string | null>;
-}
+export type {
+  TokenProvider,
+} from '../ports/http';
 
 /** Token provider that always returns null (public-only). */
 export const NULL_TOKEN_PROVIDER: TokenProvider = {

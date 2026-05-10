@@ -22,3 +22,11 @@ export type {
   HttpResponse,
   TokenProvider,
 } from './http';
+
+export type {
+  EtaggedNotModified,
+  EtaggedOk,
+  EtaggedResult,
+  GitHubApi,
+  RateLimitTelemetry,
+} from './github-api';
