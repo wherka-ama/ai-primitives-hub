@@ -7,7 +7,7 @@ import {
   redactToken,
   resolveGithubToken,
   type TokenResolver,
-} from '../src/primitive-index/hub/token-provider';
+} from '../src/infra/harvest/token-provider';
 
 describe('token-provider', () => {
   it('prefers an explicit token over env + gh CLI', async () => {

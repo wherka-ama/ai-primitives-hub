@@ -18,18 +18,20 @@ import {
 } from '../../install/checksum';
 import {
   GitHubBundleResolver,
-} from '../../install/github-resolver';
+} from '../../infra/resolvers/github-resolver';
 import {
-  envTokenProvider,
   type HttpClient,
   type TokenProvider,
+} from '../../ports/http';
+import {
+  envTokenProvider,
 } from '../../install/http';
 import {
   HttpsBundleDownloader,
-} from '../../install/https-downloader';
+} from '../../infra/downloaders/https-downloader';
 import {
   readLocalBundle,
-} from '../../install/local-dir-source';
+} from '../../infra/resolvers/local-resolver';
 import {
   type LockfileEntry,
   type LockfileSource,
@@ -37,18 +39,18 @@ import {
   upsertEntry,
   upsertSource,
   writeLockfile,
-} from '../../install/lockfile';
+} from '../../infra/stores/json-lockfile-store';
 import {
   validateManifest,
 } from '../../install/manifest-validator';
 import {
   NodeHttpClient,
-} from '../../install/node-http-client';
+} from '../../infra/http/node-http-client';
 import {
   type RepositoryCommitMode,
   RepositoryScopeWriter,
   RepositoryScopeWriterAdapter,
-} from '../../install/repository-scope-writer';
+} from '../../infra/writers/repo-scope-writer';
 import {
   parseBundleSpec,
 } from '../../install/spec-parser';
@@ -61,10 +63,10 @@ import {
 import {
   FileTreeTargetWriter,
   type TargetWriter,
-} from '../../install/target-writer';
+} from '../../infra/writers/file-tree-writer';
 import {
   YauzlBundleExtractor,
-} from '../../install/yauzl-extractor';
+} from '../../infra/extractors/yauzl-extractor';
 import {
   type CommandDefinition,
   type Context,

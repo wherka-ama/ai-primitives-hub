@@ -9,7 +9,7 @@ import {
   buildReleaseAssetApiUrl,
   isGitHubHost,
   parseRepoSlug,
-} from '../src/github/url';
+} from '../src/infra/github/url';
 
 describe('github/url', () => {
   describe('buildApiUrl', () => {

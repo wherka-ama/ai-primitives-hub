@@ -19,15 +19,15 @@ import type {
 } from '../ports/filesystem';
 import type {
   LockfileEntry,
-} from './lockfile';
+} from '../infra/stores/json-lockfile-store';
 import {
   readLockfile,
   removeEntry,
   writeLockfile,
-} from './lockfile';
+} from '../infra/stores/json-lockfile-store';
 import type {
   TargetWriter,
-} from './target-writer';
+} from '../infra/writers/file-tree-writer';
 
 /**
  * Options for uninstall pipeline.

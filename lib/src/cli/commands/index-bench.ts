@@ -13,13 +13,13 @@ import {
   type BenchCase,
   renderBenchReportMarkdown,
   runBench,
-} from '../../primitive-index/bench';
+} from '../../infra/search/bench';
 import {
   defaultIndexFile,
-} from '../../primitive-index/default-paths';
+} from '../../infra/harvest/default-paths';
 import {
   loadIndex,
-} from '../../primitive-index/store';
+} from '../../infra/stores/json-index-store';
 import {
   type CommandDefinition,
   type Context,

@@ -14,17 +14,17 @@ import type {
 import {
   BlobCache,
   computeGitBlobSha,
-} from '../src/primitive-index/hub/blob-cache';
-import {
-  BlobFetcher,
-} from '../src/primitive-index/hub/blob-fetcher';
+} from '../src/infra/github/blob-cache';
 import {
   type FetchLike,
-  GitHubApiClient,
-} from '../src/primitive-index/hub/github-api-client';
+  GitHubClient,
+} from '../src/infra/github/client';
+import {
+  staticTokenProvider,
+} from '../src/infra/github/token';
 import {
   HubHarvester,
-} from '../src/primitive-index/hub/hub-harvester';
+} from '../src/infra/harvest/hub-harvester';
 
 let tmp: string;
 beforeEach(() => {
@@ -41,6 +41,27 @@ function jsonResp(body: unknown, status = 200): Response {
 function makeFetch(repos: Map<string, { sha: string; tree: { path: string; sha: string; size: number }[]; blobs: Map<string, Buffer> }>): FetchLike {
   return async (req) => {
     const url = new URL(req.url);
+    // Handle raw.githubusercontent.com URLs for file content (before /repos/ check)
+    if (url.hostname === 'raw.githubusercontent.com') {
+      const pathMatch = url.pathname.match(/^\/([^/]+)\/([^/]+)\/[^/]+\/(.+)$/);
+      if (pathMatch) {
+        const owner = pathMatch[1];
+        const repoName = pathMatch[2];
+        const relPath = pathMatch[3];
+        const key = `${owner}/${repoName}`;
+        const repoData = repos.get(key);
+        if (repoData) {
+          const entry = repoData.tree.find((t) => t.path === relPath);
+          if (entry) {
+            const blob = repoData.blobs.get(entry.sha);
+            if (blob) {
+              return new Response(new Uint8Array(blob), { status: 200, headers: { 'content-type': 'text/plain' } });
+            }
+          }
+        }
+        return new Response(JSON.stringify({ message: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+      }
+    }
     const m = url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)(.*)$/);
     if (!m) {
       return jsonResp({ message: 'no repo' }, 404);
@@ -66,6 +87,31 @@ function makeFetch(repos: Map<string, { sha: string; tree: { path: string; sha: 
         return jsonResp({ message: 'not found' }, 404);
       }
       return jsonResp({ sha: bm[1], size: blob.length, content: blob.toString('base64'), encoding: 'base64' });
+    }
+    // Handle raw.githubusercontent.com URLs for file content
+    if (url.hostname === 'raw.githubusercontent.com') {
+      const pathMatch = url.pathname.match(/^\/([^/]+)\/([^/]+)\/[^/]+\/(.+)$/);
+      console.log('DEBUG mock: raw.githubusercontent.com URL =', url.href, 'pathMatch =', pathMatch);
+      if (pathMatch) {
+        const owner = pathMatch[1];
+        const repoName = pathMatch[2];
+        const relPath = pathMatch[3];
+        const key = `${owner}/${repoName}`;
+        const repoData = repos.get(key);
+        console.log('DEBUG mock: key =', key, 'repoData =', !!repoData);
+        if (repoData) {
+          const entry = repoData.tree.find((t) => t.path === relPath);
+          console.log('DEBUG mock: relPath =', relPath, 'entry =', !!entry);
+          if (entry) {
+            const blob = repoData.blobs.get(entry.sha);
+            console.log('DEBUG mock: blob =', !!blob, 'size =', blob?.length);
+            if (blob) {
+              return new Response(new Uint8Array(blob), { status: 200, headers: { 'content-type': 'text/plain' } });
+            }
+          }
+        }
+        return new Response(JSON.stringify({ message: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+      }
     }
     return jsonResp({ message: `unexpected ${m[3]}` }, 500);
   };
@@ -95,13 +141,13 @@ describe('hub-harvester', () => {
       }]
     ]);
     const fetch = makeFetch(repos);
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
     const cache = new BlobCache(path.join(tmp, 'blobs'));
-    const blobs = new BlobFetcher({ client, cache });
 
     const harvester = new HubHarvester({
       sources: [spec('src-1', 'o1', 'r1'), spec('src-2', 'o2', 'r2')],
-      client, blobs,
+      client,
+      cache,
       progressFile: path.join(tmp, 'progress.jsonl'),
       concurrency: 1
     });
@@ -132,13 +178,13 @@ describe('hub-harvester', () => {
       }
       return base(req);
     };
-    const client = new GitHubApiClient({ token: 't', fetch: counted });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: counted });
     const cache = new BlobCache(path.join(tmp, 'blobs'));
-    const blobs = new BlobFetcher({ client, cache });
 
     const mkHarv = (): HubHarvester => new HubHarvester({
       sources: [spec('src-1', 'o', 'r')],
-      client, blobs,
+      client,
+      cache,
       progressFile: path.join(tmp, 'progress.jsonl'),
       concurrency: 1
     });
@@ -187,9 +233,8 @@ describe('hub-harvester', () => {
       }]
     ]);
     const fetch = makeFetch(repos);
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
     const cache = new BlobCache(path.join(tmp, 'blobs'));
-    const blobs = new BlobFetcher({ client, cache });
 
     const pluginSpec: HubSourceSpec = {
       id: 'upstream-awesome',
@@ -200,7 +245,9 @@ describe('hub-harvester', () => {
       pluginsPath: 'plugins'
     };
     const h = new HubHarvester({
-      sources: [pluginSpec], client, blobs,
+      sources: [pluginSpec],
+      client,
+      cache,
       progressFile: path.join(tmp, 'progress.jsonl'),
       concurrency: 1
     });
@@ -231,9 +278,8 @@ describe('hub-harvester', () => {
       }]
     ]);
     const fetch = makeFetch(repos);
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
     const cache = new BlobCache(path.join(tmp, 'blobs'));
-    const blobs = new BlobFetcher({ client, cache });
     const pluginSpec: HubSourceSpec = {
       id: 'upstream-mcp', name: 'upstream-mcp', type: 'awesome-copilot-plugin',
       url: 'https://github.com/github/awesome-copilot',
@@ -241,7 +287,9 @@ describe('hub-harvester', () => {
       pluginsPath: 'plugins'
     };
     const h = new HubHarvester({
-      sources: [pluginSpec], client, blobs,
+      sources: [pluginSpec],
+      client,
+      cache,
       progressFile: path.join(tmp, 'progress.jsonl'),
       concurrency: 1
     });
@@ -266,11 +314,12 @@ describe('hub-harvester', () => {
       }
       return jsonResp({ message: 'unexpected' }, 500);
     };
-    const client = new GitHubApiClient({ token: 't', fetch });
-    const blobs = new BlobFetcher({ client, cache: new BlobCache(path.join(tmp, 'blobs')) });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(path.join(tmp, 'blobs'));
     const h = new HubHarvester({
       sources: [spec('src-1', 'o1', 'r1'), spec('src-2', 'o2', 'r2')],
-      client, blobs,
+      client,
+      cache,
       progressFile: path.join(tmp, 'progress.jsonl'),
       concurrency: 1
     });

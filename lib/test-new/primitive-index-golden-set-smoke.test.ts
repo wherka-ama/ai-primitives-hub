@@ -8,14 +8,14 @@ import {
 import {
   type PatternCase,
   runPatternEval,
-} from '../src/primitive-index/eval-pattern';
+} from '../src/infra/search/eval-pattern';
 import {
   PrimitiveIndex,
-} from '../src/primitive-index/index';
+} from '../src/infra/search/primitive-index';
 import type {
   BundleRef,
   Primitive,
-} from '../src/primitive-index/types';
+} from '../src/infra/search/types';
 
 function mkP(id: string, title: string, desc: string, bundleId = 'b', sourceId = 's', kind: Primitive['kind'] = 'skill'): Primitive {
   const bundle: BundleRef = { sourceId, sourceType: 'github', bundleId, bundleVersion: 'v', installed: false };

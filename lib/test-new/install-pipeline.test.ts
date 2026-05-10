@@ -28,7 +28,7 @@ import {
 import {
   FileTreeTargetWriter,
   type WriterFs,
-} from '../src/install/target-writer';
+} from '../src/infra/writers/file-tree-writer';
 
 const target: Target = { name: 'dev', type: 'vscode', scope: 'user', path: '/tmp/v' };
 

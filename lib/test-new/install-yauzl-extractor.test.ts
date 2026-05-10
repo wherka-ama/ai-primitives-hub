@@ -7,7 +7,7 @@ import {
 import {
   isUnsafeZipPath,
   YauzlBundleExtractor,
-} from '../src/install/yauzl-extractor';
+} from '../src/infra/extractors/yauzl-extractor';
 
 interface ZipEntry {
   path: string;

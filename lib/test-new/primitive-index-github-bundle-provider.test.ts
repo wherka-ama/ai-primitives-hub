@@ -14,17 +14,17 @@ import type {
 import {
   BlobCache,
   computeGitBlobSha,
-} from '../src/primitive-index/hub/blob-cache';
-import {
-  BlobFetcher,
-} from '../src/primitive-index/hub/blob-fetcher';
+} from '../src/infra/github/blob-cache';
 import {
   type FetchLike,
-  GitHubApiClient,
-} from '../src/primitive-index/hub/github-api-client';
+  GitHubClient,
+} from '../src/infra/github/client';
+import {
+  staticTokenProvider,
+} from '../src/infra/github/token';
 import {
   GitHubSingleBundleProvider,
-} from '../src/primitive-index/hub/github-bundle-provider';
+} from '../src/infra/harvest/bundle-providers/github-bundle-provider';
 
 let tmp: string;
 beforeEach(() => {
@@ -67,6 +67,21 @@ function fakeGithubFetch(opts: {
       }
       return jsonResp({ sha, size: bytes.length, content: bytes.toString('base64'), encoding: 'base64' });
     }
+    // Handle raw.githubusercontent.com URLs for file content
+    if (url.hostname === 'raw.githubusercontent.com') {
+      const pathMatch = url.pathname.match(/\/o\/r\/[^/]+\/(.+)$/);
+      if (pathMatch) {
+        const relPath = pathMatch[1];
+        const treeEntry = opts.tree.find((t) => t.path === relPath);
+        if (treeEntry) {
+          const bytes = opts.blobs.get(treeEntry.sha);
+          if (bytes) {
+            return new Response(new Uint8Array(bytes), { status: 200, headers: { 'content-type': 'text/plain' } });
+          }
+        }
+      }
+      return jsonResp({ message: 'not found' }, 404);
+    }
     return jsonResp({ message: `unexpected ${url.pathname}` }, 500);
   };
 }
@@ -82,12 +97,12 @@ function makeSpec(): HubSourceSpec {
 describe('GitHubSingleBundleProvider', () => {
   it('lists one bundle with commit sha from the branch ref', async () => {
     const fetch = fakeGithubFetch({ commitSha: 'abc123', tree: [], blobs: new Map() });
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
     const cache = new BlobCache(tmp);
     const provider = new GitHubSingleBundleProvider({
       spec: makeSpec(),
       client,
-      blobs: new BlobFetcher({ client, cache })
+      cache
     });
     const refs: unknown[] = [];
     for await (const r of provider.listBundles()) {
@@ -111,11 +126,12 @@ describe('GitHubSingleBundleProvider', () => {
       ],
       blobs: new Map([[promptSha, promptBytes]])
     });
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(tmp);
     const provider = new GitHubSingleBundleProvider({
       spec: makeSpec(),
       client,
-      blobs: new BlobFetcher({ client, cache: new BlobCache(tmp) })
+      cache
     });
     const refs: Awaited<ReturnType<typeof provider.listBundles> extends AsyncIterable<infer T> ? T : never>[] = [];
     for await (const r of provider.listBundles()) {

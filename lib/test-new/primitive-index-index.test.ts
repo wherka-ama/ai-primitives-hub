@@ -8,14 +8,14 @@ import {
 } from 'vitest';
 import {
   harvest,
-} from '../src/primitive-index/harvester';
+} from '../src/infra/harvest/harvester';
 import {
   PrimitiveIndex,
-} from '../src/primitive-index/index';
+} from '../src/infra/search/primitive-index';
 import {
   loadIndex,
   saveIndex,
-} from '../src/primitive-index/store';
+} from '../src/infra/stores/json-index-store';
 import {
   createFixtureBundles,
   FakeBundleProvider,

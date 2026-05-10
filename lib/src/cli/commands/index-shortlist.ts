@@ -9,17 +9,17 @@
  */
 import {
   defaultIndexFile,
-} from '../../primitive-index/default-paths';
+} from '../../infra/harvest/default-paths';
 import type {
   PrimitiveIndex,
-} from '../../primitive-index/index';
+} from '../../infra/search/primitive-index';
 import {
   loadIndex,
   saveIndex,
-} from '../../primitive-index/store';
+} from '../../infra/stores/json-index-store';
 import type {
   Shortlist,
-} from '../../primitive-index/types';
+} from '../../infra/search/types';
 import {
   type CommandDefinition,
   type Context,

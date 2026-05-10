@@ -63,48 +63,44 @@ export {
   createSkill,
 } from './skills';
 
-export * as registry from './registry';
-export * as hub from './hub';
-export * as core from './core';
-
 // Phase 3: Domain layer exports (already exported via public API and namespace exports)
 export * as domain from './domain';
-export { PrimitiveIndex } from './primitive-index/index';
-export { tokenize, stem } from './primitive-index/tokenizer';
+export { PrimitiveIndex } from './infra/search/primitive-index';
+export { tokenize, stem } from './infra/search/tokenizer';
 export {
   Bm25Engine,
   type Bm25Doc,
   type Bm25Stats,
   type FieldTokens,
-} from './primitive-index/bm25';
+} from './infra/search/bm25-engine';
 export type {
   SearchHit,
   SearchResult,
   SearchQuery,
   MatchExplanation,
-} from './primitive-index/types';
+} from './infra/search/types';
 
 // Hub harvester public API — lets the extension (or any other caller)
 // run the same harvest pipeline the CLI does, with an injected token.
 export {
   BlobCache,
   computeGitBlobSha,
-} from './primitive-index/hub/blob-cache';
-export { BlobFetcher } from './primitive-index/hub/blob-fetcher';
-export { EtagStore } from './primitive-index/hub/etag-store';
+} from './infra/github/blob-cache';
+export { AssetFetcher } from './infra/github/asset-fetcher';
+export { EtagStore } from './infra/github/etag-store';
 export {
-  GitHubApiClient,
+  GitHubClient,
   type FetchLike as GitHubFetchLike,
   GitHubApiError,
-} from './primitive-index/hub/github-api-client';
-export { GitHubSingleBundleProvider } from './primitive-index/hub/github-bundle-provider';
-export { AwesomeCopilotPluginBundleProvider } from './primitive-index/hub/plugin-bundle-provider';
+} from './infra/github/client';
+export { GitHubSingleBundleProvider } from './infra/harvest/bundle-providers/github-bundle-provider';
+export { AwesomeCopilotPluginBundleProvider } from './infra/harvest/bundle-providers/plugin-bundle-provider';
 export {
   derivePluginItems,
   extractPluginMcpServers,
   parsePluginManifest,
   resolvePluginItemEntryPath,
-} from './primitive-index/hub/plugin-manifest';
+} from './infra/harvest/plugin-manifest';
 export type {
   PluginItem,
   PluginItemKind,
@@ -114,15 +110,15 @@ export {
   enumeratePluginRepo,
   type EnumeratePluginRepoResult,
   type PluginDiscovery,
-} from './primitive-index/hub/plugin-tree-enumerator';
-export { parseExtraSource } from './primitive-index/hub/extra-source';
+} from './infra/harvest/plugin-tree-enumerator';
+export { parseExtraSource } from './infra/harvest/extra-source';
 export {
   defaultCacheDir,
   defaultHubCacheDir,
   defaultIndexFile,
   defaultProgressFile,
   type DefaultPathEnv,
-} from './primitive-index/default-paths';
+} from './infra/harvest/default-paths';
 
 // Quality tooling: pattern-based relevance eval + search microbench.
 export {
@@ -133,62 +129,62 @@ export {
   type PatternReport,
   type PatternCaseReport,
   type RelevancePattern,
-} from './primitive-index/eval-pattern';
+} from './infra/search/eval-pattern';
 export {
   runBench,
   renderBenchReportMarkdown,
   type BenchCase,
   type BenchCaseResult,
   type BenchReport,
-} from './primitive-index/bench';
+} from './infra/search/bench';
 export {
   parseHubConfig,
   normalizeRepoFromUrl,
-} from './primitive-index/hub/hub-config';
+} from './infra/harvest/hub-config-parser';
 export type { HubSourceSpec } from './domain';
 export {
   HubHarvester,
   type HubHarvesterOptions,
   type HubHarvestResult,
   type HubHarvestEvent,
-} from './primitive-index/hub/hub-harvester';
+} from './infra/harvest/hub-harvester';
 export {
   computeIndexHmac,
   saveIndexWithIntegrity,
   verifyIndexIntegrity,
   type IntegritySecret,
-} from './primitive-index/hub/integrity';
+} from './infra/harvest/integrity';
 export {
   HarvestProgressLog,
   type ProgressSummary,
-} from './primitive-index/hub/progress-log';
+} from './infra/harvest/progress-log';
 export {
   redactToken,
   resolveGithubToken,
   type ResolvedToken,
-} from './primitive-index/hub/token-provider';
+} from './infra/harvest/token-provider';
 export {
   enumerateRepoTree,
   isPrimitiveCandidatePath,
   resolveCommitSha,
-} from './primitive-index/hub/tree-enumerator';
-export { harvest, harvestBundle } from './primitive-index/harvester';
+} from './infra/harvest/tree-enumerator';
+export { harvest, harvestBundle } from './infra/harvest/harvester';
 export {
   harvestHub,
   type HubHarvestPipelineOptions,
   type HubHarvestPipelineResult,
-} from './primitive-index/hub-harvest-pipeline';
+} from './infra/harvest/hub-harvester';
 export {
   parseFrontmatter as parsePrimitiveFrontmatter,
   extractFromFile,
   extractMcpPrimitives,
   computePrimitiveId,
   detectKindFromPath,
-} from './primitive-index/extract';
-export { saveIndex, loadIndex, tryLoadIndex } from './primitive-index/store';
+} from './infra/harvest/extractor';
+export { saveIndex, loadIndex, tryLoadIndex } from './infra/stores/json-index-store';
 export {
   exportShortlistAsProfile,
-} from './primitive-index/export-profile';
+} from './app/search/export-profile';
 export type {
   HubProfile,
   HubProfileBundleRef,
@@ -196,5 +192,5 @@ export type {
   CollectionItem as PrimitiveIndexCollectionItem,
   ExportProfileOptions,
   ProfileExport,
-} from './primitive-index/export-profile';
-export { LocalFolderBundleProvider } from './primitive-index/providers/local-folder';
+} from './app/search/export-profile';
+export { LocalFolderBundleProvider } from './infra/harvest/bundle-providers/local-folder';

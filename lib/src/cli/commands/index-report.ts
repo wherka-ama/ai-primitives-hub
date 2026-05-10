@@ -12,15 +12,15 @@ import * as path from 'node:path';
 import {
   defaultHubCacheDir,
   defaultProgressFile,
-} from '../../primitive-index/default-paths';
+} from '../../infra/harvest/default-paths';
 import {
   BlobCache,
-} from '../../primitive-index/hub/blob-cache';
+} from '../../infra/github/blob-cache';
 import {
   type BundleState,
   HarvestProgressLog,
   type ProgressSummary,
-} from '../../primitive-index/hub/progress-log';
+} from '../../infra/harvest/progress-log';
 import {
   type CommandDefinition,
   type Context,

@@ -8,14 +8,14 @@ import {
   type PatternCase,
   renderPatternReportMarkdown,
   runPatternEval,
-} from '../src/primitive-index/eval-pattern';
+} from '../src/infra/search/eval-pattern';
 import {
   PrimitiveIndex,
-} from '../src/primitive-index/index';
+} from '../src/infra/search/primitive-index';
 import type {
   BundleRef,
   Primitive,
-} from '../src/primitive-index/types';
+} from '../src/infra/search/types';
 
 function mkBundle(sourceId: string, bundleId: string): BundleRef {
   return { sourceId, sourceType: 'github', bundleId, bundleVersion: 'x', installed: false };

@@ -17,7 +17,7 @@ import {
   upsertProfile,
   upsertSource,
   writeLockfile,
-} from '../src/install/lockfile';
+} from '../src/infra/stores/json-lockfile-store';
 import {
   createNodeFsAdapter,
 } from '../test/cli/helpers/node-fs-adapter';
@@ -131,7 +131,7 @@ describe('lockfile', () => {
     });
 
     it('upsertUseProfile sets and clears the linkage (D24)', async () => {
-      const { upsertUseProfile } = await import('../src/install/lockfile');
+      const { upsertUseProfile } = await import('../src/infra/stores/json-lockfile-store');
       let lock: Lockfile = { schemaVersion: 1, entries: [] };
       lock = upsertUseProfile(lock, { hubId: 'h', profileId: 'p' });
       expect(lock.useProfile).toStrictEqual({ hubId: 'h', profileId: 'p' });
@@ -140,7 +140,7 @@ describe('lockfile', () => {
     });
 
     it('useProfile round-trips through write/read', async () => {
-      const { upsertUseProfile } = await import('../src/install/lockfile');
+      const { upsertUseProfile } = await import('../src/infra/stores/json-lockfile-store');
       const file = path.join(work, 'with-profile.lock.json');
       let lock: Lockfile = { schemaVersion: 1, entries: [] };
       lock = upsertUseProfile(lock, { hubId: 'h', profileId: 'p' });

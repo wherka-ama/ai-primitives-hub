@@ -11,7 +11,7 @@ import {
 import {
   BlobCache,
   computeGitBlobSha,
-} from '../src/primitive-index/hub/blob-cache';
+} from '../src/infra/github/blob-cache';
 
 let tmp: string;
 

@@ -19,13 +19,13 @@ import {
 } from '../domain/registry';
 import {
   ActiveHubStore,
-} from './active-hub-store';
+} from '../infra/stores/active-hub-store';
 import {
   type HubResolver,
 } from './hub-resolver';
 import {
   HubStore,
-} from './hub-store';
+} from '../infra/stores/yaml-hub-store';
 
 export interface HubInfo {
   id: string;

@@ -10,16 +10,16 @@
 import * as path from 'node:path';
 import {
   PrimitiveIndex,
-} from '../../primitive-index/index';
+} from '../../infra/search/primitive-index';
 import {
   LocalFolderBundleProvider,
-} from '../../primitive-index/providers/local-folder';
+} from '../../infra/harvest/bundle-providers/local-folder';
 import {
   saveIndex,
-} from '../../primitive-index/store';
+} from '../../infra/stores/json-index-store';
 import type {
   IndexStats,
-} from '../../primitive-index/types';
+} from '../../infra/search/types';
 import {
   type CommandDefinition,
   type Context,
@@ -117,4 +117,4 @@ const failWith = (ctx: Context, output: OutputFormat, err: RegistryError): numbe
 
 // Re-export for symmetry with other commands' default-path helpers.
 
-export { defaultIndexFile } from '../../primitive-index/default-paths';
+export { defaultIndexFile } from '../../infra/harvest/default-paths';

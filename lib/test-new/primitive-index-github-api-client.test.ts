@@ -5,8 +5,11 @@ import {
 } from 'vitest';
 import {
   type FetchLike,
-  GitHubApiClient,
-} from '../src/primitive-index/hub/github-api-client';
+  GitHubClient,
+} from '../src/infra/github/client';
+import {
+  staticTokenProvider,
+} from '../src/infra/github/token';
 
 function mockResponse(init: {
   status?: number;
@@ -30,12 +33,12 @@ describe('github-api-client', () => {
       calls.push(req);
       return mockResponse({ body: { ok: true } });
     };
-    const client = new GitHubApiClient({ token: 'ghp_test', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('ghp_test'), fetch });
     const r = await client.getJson<{ ok: boolean }>('/user');
     expect(r.ok).toBe(true);
     expect(calls.length).toBe(1);
     expect(calls[0].headers.get('authorization')).toBe('Bearer ghp_test');
-    expect(calls[0].headers.get('user-agent') ?? '').toMatch(/primitive-index\//);
+    expect(calls[0].headers.get('user-agent') ?? '').toMatch(/prompt-registry-lib\//);
     expect(calls[0].headers.get('accept') ?? '').toMatch(/application\/vnd\.github/);
   });
 
@@ -48,8 +51,8 @@ describe('github-api-client', () => {
       }
       return mockResponse({ body: { ok: true } });
     };
-    const client = new GitHubApiClient({
-      token: 't',
+    const client = new GitHubClient({
+      tokens: staticTokenProvider('t'),
       fetch,
       maxRetries: 4,
       backoffBaseMs: 1,
@@ -78,14 +81,7 @@ describe('github-api-client', () => {
       return mockResponse({ body: { ok: true } });
     };
     const start = Date.now();
-    const client = new GitHubApiClient({
-      token: 't',
-      fetch,
-      maxRetries: 3,
-      backoffBaseMs: 1,
-      jitterMs: 0,
-      maxSleepMs: 2000
-    });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch, maxRetries: 3, backoffBaseMs: 1, jitterMs: 0, maxSleepMs: 2000 });
     const r = await client.getJson<{ ok: boolean }>('/foo');
     const elapsed = Date.now() - start;
     expect(r.ok).toBe(true);
@@ -106,7 +102,7 @@ describe('github-api-client', () => {
       }
       return mockResponse({ body: { ok: true } });
     };
-    const client = new GitHubApiClient({ token: 't', fetch, maxRetries: 3, backoffBaseMs: 1, jitterMs: 0 });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch, maxRetries: 3, backoffBaseMs: 1, jitterMs: 0 });
     const r = await client.getJson<{ ok: boolean }>('/foo');
     expect(r.ok).toBe(true);
     expect(attempt).toBe(2);
@@ -114,7 +110,7 @@ describe('github-api-client', () => {
 
   it('gives up after maxRetries and throws a classified error', async () => {
     const fetch: FetchLike = async () => mockResponse({ status: 500, body: { message: 'oops' } });
-    const client = new GitHubApiClient({ token: 't', fetch, maxRetries: 2, backoffBaseMs: 1, jitterMs: 0 });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch, maxRetries: 2, backoffBaseMs: 1, jitterMs: 0 });
     await expect(
       client.getJson('/foo')
     ).rejects.toThrow(/after 2 retries/);
@@ -132,7 +128,7 @@ describe('github-api-client', () => {
       }
       return mockResponse({ headers: { etag: 'etag-abc' }, body: { ok: true } });
     };
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
     const first = await client.getJsonWithEtag<{ ok: boolean }>('/foo');
     expect(first.status).toBe('ok');
     expect((first as any).etag).toBe('etag-abc');
@@ -147,7 +143,7 @@ describe('github-api-client', () => {
       attempt += 1;
       return mockResponse({ status: 404, body: { message: 'Not Found' } });
     };
-    const client = new GitHubApiClient({ token: 't', fetch, maxRetries: 3, backoffBaseMs: 1, jitterMs: 0 });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch, maxRetries: 3, backoffBaseMs: 1, jitterMs: 0 });
     await expect(client.getJson('/nope')).rejects.toThrow(/404/);
     expect(attempt).toBe(1);
   });

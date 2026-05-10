@@ -6,16 +6,16 @@ import {
 import {
   type FetchLike,
   GitHubClient,
-} from '../src/github/client';
+} from '../src/infra/github/client';
 import {
   GitHubApiError,
-} from '../src/github/errors';
+} from '../src/infra/github/errors';
 import type {
   ClientEvent,
-} from '../src/github/events';
+} from '../src/infra/github/events';
 import {
   staticTokenProvider,
-} from '../src/github/token';
+} from '../src/infra/github/token';
 
 interface FakeStep {
   status: number;

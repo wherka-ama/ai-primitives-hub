@@ -12,17 +12,17 @@ import type {
 import {
   BlobCache,
   computeGitBlobSha,
-} from '../src/primitive-index/hub/blob-cache';
-import {
-  BlobFetcher,
-} from '../src/primitive-index/hub/blob-fetcher';
+} from '../src/infra/github/blob-cache';
 import {
   type FetchLike,
-  GitHubApiClient,
-} from '../src/primitive-index/hub/github-api-client';
+  GitHubClient,
+} from '../src/infra/github/client';
+import {
+  staticTokenProvider,
+} from '../src/infra/github/token';
 import {
   AwesomeCopilotPluginBundleProvider,
-} from '../src/primitive-index/hub/plugin-bundle-provider';
+} from '../src/infra/harvest/bundle-providers/plugin-bundle-provider';
 
 function jsonResponse(body: unknown): Response {
   return Response.json(body, {
@@ -78,12 +78,27 @@ describe('plugin-bundle-provider', () => {
           });
         }
       }
+      // Handle raw.githubusercontent.com URLs for file content
+      const urlObj = new URL(url);
+      if (urlObj.hostname === 'raw.githubusercontent.com') {
+        const pathMatch = urlObj.pathname.match(/\/github\/awesome-copilot\/main\/(.+)$/);
+        if (pathMatch) {
+          const relPath = pathMatch[1];
+          const treeEntry = tree.tree.find((t) => t.path === relPath);
+          if (treeEntry) {
+            const content = byCorpus[treeEntry.sha];
+            if (content) {
+              return new Response(new Uint8Array(Buffer.from(content, 'utf8')), { status: 200, headers: { 'content-type': 'text/plain' } });
+            }
+          }
+        }
+        return new Response(JSON.stringify({ message: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+      }
       throw new Error(`unexpected URL: ${url}`);
     };
-    const client = new GitHubApiClient({ token: 't', fetch: fakeFetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pbp-'));
     const cache = new BlobCache(path.join(tmpDir, 'blobs'));
-    const blobFetcher = new BlobFetcher({ client, cache });
 
     const spec: HubSourceSpec = {
       id: 'awesome-upstream',
@@ -94,7 +109,7 @@ describe('plugin-bundle-provider', () => {
       pluginsPath: 'plugins',
       rawConfig: {}
     };
-    const provider = new AwesomeCopilotPluginBundleProvider({ spec, client, blobs: blobFetcher });
+    const provider = new AwesomeCopilotPluginBundleProvider({ spec, client, cache });
 
     const refs = [];
     for await (const ref of provider.listBundles()) {
@@ -164,19 +179,31 @@ describe('plugin-bundle-provider', () => {
           content: Buffer.from(manifest, 'utf8').toString('base64')
         });
       }
+      // Handle raw.githubusercontent.com URLs for file content
+      const urlObj = new URL(url);
+      if (urlObj.hostname === 'raw.githubusercontent.com') {
+        const pathMatch = urlObj.pathname.match(/\/o\/r\/main\/(.+)$/);
+        if (pathMatch) {
+          const relPath = pathMatch[1];
+          const treeEntry = tree.tree.find((t) => t.path === `plugins/${relPath}`);
+          if (treeEntry) {
+            return new Response(new Uint8Array(Buffer.from(manifest, 'utf8')), { status: 200, headers: { 'content-type': 'text/plain' } });
+          }
+        }
+        return new Response(JSON.stringify({ message: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+      }
       throw new Error(`unexpected URL: ${url}`);
     };
-    const client = new GitHubApiClient({ token: 't', fetch: fakeFetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pbp-mcp-'));
     const cache = new BlobCache(path.join(tmpDir, 'blobs'));
-    const blobFetcher = new BlobFetcher({ client, cache });
     const spec: HubSourceSpec = {
       id: 'mcp-src', name: 'mcp-src', type: 'awesome-copilot-plugin',
       url: 'https://github.com/o/r',
       owner: 'o', repo: 'r', branch: 'main', pluginsPath: 'plugins',
       rawConfig: {}
     };
-    const provider = new AwesomeCopilotPluginBundleProvider({ spec, client, blobs: blobFetcher });
+    const provider = new AwesomeCopilotPluginBundleProvider({ spec, client, cache });
     const refs = [];
     for await (const ref of provider.listBundles()) {
       refs.push(ref);

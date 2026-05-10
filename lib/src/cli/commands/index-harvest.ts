@@ -11,7 +11,7 @@ import {
   harvestHub as defaultHarvestHub,
   type HubHarvestPipelineOptions,
   type HubHarvestPipelineResult,
-} from '../../primitive-index/hub-harvest-pipeline';
+} from '../../infra/harvest/hub-harvester';
 import {
   type CommandDefinition,
   type Context,

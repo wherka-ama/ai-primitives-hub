@@ -8,16 +8,19 @@ import {
 } from 'vitest';
 import {
   EtagStore,
-} from '../src/primitive-index/hub/etag-store';
+} from '../src/infra/github/etag-store';
 import {
   type FetchLike,
-  GitHubApiClient,
-} from '../src/primitive-index/hub/github-api-client';
+  GitHubClient,
+} from '../src/infra/github/client';
+import {
+  staticTokenProvider,
+} from '../src/infra/github/token';
 import {
   enumerateRepoTree,
   isPrimitiveCandidatePath,
   resolveCommitSha,
-} from '../src/primitive-index/hub/tree-enumerator';
+} from '../src/infra/harvest/tree-enumerator';
 
 function mockResponse(init: {
   status?: number;
@@ -80,7 +83,7 @@ describe('tree-enumerator', () => {
       }
       throw new Error(`unexpected ${url.pathname}`);
     };
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
     const r = await enumerateRepoTree(client, { owner: 'o', repo: 'r', ref: 'main' });
     expect(r.commitSha).toBe('cafe1234');
     expect(
@@ -101,7 +104,7 @@ describe('tree-enumerator', () => {
         body: { sha: 'sha1', truncated: true, tree: [] }
       });
     };
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
     await expect(
       enumerateRepoTree(client, { owner: 'o', repo: 'r', ref: 'main' })
     ).rejects.toThrow(/truncated/i);
@@ -117,7 +120,7 @@ describe('tree-enumerator', () => {
       }
       return mockResponse({ body: { sha: 'sha-1' }, headers: { etag: '"etag-1"' } });
     };
-    const client = new GitHubApiClient({ token: 't', fetch: fetchImpl });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fetchImpl });
     const store = await EtagStore.open(path.join(tmp, 'etags.json'));
 
     const sha1 = await resolveCommitSha(client, { owner: 'o', repo: 'r', ref: 'main', etagStore: store });
@@ -148,7 +151,7 @@ describe('tree-enumerator', () => {
         }
       });
     };
-    const client = new GitHubApiClient({ token: 't', fetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
     const r = await enumerateRepoTree(client, {
       owner: 'o', repo: 'r', ref: 'main', pathPrefix: 'collections/'
     });

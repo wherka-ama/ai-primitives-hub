@@ -10,7 +10,7 @@ import {
   NULL_TOKEN_PROVIDER,
   staticTokenProvider,
   type TokenProvider,
-} from '../src/github/token';
+} from '../src/infra/github/token';
 
 describe('github/token', () => {
   describe('NULL_TOKEN_PROVIDER', () => {

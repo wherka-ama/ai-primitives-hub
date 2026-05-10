@@ -5,10 +5,10 @@ import {
 } from 'vitest';
 import {
   exportShortlistAsProfile,
-} from '../src/primitive-index/export-profile';
+} from '../src/app/search/export-profile';
 import {
   PrimitiveIndex,
-} from '../src/primitive-index/index';
+} from '../src/infra/search/primitive-index';
 import {
   createFixtureBundles,
   FakeBundleProvider,

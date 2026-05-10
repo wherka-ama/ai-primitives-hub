@@ -5,7 +5,7 @@ import {
 } from 'vitest';
 import {
   parseExtraSource,
-} from '../src/primitive-index/hub/extra-source';
+} from '../src/infra/harvest/extra-source';
 
 describe('extra-source', () => {
   it('parses a minimal awesome-copilot-plugin source spec with defaults', () => {

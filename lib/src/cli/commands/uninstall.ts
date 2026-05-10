@@ -16,12 +16,12 @@ import {
   readLockfile,
   removeEntry,
   writeLockfile,
-} from '../../install/lockfile';
+} from '../../infra/stores/json-lockfile-store';
 import {
   type RepositoryCommitMode,
   RepositoryScopeWriter,
   RepositoryScopeWriterAdapter,
-} from '../../install/repository-scope-writer';
+} from '../../infra/writers/repo-scope-writer';
 import {
   TargetStateStore,
 } from '../../install/target-state-store';
@@ -31,7 +31,7 @@ import {
 import {
   FileTreeTargetWriter,
   type TargetWriter,
-} from '../../install/target-writer';
+} from '../../infra/writers/file-tree-writer';
 import {
   UninstallPipeline,
 } from '../../install/uninstall-pipeline';

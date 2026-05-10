@@ -12,16 +12,16 @@
 import * as fs from 'node:fs';
 import {
   defaultIndexFile,
-} from '../../primitive-index/default-paths';
+} from '../../infra/harvest/default-paths';
 import {
   type PatternCase,
   type PatternReport,
   renderPatternReportMarkdown,
   runPatternEval,
-} from '../../primitive-index/eval-pattern';
+} from '../../infra/search/eval-pattern';
 import {
   loadIndex,
-} from '../../primitive-index/store';
+} from '../../infra/stores/json-index-store';
 import {
   type CommandDefinition,
   type Context,

@@ -5,7 +5,7 @@ import {
 } from 'vitest';
 import {
   harvest,
-} from '../src/primitive-index/harvester';
+} from '../src/infra/harvest/harvester';
 import {
   createFixtureBundles,
   FakeBundleProvider,

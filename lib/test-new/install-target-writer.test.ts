@@ -15,7 +15,7 @@ import {
   FileTreeTargetWriter,
   resolveLayout,
   type WriterFs,
-} from '../src/install/target-writer';
+} from '../src/infra/writers/file-tree-writer';
 
 interface RecordingFs extends WriterFs {
   writes: Map<string, string>;

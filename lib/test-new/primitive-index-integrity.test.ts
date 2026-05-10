@@ -13,7 +13,7 @@ import {
   type IntegritySecret,
   saveIndexWithIntegrity,
   verifyIndexIntegrity,
-} from '../src/primitive-index/hub/integrity';
+} from '../src/infra/harvest/integrity';
 
 let tmp: string;
 beforeEach(() => {

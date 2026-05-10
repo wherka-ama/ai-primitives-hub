@@ -13,19 +13,21 @@
 import * as path from 'node:path';
 import {
   envTokenProvider,
+} from '../../install/http';
+import {
   type HttpClient,
   type TokenProvider,
-} from '../../install/http';
+} from '../../ports/http';
 import {
   readLockfile,
   upsertEntry,
   upsertSource,
   upsertUseProfile,
   writeLockfile,
-} from '../../install/lockfile';
+} from '../../infra/stores/json-lockfile-store';
 import {
   NodeHttpClient,
-} from '../../install/node-http-client';
+} from '../../infra/http/node-http-client';
 import {
   generateSourceId,
 } from '../../install/source-id';
@@ -33,8 +35,10 @@ import {
   readTargets,
 } from '../../install/target-store';
 import {
-  type ActivationOutcome,
   ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
+import {
+  type ActivationOutcome,
   CompositeHubResolver,
   GitHubHubResolver,
   HubManager,

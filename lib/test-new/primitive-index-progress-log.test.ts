@@ -10,7 +10,7 @@ import {
 } from 'vitest';
 import {
   HarvestProgressLog,
-} from '../src/primitive-index/hub/progress-log';
+} from '../src/infra/harvest/progress-log';
 
 let tmp: string;
 

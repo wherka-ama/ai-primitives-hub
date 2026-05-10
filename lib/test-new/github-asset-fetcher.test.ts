@@ -5,13 +5,13 @@ import {
 } from 'vitest';
 import {
   AssetFetcher,
-} from '../src/github/asset-fetcher';
+} from '../src/infra/github/asset-fetcher';
 import type {
   FetchLike,
-} from '../src/github/client';
+} from '../src/infra/github/client';
 import {
   staticTokenProvider,
-} from '../src/github/token';
+} from '../src/infra/github/token';
 
 interface Step {
   status: number;

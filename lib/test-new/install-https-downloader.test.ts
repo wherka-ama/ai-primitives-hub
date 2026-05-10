@@ -11,12 +11,11 @@ import {
 } from '../src/install/downloader';
 import {
   envTokenProvider,
-  type HttpResponse,
   NULL_TOKEN_PROVIDER,
-} from '../src/install/http';
+} from '../src/infra/github/token';
 import {
   HttpsBundleDownloader,
-} from '../src/install/https-downloader';
+} from '../src/infra/downloaders/https-downloader';
 import {
   RecordingHttpClient,
 } from './install-http.test';

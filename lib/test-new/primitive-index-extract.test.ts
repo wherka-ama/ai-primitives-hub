@@ -10,11 +10,11 @@ import {
   extractFromFile,
   extractMcpPrimitives,
   parseFrontmatter,
-} from '../src/primitive-index/extract';
+} from '../src/infra/harvest/extractor';
 import type {
   BundleManifest,
   BundleRef,
-} from '../src/primitive-index/types';
+} from '../src/infra/search/types';
 
 const ref: BundleRef = {
   sourceId: 'hub-a',

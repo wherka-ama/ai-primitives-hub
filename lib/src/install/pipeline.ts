@@ -37,7 +37,7 @@ import type {
 import type {
   TargetWriter,
   TargetWriteResult,
-} from './target-writer';
+} from '../infra/writers/file-tree-writer';
 
 /**
  * Pipeline events emitted during install.

@@ -10,7 +10,7 @@ import {
 } from 'vitest';
 import {
   EtagStore,
-} from '../src/primitive-index/hub/etag-store';
+} from '../src/infra/github/etag-store';
 
 let tmp: string;
 beforeEach(() => {

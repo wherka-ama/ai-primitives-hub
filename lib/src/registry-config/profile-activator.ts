@@ -32,32 +32,32 @@ import {
 } from '../domain/install';
 import {
   AssetFetcher,
-} from '../github/asset-fetcher';
+} from '../infra/github/asset-fetcher';
 import {
   type ExtractedFiles,
 } from '../install/extractor';
 import {
   type HttpClient,
   type TokenProvider,
-} from '../install/http';
+} from '../ports/http';
 import {
   HttpsBundleDownloader,
-} from '../install/https-downloader';
+} from '../infra/downloaders/https-downloader';
 import {
   readLocalBundle,
-} from '../install/local-dir-source';
+} from '../infra/resolvers/local-resolver';
 import {
   validateManifest,
 } from '../install/manifest-validator';
 import {
   SourceDispatcher,
-} from '../install/source-dispatcher';
+} from '../infra/resolvers/resolver-registry';
 import {
   FileTreeTargetWriter,
-} from '../install/target-writer';
+} from '../infra/writers/file-tree-writer';
 import {
   YauzlBundleExtractor,
-} from '../install/yauzl-extractor';
+} from '../infra/extractors/yauzl-extractor';
 import type {
   FileSystem,
 } from '../ports/filesystem';

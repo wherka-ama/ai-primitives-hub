@@ -6,7 +6,7 @@ import {
 import {
   stem,
   tokenize,
-} from '../src/primitive-index/tokenizer';
+} from '../src/infra/search/tokenizer';
 
 describe('tokenizer', () => {
   it('lowercases and splits on non-word chars', () => {

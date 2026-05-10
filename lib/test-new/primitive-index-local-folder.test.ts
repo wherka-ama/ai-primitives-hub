@@ -10,10 +10,10 @@ import {
 } from 'vitest';
 import {
   harvest,
-} from '../src/primitive-index/harvester';
+} from '../src/infra/harvest/harvester';
 import {
   LocalFolderBundleProvider,
-} from '../src/primitive-index/providers/local-folder';
+} from '../src/infra/harvest/bundle-providers/local-folder';
 
 function writeBundle(root: string, id: string): void {
   const dir = path.join(root, id);

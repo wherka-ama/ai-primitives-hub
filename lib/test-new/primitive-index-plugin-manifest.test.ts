@@ -11,7 +11,7 @@ import {
   extractPluginMcpServers,
   parsePluginManifest,
   resolvePluginItemEntryPath,
-} from '../src/primitive-index/hub/plugin-manifest';
+} from '../src/infra/harvest/plugin-manifest';
 
 describe('plugin-manifest', () => {
   it('parses our explicit items[] format and keeps kinds normalized', () => {

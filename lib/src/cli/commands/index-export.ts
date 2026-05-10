@@ -16,13 +16,13 @@ import {
 } from 'js-yaml';
 import {
   defaultIndexFile,
-} from '../../primitive-index/default-paths';
+} from '../../infra/harvest/default-paths';
 import {
   exportShortlistAsProfile,
-} from '../../primitive-index/export-profile';
+} from '../../app/search/export-profile';
 import {
   loadIndex,
-} from '../../primitive-index/store';
+} from '../../infra/stores/json-index-store';
 import {
   type CommandDefinition,
   type Context,

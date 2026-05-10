@@ -5,11 +5,17 @@ import {
 } from 'vitest';
 import {
   type FetchLike,
-  GitHubApiClient,
-} from '../src/primitive-index/hub/github-api-client';
+  GitHubClient,
+} from '../src/infra/github/client';
 import {
   enumeratePluginRepo,
-} from '../src/primitive-index/hub/plugin-tree-enumerator';
+} from '../src/infra/harvest/plugin-tree-enumerator';
+import {
+  staticTokenProvider,
+} from '../src/infra/github/token';
+import {
+  BlobCache,
+} from '../src/infra/github/blob-cache';
 
 function jsonResponse(body: unknown, headers: Record<string, string> = {}): Response {
   return Response.json(body, {
@@ -66,7 +72,7 @@ describe('plugin-tree-enumerator', () => {
       if (url.includes('/git/trees/')) {
         return jsonResponse(tree);
       }
-      const m = /\/git\/blobs\/(\w+)/u.exec(url);
+      const m = /\/repos\/[^/]+\/[^/]+\/git\/blobs\/(\w+)/u.exec(url);
       if (m && manifests[m[1]]) {
         return jsonResponse({
           sha: m[1],
@@ -76,10 +82,10 @@ describe('plugin-tree-enumerator', () => {
       }
       throw new Error(`unexpected URL: ${url}`);
     };
-    const client = new GitHubApiClient({ token: 't', fetch: fakeFetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
 
     const result = await enumeratePluginRepo(client, {
-      owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins'
+      owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins', client
     });
 
     expect(result.commitSha).toBe(commitSha);
@@ -122,9 +128,9 @@ describe('plugin-tree-enumerator', () => {
       }
       throw new Error(`unexpected: ${url}`);
     };
-    const client = new GitHubApiClient({ token: 't', fetch: fakeFetch });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
     await expect(
-      () => enumeratePluginRepo(client, { owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins' })
+      () => enumeratePluginRepo(client, { owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins', client })
     ).rejects.toThrow(/truncated/u);
   });
 
@@ -146,7 +152,7 @@ describe('plugin-tree-enumerator', () => {
           ]
         });
       }
-      if (url.includes('/git/blobs/mempty')) {
+      if (url.includes('/repos/o/r/git/blobs/mempty')) {
         return jsonResponse({
           sha: 'mempty', encoding: 'base64',
           content: Buffer.from(manifest, 'utf8').toString('base64')
@@ -154,8 +160,8 @@ describe('plugin-tree-enumerator', () => {
       }
       throw new Error(`unexpected URL: ${url}`);
     };
-    const client = new GitHubApiClient({ token: 't', fetch: fakeFetch });
-    const r = await enumeratePluginRepo(client, { owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins' });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
+    const r = await enumeratePluginRepo(client, { owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins', client });
     expect(r.plugins.length).toBe(1);
     expect(r.plugins[0].candidates.length).toBe(1);
     expect(r.plugins[0].candidates[0].path).toBe('plugins/empty/.github/plugin/plugin.json');
@@ -180,7 +186,7 @@ describe('plugin-tree-enumerator', () => {
           ]
         });
       }
-      if (url.includes('/git/blobs/mext')) {
+      if (url.includes('/repos/o/r/git/blobs/mext')) {
         return jsonResponse({
           sha: 'mext', encoding: 'base64',
           content: Buffer.from(manifest, 'utf8').toString('base64')
@@ -188,8 +194,8 @@ describe('plugin-tree-enumerator', () => {
       }
       throw new Error(`unexpected URL: ${url}`);
     };
-    const client = new GitHubApiClient({ token: 't', fetch: fakeFetch });
-    const r = await enumeratePluginRepo(client, { owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins' });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
+    const r = await enumeratePluginRepo(client, { owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins', client });
     expect(r.plugins.length).toBe(0);
   });
 
@@ -211,8 +217,8 @@ describe('plugin-tree-enumerator', () => {
       }
       throw new Error(`unexpected: ${url}`);
     };
-    const client = new GitHubApiClient({ token: 't', fetch: fakeFetch });
-    const r = await enumeratePluginRepo(client, { owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins' });
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
+    const r = await enumeratePluginRepo(client, { owner: 'o', repo: 'r', ref: 'main', pluginsPath: 'plugins', client });
     expect(r.plugins.length).toBe(0);
   });
 });

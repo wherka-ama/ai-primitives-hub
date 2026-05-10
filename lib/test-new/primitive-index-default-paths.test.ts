@@ -11,7 +11,7 @@ import {
   defaultIndexFile,
   DefaultPathEnv,
   defaultProgressFile,
-} from '../src/primitive-index/default-paths';
+} from '../src/infra/harvest/default-paths';
 
 describe('primitive-index / default-paths', () => {
   const homeDir = os.homedir();

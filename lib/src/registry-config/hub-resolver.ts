@@ -21,7 +21,7 @@ import {
 import {
   type HttpClient,
   type TokenProvider,
-} from '../install/http';
+} from '../ports/http';
 import type {
   FileSystem,
 } from '../ports/filesystem';

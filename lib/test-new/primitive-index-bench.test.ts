@@ -7,14 +7,14 @@ import {
   type BenchCase,
   renderBenchReportMarkdown,
   runBench,
-} from '../src/primitive-index/bench';
+} from '../src/infra/search/bench';
 import {
   PrimitiveIndex,
-} from '../src/primitive-index/index';
+} from '../src/infra/search/primitive-index';
 import type {
   BundleRef,
   Primitive,
-} from '../src/primitive-index/types';
+} from '../src/infra/search/types';
 
 function mkP(id: string, title: string, desc = ''): Primitive {
   const bundle: BundleRef = { sourceId: 's', sourceType: 'github', bundleId: 'b', bundleVersion: 'v', installed: false };

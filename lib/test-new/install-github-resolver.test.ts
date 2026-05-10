@@ -5,12 +5,11 @@ import {
 } from 'vitest';
 import {
   GitHubBundleResolver,
-} from '../src/install/github-resolver';
+} from '../src/infra/resolvers/github-resolver';
 import {
   envTokenProvider,
-  type HttpResponse,
   NULL_TOKEN_PROVIDER,
-} from '../src/install/http';
+} from '../src/infra/github/token';
 import {
   generateSourceId,
 } from '../src/install/source-id';
@@ -26,7 +25,7 @@ const release = (tag: string, assetName = 'bundle.zip', extra: Partial<{ draft: 
   ...extra
 });
 
-const releasesResponse = (releases: unknown[]): HttpResponse =>
+const releasesResponse = (releases: unknown[]): Response =>
   okResponse(JSON.stringify(releases));
 
 describe('GitHubBundleResolver', () => {

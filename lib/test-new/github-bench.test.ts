@@ -5,11 +5,11 @@ import {
 } from 'vitest';
 import {
   standardBenchCases,
-} from '../src/github/bench/cases';
+} from '../src/infra/github/bench/cases';
 import {
   renderBenchReport,
   runBench,
-} from '../src/github/bench/harness';
+} from '../src/infra/github/bench/harness';
 
 const enabled = process.env.RUN_BENCH === '1';
 const describeIfEnabled = enabled ? describe : describe.skip;

@@ -6,7 +6,7 @@ import {
 import {
   normalizeRepoFromUrl,
   parseHubConfig,
-} from '../src/primitive-index/hub/hub-config';
+} from '../src/infra/harvest/hub-config-parser';
 
 const SAMPLE = `
 version: 1.0.0

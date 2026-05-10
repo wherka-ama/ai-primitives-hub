@@ -12,7 +12,7 @@ import type {
 } from '../src/install/extractor';
 import {
   UserScopeWriter,
-} from '../src/install/user-scope-writer';
+} from '../src/infra/writers/user-scope-writer';
 
 describe('UserScopeWriter', () => {
   const mockFs = {
