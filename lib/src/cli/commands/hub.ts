@@ -300,7 +300,6 @@ const createHubCommandDefinition = (
   tokens?: TokenProvider,
   defaultOutput?: string
 ): CommandClass => {
-  // eslint-disable-next-line new-cap -- hubCommandClass IS a constructor; it's called as such; the lint rule incorrectly flags extends expressions
   class ConfiguredCommand extends (hubCommandClass as any) {
     public execute(): Promise<number | void> {
       this.commandContext = { ctx, http, tokens };
@@ -314,7 +313,7 @@ const createHubCommandDefinition = (
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class config
   (ConfiguredCommand as any).paths = (hubCommandClass as any).paths;
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic usage assignment
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, new-cap -- dynamic usage assignment; Command.Usage is a static factory, not a constructor
   (ConfiguredCommand as any).usage = Command.Usage({
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic paths access
     description: `hub ${(hubCommandClass as any).paths[0][1]}`,
