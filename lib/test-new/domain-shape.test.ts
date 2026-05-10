@@ -34,17 +34,32 @@ describe('domain barrel shape', () => {
       const ownKeys = Object.keys(domain).toSorted();
       expect(ownKeys).toStrictEqual([
         'DEFAULT_LOCAL_HUB_ID',
+        'DEFAULT_VALIDATION_RULES',
+        'MAX_ASSET_SIZE',
         'PRIMITIVE_KINDS',
         'RegistryError',
+        'SKILL_DESCRIPTION_MAX_LENGTH',
+        'SKILL_DESCRIPTION_MIN_LENGTH',
+        'SKILL_NAME_MAX_LENGTH',
         'TARGET_TYPES',
+        'generateBundleId',
         'isHubConfig',
         'isHubReference',
         'isProfile',
         'isProfileBundle',
         'isRegistryError',
         'isRegistrySource',
+        'isSafeRepoRelativePath',
         'isTarget',
-        'sanitizeHubId'
+        'normalizeRepoRelativePath',
+        'parseFrontmatter',
+        'sanitizeHubId',
+        'validateCollectionId',
+        'validateCollectionObject',
+        'validateItemKind',
+        'validateSkillDescription',
+        'validateSkillName',
+        'validateVersion'
       ]);
     });
   });

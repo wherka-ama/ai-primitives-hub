@@ -19,35 +19,35 @@ export type {
   ValidationRules,
   VersionInfo,
   BundleInfo,
-} from './types';
+} from './domain/collection/types';
 
 export {
-  VALIDATION_RULES,
-  loadItemKindsFromSchema,
+  DEFAULT_VALIDATION_RULES as VALIDATION_RULES,
   validateCollectionId,
   validateVersion,
   validateItemKind,
   normalizeRepoRelativePath,
   isSafeRepoRelativePath,
   validateCollectionObject,
+} from './domain/collection/validate';
+
+export {
+  loadItemKindsFromSchema,
   validateCollectionFile,
   validateAllCollections,
   generateMarkdown,
-} from './validate';
-
-export {
   listCollectionFiles,
   readCollection,
   resolveCollectionItemPaths,
-} from './collections';
+} from './app/collection/read-collection';
 
-export { generateBundleId } from './bundle-id';
+export { generateBundleId } from './domain/bundle/id';
 
 export type {
   SkillMetadata,
   SkillValidationResult,
   AllSkillsValidationResult,
-} from './skills';
+} from './domain/skill/validate';
 
 export {
   SKILL_NAME_MAX_LENGTH,
@@ -57,11 +57,14 @@ export {
   parseFrontmatter,
   validateSkillName,
   validateSkillDescription,
+} from './domain/skill/validate';
+
+export {
   validateSkillFolder,
   validateAllSkills,
   generateSkillContent,
   createSkill,
-} from './skills';
+} from './app/collection/generate-skill';
 
 // Phase 3: Domain layer exports (already exported via public API and namespace exports)
 export * as domain from './domain';

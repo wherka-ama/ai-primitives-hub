@@ -1,6 +1,9 @@
 /**
- * Type definitions for collection scripts.
- * @module types
+ * Collection type definitions.
+ * @module domain/collection/types
+ *
+ * Type definitions for collection files.
+ * Merged from src/types.ts and src/collections.ts.
  */
 
 export interface ValidationResult {

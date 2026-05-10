@@ -5,7 +5,7 @@ import {
 } from 'vitest';
 import {
   generateBundleId,
-} from '../src/bundle-id';
+} from '../src/domain/bundle/id';
 
 describe('generateBundleId', () => {
   it('should generate bundle ID with slash-separated repo slug', () => {

@@ -13,6 +13,7 @@ export type {
   HarvestedFile,
   BundleProvider,
 } from './bundle';
+export { generateBundleId } from './bundle/id';
 
 export { PRIMITIVE_KINDS } from './primitive';
 export type { PrimitiveKind, Primitive } from './primitive';
@@ -23,6 +24,42 @@ export type {
   PluginItemKind,
   PluginManifest,
 } from './hub';
+
+export type {
+  Collection,
+  CollectionItem,
+  ValidationResult,
+  ObjectValidationResult,
+  FileValidationResult,
+  AllCollectionsResult,
+  ValidationRules,
+  VersionInfo,
+  BundleInfo,
+} from './collection/types';
+export {
+  DEFAULT_VALIDATION_RULES,
+  validateCollectionId,
+  validateVersion,
+  validateItemKind,
+  normalizeRepoRelativePath,
+  isSafeRepoRelativePath,
+  validateCollectionObject,
+} from './collection/validate';
+
+export type {
+  SkillMetadata,
+  SkillValidationResult,
+  AllSkillsValidationResult,
+} from './skill/validate';
+export {
+  SKILL_NAME_MAX_LENGTH,
+  SKILL_DESCRIPTION_MIN_LENGTH,
+  SKILL_DESCRIPTION_MAX_LENGTH,
+  MAX_ASSET_SIZE,
+  parseFrontmatter,
+  validateSkillName,
+  validateSkillDescription,
+} from './skill/validate';
 
 // Phase 5 / Iter 1: install-related domain types (Target tagged union).
 export type {

@@ -12,7 +12,7 @@ import {
   listCollectionFiles,
   readCollection,
   resolveCollectionItemPaths,
-} from '../src/collections';
+} from '../src/app/collection/read-collection';
 
 function createTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

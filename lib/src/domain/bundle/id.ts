@@ -1,6 +1,6 @@
 /**
  * Bundle ID Generation Utilities
- * @module bundle-id
+ * @module domain/bundle/id
  *
  * IMPORTANT: This logic MUST stay in sync with the runtime implementation in:
  * src/utils/bundleNameUtils.ts (generateBuildScriptBundleId function)
