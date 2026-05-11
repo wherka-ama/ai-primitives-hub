@@ -10,8 +10,6 @@ Before working in any folder, **MUST READ** the corresponding AGENTS.md file:
 |---------------|------------|
 | `src/cli/` | `src/cli/AGENTS.md` — CLI framework, command patterns, argument parsing |
 | `src/domain/` | `src/domain/AGENTS.md` — Domain layer invariants, type definitions |
-| `src/app/` | `src/app/AGENTS.md` — Application layer use cases |
-| `src/infra/` | `src/infra/AGENTS.md` — Infrastructure layer implementations |
 | `test/` | `test/AGENTS.md` — Test patterns, fixtures, mocking strategies |
 | `test/cli/` | `test/cli/AGENTS.md` — CLI testing patterns, framework testing |
 
@@ -186,7 +184,7 @@ export * as ports from './ports';
 
 - Don't add dependencies without justification — keep library lightweight
 - Don't use `any` — use `unknown` with type guards
-- Don't duplicate validation logic — use `src/validate.ts`
+- Don't duplicate validation logic — use `src/domain/collection/validate.ts` and `src/domain/skill/validate.ts`
 - Don't break domain layer invariants — no feature imports in domain
 - Don't use sync file operations in async contexts
 

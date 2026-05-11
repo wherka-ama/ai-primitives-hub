@@ -28,28 +28,49 @@ npm test
 npm run lint
 ```
 
-## Project Structure
+## Project Structure (Clean Architecture)
 
 ```
 lib/
 ├── src/                    # Source code
-│   ├── cli/               # CLI commands and framework
-│   ├── domain/            # Type definitions (no I/O)
-│   ├── primitive-index/   # Search engine
-│   ├── install/           # Installation system
-│   ├── github/            # GitHub integration
-│   ├── core/              # Barrel exports
-│   ├── public/            # Public API
-│   ├── registry/            # Registry namespace
-│   └── *.ts               # Top-level modules
-├── test/                  # Test suite
-│   ├── cli/               # CLI tests
-│   ├── fixtures/          # Test data
-│   └── *.test.ts          # Module tests
-├── dist/                  # Compiled output (gitignored)
-├── dist-test/             # Compiled tests (gitignored)
-├── docs/                  # Documentation
-└── fixtures/              # Shared test fixtures
+│   ├── app/                # Application layer (use cases)
+│   │   ├── collection/     # Collection management
+│   │   ├── harvest/        # Harvesting use cases
+│   │   ├── install/        # Installation pipeline
+│   │   ├── registry/       # Registry management
+│   │   └── search/         # Search use cases
+│   ├── cli/                # CLI commands and framework
+│   ├── domain/             # Type definitions (no I/O)
+│   │   ├── bundle/         # Bundle types
+│   │   ├── collection/     # Collection types
+│   │   ├── hub/            # Hub configuration
+│   │   ├── install/        # Installation types
+│   │   ├── primitive/      # Primitive index types
+│   │   ├── registry/       # Registry configuration
+│   │   ├── skill/          # Skill types
+│   │   └── source/         # Source reference
+│   ├── infra/              # Infrastructure implementations
+│   │   ├── checksum/       # Checksum utilities
+│   │   ├── downloaders/    # Bundle downloaders
+│   │   ├── extractors/     # Bundle extractors
+│   │   ├── fs/             # Filesystem adapter
+│   │   ├── github/         # GitHub integration
+│   │   ├── harvest/        # Harvesting infrastructure
+│   │   ├── http/           # HTTP client
+│   │   ├── resolvers/      # Bundle resolvers
+│   │   ├── search/         # Search infrastructure
+│   │   ├── stores/         # Storage implementations
+│   │   └── writers/        # Target writers
+│   ├── ports/              # Port interfaces
+│   ├── public/             # Public API
+│   └── *.ts                # Top-level modules
+├── test/                   # Test suite (vitest)
+│   ├── cli/                # CLI tests
+│   ├── fixtures/           # Test data
+│   └── *.test.ts           # Module tests
+├── dist/                   # Compiled output (gitignored)
+├── docs/                   # Documentation
+└── fixtures/               # Shared test fixtures
 ```
 
 ## Development Workflow
@@ -78,10 +99,7 @@ touch test/my-feature.test.ts
 
 # Write tests following existing patterns
 
-# Compile tests
-npm run compile-tests
-
-# Run tests
+# Run tests (vitest, no compilation step)
 npm test
 ```
 
@@ -138,14 +156,17 @@ class MyClass { }
 ```typescript
 // Domain layer - no feature imports
 import { Primitive } from './domain/primitive/types';  // ✅
-import { PrimitiveIndex } from '../primitive-index';    // ❌
+import { PrimitiveIndex } from '../../infra/search';     // ❌
 
 // CLI commands - use framework
 import { Context } from './framework';  // ✅
 import * as vscode from 'vscode';       // ❌
 
 // Barrel exports for public API
-export * as core from './core';
+export * as domain from './domain';
+export * as app from './app';
+export * as infra from './infra';
+export * as ports from './ports';
 export type { BundleManifest } from './public';
 ```
 
@@ -198,19 +219,19 @@ describe('Feature', () => {
 1. Add to appropriate file in `src/domain/`
 2. Export from `src/domain/index.ts`
 3. Re-export from `src/public/` if public API
-4. Add validation in `src/validate.ts` if needed
+4. Add validation in `src/domain/collection/validate.ts` or `src/domain/skill/validate.ts` if needed
 
 ### Add a New Primitive Kind
 
 1. Add to `PRIMITIVE_KINDS` in `src/domain/primitive/types.ts`
-2. Update `detectKindFromPath()` in `src/primitive-index/extract.ts`
+2. Update `detectKindFromPath()` in `src/infra/search/extract.ts`
 3. Add extraction logic if needed
 4. Update facet handling
 5. Add tests
 
 ### Add GitHub API Integration
 
-1. Add method to `src/github/client.ts`
+1. Add method to `src/infra/github/client.ts`
 2. Handle rate limits with backoff
 3. Support ETag caching via `EtagStore`
 4. Add tests with `nock`
@@ -220,10 +241,8 @@ describe('Feature', () => {
 ### Debug Tests
 
 ```bash
-# Run with Node debugger
-node --inspect-brk node_modules/.bin/mocha dist-test/test/my.test.js
-
-# Then attach VS Code debugger
+# Run with Node debugger (vitest)
+npm test -- --inspect
 ```
 
 ### Debug CLI
@@ -253,16 +272,15 @@ debug('message %o', object);
 
 ```bash
 # Clean and rebuild
-rm -rf dist dist-test
+rm -rf dist
 npm run build
-npm run compile-tests
 ```
 
 ### Test Failures
 
 ```bash
 # Run specific test file
-npx mocha dist-test/test/my.test.js
+npm test -- test/my.test.ts
 
 # Run with more output
 npm test -- --reporter spec
@@ -282,9 +300,6 @@ npm test -- --bail
 ```bash
 # Check TypeScript compilation
 npx tsc --noEmit
-
-# For tests
-npx tsc -p tsconfig.test.json --noEmit
 ```
 
 ## Next Steps

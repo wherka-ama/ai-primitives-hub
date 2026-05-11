@@ -49,25 +49,6 @@ into one consistent surface.
    talks to GitHub should construct a `GitHubClient` /
    `AssetFetcher` and use it.
 
-## Backward compat shims (one-cycle, then remove)
-
-These exist so the migration didn't require flag-day changes:
-
-- `lib/src/primitive-index/hub/github-api-client.ts` — wraps
-  `GitHubClient`, accepts the legacy `{ token: string }` constructor.
-- `lib/src/primitive-index/hub/etag-store.ts`,
-  `lib/src/primitive-index/hub/blob-cache.ts` — pure re-exports.
-- `lib/src/install/https-downloader.ts` — accepts both
-  `AssetFetcher` (preferred) and `(HttpClient, TokenProvider)`
-  (legacy).
-- `lib/src/install/http.ts` — `TokenProvider` interface still
-  exported here for back-compat; new code should import from
-  `../../github/token`.
-
-When the next refactor pass lands, search for `// back-compat` and
-`primitive-index/hub/(github-api-client|etag-store|blob-cache).ts`
-to find the cleanup sites.
-
 ## Bench
 
 ```bash
