@@ -44,7 +44,7 @@ import {
   createDoctorCommand,
 } from './commands/doctor';
 import {
-  createExplainCommand,
+  ExplainCommand,
 } from './commands/explain';
 import {
   createHubAddCommand,
@@ -105,10 +105,10 @@ import {
   createSourceRemoveCommand,
 } from './commands/source';
 import {
-  createTargetAddCommand,
+  TargetAddCommand,
 } from './commands/target-add';
 import {
-  createTargetListCommand,
+  TargetListCommand,
 } from './commands/target-list';
 import {
   createTargetRemoveCommand,
@@ -173,10 +173,6 @@ export const main = async (argv: string[]): Promise<number> => {
       verbose: parsed.verbose
     }),
     createDoctorCommand({ output: parsed.output }),
-    createExplainCommand({
-      output: parsed.output,
-      code: '' // Will be extracted from positionals in the actual dispatch
-    }),
     createIndexSearchCommand(),
     createIndexStatsCommand(),
     createIndexBuildCommand({ root: '' }),
@@ -203,7 +199,6 @@ export const main = async (argv: string[]): Promise<number> => {
     }),
     createConfigListCommand({ output: parsed.output }),
     createPluginsListCommand({ output: parsed.output }),
-    createTargetListCommand({ output: parsed.output }),
     createInstallCommand({ output: parsed.output }),
     createUninstallCommand({ output: parsed.output }),
     createConfigGetCommand({
@@ -214,11 +209,13 @@ export const main = async (argv: string[]): Promise<number> => {
         ? parsed.positional[2]
         : ''
     }),
-    createTargetAddCommand({ name: '', type: '' }),
     createTargetRemoveCommand({ name: '' })
   ];
 
   const commandClasses = [
+    ExplainCommand,
+    TargetAddCommand,
+    TargetListCommand,
     createHubListCommand(ctx, httpClient, tokenProvider, parsed.output),
     createHubAddCommand(ctx, httpClient, tokenProvider, parsed.output),
     createHubUseCommand(ctx, httpClient, tokenProvider, parsed.output),

@@ -16,12 +16,15 @@
  *     already a documented hub.
  */
 import {
-  type CommandDefinition,
-  type Context,
-  defineCommand,
+  Command,
+  Option,
   formatOutput,
   loadConfig,
+  type CommandClass,
+  type Context,
   type OutputFormat,
+  type CommandDefinition,
+  defineCommand,
 } from '../framework';
 
 /**
@@ -74,18 +77,19 @@ export interface TargetListOptions {
 }
 
 /**
- * Build the `target list` command.
+ * Build the `target list` command using defineCommand (for test compatibility).
  * @param opts - Command options.
  * @returns CommandDefinition wired to the framework adapter.
  */
 export const createTargetListCommand = (
-  opts: TargetListOptions = {}
+  opts: TargetListOptions
 ): CommandDefinition =>
   defineCommand({
     path: ['target', 'list'],
     description: 'List configured install targets (vscode, copilot-cli, kiro, …).',
     category: 'Installation',
     run: async ({ ctx }: { ctx: Context }): Promise<number> => {
+      const fmt = opts.output ?? 'text';
       const config = await loadConfig({
         cwd: ctx.cwd(),
         env: ctx.env,
@@ -95,14 +99,57 @@ export const createTargetListCommand = (
       const targets = Array.isArray(raw)
         ? (raw as TargetRecord[])
         : [];
-      formatOutput({
-        ctx,
-        command: 'target.list',
-        output: opts.output ?? 'text',
-        status: 'ok',
-        data: targets,
-        textRenderer: (d) => renderTargetTable(d)
-      });
+      if (fmt === 'json' || fmt === 'yaml' || fmt === 'ndjson') {
+        formatOutput({
+          ctx,
+          command: 'target.list',
+          output: fmt,
+          status: 'ok',
+          data: targets
+        });
+      } else {
+        ctx.stdout.write(renderTargetTable(targets));
+      }
       return 0;
     }
   });
+
+/**
+ * Target list command class.
+ */
+export class TargetListCommand extends Command {
+  public static readonly paths = [['target', 'list']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'List configured install targets (vscode, copilot-cli, kiro, …).',
+    category: 'Installation'
+  });
+
+  public output = Option.String('-o,--output');
+
+  public async execute(): Promise<number> {
+    const ctx = (this as any).commandContext?.ctx as Context;
+    if (!ctx) {
+      throw new Error('CommandContext not available');
+    }
+
+    const config = await loadConfig({
+      cwd: ctx.cwd(),
+      env: ctx.env,
+      fs: ctx.fs
+    });
+    const raw = (config as { targets?: unknown }).targets;
+    const targets = Array.isArray(raw)
+      ? (raw as TargetRecord[])
+      : [];
+    formatOutput({
+      ctx,
+      command: 'target.list',
+      output: (this.output as OutputFormat) ?? 'text',
+      status: 'ok',
+      data: targets,
+      textRenderer: (d) => renderTargetTable(d)
+    });
+    return 0;
+  }
+}

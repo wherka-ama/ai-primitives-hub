@@ -18,7 +18,7 @@
  *   - A snapshot harness. Snapshot diffing belongs in tests proper
  *     (mocha + a JSON.stringify diff is sufficient for now).
  *   - A clipanion runner. The framework adapter (`runCli`) handles all
- *     dispatch; this helper only composes.
+ *      dispatch; this helper only composes.
  */
 import type {
   CommandDefinition,
@@ -26,6 +26,9 @@ import type {
 import {
   runCli,
 } from './cli';
+import type {
+  CommandClass,
+} from 'clipanion';
 import type {
   TestContextOptions,
 } from './test-context';
@@ -35,7 +38,9 @@ import {
 
 export interface RunCommandOptions {
   /** Commands available for dispatch (passed to `runCli`). */
-  commands: CommandDefinition[];
+  commands?: CommandDefinition[];
+  /** Native clipanion command classes registered directly. */
+  commandClasses?: CommandClass[];
   /** Binary name reported in usage / version output. Default: `prompt-registry`. */
   name?: string;
   /** Binary version reported by --version. Default: `0.0.0-test`. */
@@ -56,7 +61,7 @@ export interface RunCommandResult {
 /**
  * Run a command end-to-end through the framework adapter.
  * @param argv Argument vector to dispatch (`['hello']`, `['index', 'search']`, etc.).
- * @param opts Commands to register, optional binary metadata, and optional Context overrides.
+ * @param opts Commands to register (either CommandDefinition or CommandClass), optional binary metadata, and optional Context overrides.
  * @returns `{ exitCode, stdout, stderr }` — captured outcome.
  */
 export const runCommand = async (
@@ -68,7 +73,8 @@ export const runCommand = async (
     ctx,
     name: opts.name ?? 'prompt-registry',
     version: opts.version ?? '0.0.0-test',
-    commands: opts.commands
+    commands: opts.commands ?? [],
+    commandClasses: opts.commandClasses
   });
   return {
     exitCode,

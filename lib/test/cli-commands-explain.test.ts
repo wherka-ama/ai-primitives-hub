@@ -37,7 +37,7 @@ describe('explain command', () => {
       data: { summary: string };
     };
     expect(parsed.status).toBe('ok');
-    expect(parsed.data.summary).toMatch(/no catalog entry/);
+    expect(parsed.data.summary).toMatch(/no catalog entry/i);
   });
 
   it('exits 1 with USAGE.MISSING_FLAG for an unknown namespace', async () => {

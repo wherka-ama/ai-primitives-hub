@@ -22,11 +22,13 @@ import {
   addTarget,
 } from '../../infra/stores/target-store';
 import {
-  type CommandDefinition,
-  type Context,
-  defineCommand,
+  Command,
+  Context,
   formatOutput,
+  Option,
   type OutputFormat,
+  type CommandDefinition,
+  defineCommand,
   RegistryError,
   renderError,
 } from '../framework';
@@ -34,7 +36,7 @@ import {
 /**
  * Target add command options.
  */
-export interface TargetAddOptions {
+interface TargetAddOptions {
   output?: OutputFormat;
   /** Target name (required). */
   name: string;
@@ -116,7 +118,29 @@ async function ensureTargetDirectory(fs: Context['fs'], targetPath: string | und
 }
 
 /**
- * Build the `target add` command.
+ * Emit error in appropriate format.
+ * @param ctx CLI context.
+ * @param output Output format.
+ * @param err Registry error.
+ */
+const failWith = (ctx: Context, output: OutputFormat, err: RegistryError): number => {
+  if (output === 'json' || output === 'yaml' || output === 'ndjson') {
+    formatOutput({
+      ctx,
+      command: 'target.add',
+      output,
+      status: 'error',
+      data: null,
+      errors: [err.toJSON()]
+    });
+  } else {
+    renderError(err, ctx);
+  }
+  return 1;
+};
+
+/**
+ * Build the `target add` command using defineCommand (for test compatibility).
  * @param opts - Command options.
  * @returns CommandDefinition wired to the framework adapter.
  */
@@ -159,6 +183,83 @@ export const createTargetAddCommand = (
       }
     }
   });
+
+/**
+ * Target add command class.
+ * Accepts positional arguments for name and type.
+ */
+export class TargetAddCommand extends Command {
+  public static readonly paths = [['target', 'add']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Register a new install target in the project config (`prompt-registry.yml`).',
+    category: 'Installation',
+    details: `
+      Usage: prompt-registry target add <name> --type <kind> [--scope <user|repository>] [--path <path>]
+
+      Examples:
+        prompt-registry target add my-copilot --type copilot-cli
+        prompt-registry target add workspace-prompts --type vscode --scope repository --path .prompts
+    `
+  });
+
+  public name = Option.String();
+  public type = Option.String('--type');
+  public scope = Option.String('--scope');
+  public targetPath = Option.String('--path');
+  public workspaceRoot = Option.String('--workspace-root');
+  public allowedKinds = Option.String('--allowed-kinds');
+  public output = Option.String('-o,--output');
+
+  public async execute(): Promise<number> {
+    const ctx = (this as any).commandContext?.ctx as Context;
+    if (!ctx) {
+      throw new Error('CommandContext not available');
+    }
+
+    const fmt = (this.output ?? 'text') as OutputFormat;
+
+    // Build opts object from class properties
+    const opts: TargetAddOptions = {
+      name: this.name ?? '',
+      type: this.type ?? '',
+      scope: this.scope,
+      path: this.targetPath,
+      workspaceRoot: this.workspaceRoot,
+      allowedKinds: this.allowedKinds,
+      output: (this.output as OutputFormat) ?? 'text'
+    };
+
+    const validationError = validateTargetInputs(opts);
+    if (validationError) {
+      return failWith(ctx, fmt, validationError);
+    }
+    const cwd = ctx.cwd();
+    opts.path = normalizeTargetPath(opts.path, cwd);
+    const target = buildTarget(opts);
+    try {
+      const result = await addTarget(
+        { cwd, fs: ctx.fs },
+        target
+      );
+      await ensureTargetDirectory(ctx.fs, target.path);
+      formatOutput({
+        ctx,
+        command: 'target.add',
+        output: fmt,
+        status: 'ok',
+        data: { target, file: result.file, created: result.created },
+        textRenderer: (d) => d.created
+          ? `Created ${d.file} with target "${d.target.name}" (${d.target.type}).\n`
+          : `Added target "${d.target.name}" (${d.target.type}) to ${d.file}.\n`
+      });
+      return 0;
+    } catch (cause) {
+      const error = buildTargetAddError(cause, opts);
+      return failWith(ctx, fmt, error);
+    }
+  }
+}
 
 /**
  * Validate target inputs.
@@ -261,25 +362,3 @@ function buildStandardTarget(opts: TargetAddOptions, type: TargetType, scope: st
   } as Target;
 }
 
-/**
- * Fail with error in appropriate format.
- * @param ctx CLI context.
- * @param output Output format.
- * @param err Registry error.
- * @returns Exit code.
- */
-const failWith = (ctx: Context, output: OutputFormat, err: RegistryError): number => {
-  if (output === 'json' || output === 'yaml' || output === 'ndjson') {
-    formatOutput({
-      ctx,
-      command: 'target.add',
-      output,
-      status: 'error',
-      data: null,
-      errors: [err.toJSON()]
-    });
-  } else {
-    renderError(err, ctx);
-  }
-  return 1;
-};

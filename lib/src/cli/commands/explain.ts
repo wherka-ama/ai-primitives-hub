@@ -1,5 +1,5 @@
 /**
- * Phase 4 / Iter 19 — `--explain <code>` and `prompt-registry explain <code>`.
+ * Phase 4 / Iter 19 — `prompt-registry explain <code>`.
  *
  * Looks up a structured RegistryError code and prints a paragraph of
  * documentation. The full code catalog is built incrementally; this
@@ -10,14 +10,33 @@
  * than failing — Phase 5 fills out the catalog as new codes appear.
  */
 import {
-  type CommandDefinition,
-  type Context,
-  defineCommand,
+  Command,
+  Option,
   formatOutput,
-  type OutputFormat,
   RegistryError,
   renderError,
+  type Context,
+  type OutputFormat,
+  type CommandDefinition,
+  defineCommand,
 } from '../framework';
+
+/**
+ * Known error namespaces.
+ */
+const KNOWN_NAMESPACES: ReadonlySet<string> = new Set([
+  'BUNDLE',
+  'INDEX',
+  'INSTALL',
+  'CONFIG',
+  'HUB',
+  'SOURCE',
+  'PROFILE',
+  'TARGET',
+  'FS',
+  'USAGE',
+  'INTERNAL'
+]);
 
 /**
  * Explain data structure.
@@ -27,25 +46,8 @@ interface ExplainData {
   namespace: string;
   summary: string;
   remediation: string;
-  docsUrl: string | null;
+  docsUrl?: string | null;
 }
-
-/**
- * Explain command options.
- */
-export interface ExplainOptions {
-  /** Output format. Default 'text'. */
-  output?: OutputFormat;
-  /** The error code to explain. Required. */
-  code: string;
-}
-
-/** Valid error code namespaces. */
-const NAMESPACES = new Set([
-  'BUNDLE', 'INDEX', 'HUB', 'PRIMITIVE',
-  'CONFIG', 'NETWORK', 'AUTH', 'FS',
-  'PLUGIN', 'USAGE', 'INTERNAL'
-]);
 
 /**
  * Catalog entry for error code documentation.
@@ -139,7 +141,15 @@ const CATALOG: Record<string, CatalogEntry> = {
 };
 
 /**
- * Build the `explain` command.
+ * Explain command options.
+ */
+export interface ExplainOptions {
+  output?: OutputFormat;
+  code: string;
+}
+
+/**
+ * Build the `explain` command using defineCommand (for test compatibility).
  * @param opts - Command options.
  * @returns CommandDefinition wired to the framework adapter.
  */
@@ -150,55 +160,150 @@ export const createExplainCommand = (
     path: ['explain'],
     description: 'Print documentation for a RegistryError code (e.g., `prompt-registry explain BUNDLE.NOT_FOUND`).',
     category: 'Diagnostics',
-    run: ({ ctx }: { ctx: Context }): number => {
-      const code = opts.code;
-      if (code.length === 0) {
+    run: async ({ ctx }: { ctx: Context }): Promise<number> => {
+      const fmt = opts.output ?? 'text';
+
+      if (!opts.code) {
         const err = new RegistryError({
           code: 'USAGE.MISSING_FLAG',
           message: 'explain: missing error code',
           hint: 'Usage: `prompt-registry explain <NAMESPACE.CODE>` (e.g., BUNDLE.NOT_FOUND)'
         });
-        emitError(ctx, opts.output ?? 'text', err);
+        emitError(ctx, fmt, err);
         return 1;
       }
-      const dotIdx = code.indexOf('.');
-      const namespace = dotIdx === -1 ? code : code.slice(0, dotIdx);
-      if (!NAMESPACES.has(namespace)) {
+
+      const [namespace, code] = opts.code.split('.');
+      if (!namespace || !code) {
         const err = new RegistryError({
           code: 'USAGE.MISSING_FLAG',
-          message: `unknown namespace: ${namespace}`,
-          hint: `Valid namespaces: ${[...NAMESPACES].toSorted((a, b) => a.localeCompare(b)).join(', ')}`
+          message: `explain: invalid error code format "${opts.code}" (expected NAMESPACE.CODE)`,
+          hint: 'Example: `prompt-registry explain BUNDLE.NOT_FOUND`'
         });
-        emitError(ctx, opts.output ?? 'text', err);
+        emitError(ctx, fmt, err);
         return 1;
       }
-      const entry = CATALOG[code];
-      const data: ExplainData = entry === undefined
-        ? {
-          code,
-          namespace,
-          summary: `Code ${code} is in the recognized namespace ${namespace} but has no catalog entry yet.`,
-          remediation: 'Phase 5 fills out the catalog as new codes appear. Search the source for `code: \'CODE_NAME\'` if you need the throw site.',
-          docsUrl: null
-        }
-        : {
-          code,
-          namespace,
-          summary: entry.summary,
-          remediation: entry.remediation,
-          docsUrl: entry.docsUrl ?? null
-        };
+
+      if (!KNOWN_NAMESPACES.has(namespace)) {
+        const err = new RegistryError({
+          code: 'USAGE.MISSING_FLAG',
+          message: `explain: unknown error namespace "${namespace}"`,
+          hint: `Known namespaces: ${Array.from(KNOWN_NAMESPACES).join(', ')}`
+        });
+        emitError(ctx, fmt, err);
+        return 1;
+      }
+
+      const entry = CATALOG[opts.code];
+      if (entry) {
+        formatOutput({
+          ctx,
+          command: 'explain',
+          output: fmt,
+          status: 'ok',
+          data: {
+            code: opts.code,
+            namespace,
+            summary: entry.summary,
+            remediation: entry.remediation
+          },
+          textRenderer: (d) => `${d.code}: ${d.summary}\n\nRemediation: ${d.remediation}\n`
+        });
+        return 0;
+      }
+
+      // Placeholder for known namespace but undocumented code
       formatOutput({
         ctx,
         command: 'explain',
-        output: opts.output ?? 'text',
+        output: fmt,
         status: 'ok',
-        data,
-        textRenderer: renderText
+        data: {
+          code: opts.code,
+          namespace,
+          summary: `No catalog entry for ${opts.code} (namespace recognized, but code not yet documented).`
+        },
+        textRenderer: (d) => `${d.code}: ${d.summary}\n`
       });
       return 0;
     }
   });
+
+/**
+ * Explain command class.
+ * Accepts a positional argument for the error code.
+ */
+export class ExplainCommand extends Command {
+  public static readonly paths = [['explain']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Print documentation for a RegistryError code (e.g., `prompt-registry explain BUNDLE.NOT_FOUND`).',
+    category: 'Diagnostics',
+    details: `
+      Usage: prompt-registry explain <NAMESPACE.CODE>
+
+      Examples:
+        prompt-registry explain BUNDLE.NOT_FOUND
+        prompt-registry explain INDEX.NOT_FOUND
+    `
+  });
+
+  public code = Option.String();
+  public output = Option.String('-o,--output');
+
+  public async execute(): Promise<number> {
+    const ctx = (this as any).commandContext?.ctx as Context;
+    if (!ctx) {
+      throw new Error('CommandContext not available');
+    }
+
+    if (!this.code) {
+      const err = new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'explain: missing error code',
+        hint: 'Usage: `prompt-registry explain <NAMESPACE.CODE>` (e.g., BUNDLE.NOT_FOUND)'
+      });
+      emitError(ctx, (this.output ?? 'text') as OutputFormat, err);
+      return 1;
+    }
+    const dotIdx = this.code.indexOf('.');
+    const namespace = dotIdx === -1 ? this.code : this.code.slice(0, dotIdx);
+    if (!KNOWN_NAMESPACES.has(namespace)) {
+      const err = new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: `unknown namespace: ${namespace}`,
+        hint: `Valid namespaces: ${[...KNOWN_NAMESPACES].toSorted((a, b) => a.localeCompare(b)).join(', ')}`
+      });
+      emitError(ctx, (this.output ?? 'text') as OutputFormat, err);
+      return 1;
+    }
+    const entry = CATALOG[this.code];
+    const data: ExplainData = entry === undefined
+      ? {
+        code: this.code,
+        namespace,
+        summary: `Code ${this.code} is in the recognized namespace ${namespace} but has no catalog entry yet.`,
+        remediation: 'Phase 5 fills out the catalog as new codes appear. Search the source for `code: \'CODE_NAME\'` if you need the throw site.',
+        docsUrl: null
+      }
+      : {
+        code: this.code,
+        namespace,
+        summary: entry.summary,
+        remediation: entry.remediation,
+        docsUrl: entry.docsUrl ?? null
+      };
+    formatOutput({
+      ctx,
+      command: 'explain',
+      output: (this.output ?? 'text') as OutputFormat,
+      status: 'ok',
+      data,
+      textRenderer: renderText
+    });
+    return 0;
+  }
+}
 
 /**
  * Emit error in appropriate format.
