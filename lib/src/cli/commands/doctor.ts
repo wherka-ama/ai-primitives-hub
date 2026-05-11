@@ -19,20 +19,24 @@
  * testing, the output format is set via the factory parameter.
  */
 import {
+  resolveUserConfigPaths,
+} from '../../app/registry';
+import {
   envTokenProvider,
 } from '../../infra/github/token';
 import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
 import {
+  ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
+import {
   findProjectConfigPath,
   readTargets,
 } from '../../infra/stores/target-store';
 import {
-  ActiveHubStore,
   HubStore,
-  resolveUserConfigPaths,
-} from '../../registry-config';
+} from '../../infra/stores/yaml-hub-store';
 import {
   type CommandDefinition,
   type Context,

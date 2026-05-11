@@ -12,25 +12,31 @@
  */
 import * as path from 'node:path';
 import {
+  HubManager,
+  resolveUserConfigPaths,
+} from '../../app/registry';
+import {
   envTokenProvider,
   type TokenProvider,
 } from '../../infra/github/token';
 import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
+import {
+  CompositeHubResolver,
+  GitHubHubResolver,
+  LocalHubResolver,
+  UrlHubResolver,
+} from '../../infra/resolvers/hub-resolver';
+import {
+  ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
+import {
+  HubStore,
+} from '../../infra/stores/yaml-hub-store';
 import type {
   HttpClient,
 } from '../../ports/http';
-import {
-  ActiveHubStore,
-  CompositeHubResolver,
-  GitHubHubResolver,
-  HubManager,
-  HubStore,
-  LocalHubResolver,
-  resolveUserConfigPaths,
-  UrlHubResolver,
-} from '../../registry-config';
 import {
   Command,
   Option,

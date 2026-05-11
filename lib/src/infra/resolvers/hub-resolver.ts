@@ -17,14 +17,14 @@ import {
   type HubConfig,
   type HubReference,
   isHubConfig,
-} from '../domain/registry';
+} from '../../domain/registry';
 import type {
   FileSystem,
-} from '../ports/filesystem';
+} from '../../ports/filesystem';
 import {
   type HttpClient,
   type TokenProvider,
-} from '../ports/http';
+} from '../../ports/http';
 
 export interface ResolvedHub {
   config: HubConfig;

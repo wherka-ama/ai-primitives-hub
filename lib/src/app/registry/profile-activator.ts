@@ -26,41 +26,41 @@ import {
   type ProfileActivationState,
   type RegistrySource,
   type Target,
-} from '../domain';
+} from '../../domain';
 import {
   validateManifest,
-} from '../domain';
+} from '../../domain';
 import {
   type Installable,
-} from '../domain/install';
+} from '../../domain/install';
 import {
   HttpsBundleDownloader,
-} from '../infra/downloaders/https-downloader';
+} from '../../infra/downloaders/https-downloader';
 import {
   YauzlBundleExtractor,
-} from '../infra/extractors/yauzl-extractor';
+} from '../../infra/extractors/yauzl-extractor';
 import {
   AssetFetcher,
-} from '../infra/github/asset-fetcher';
+} from '../../infra/github/asset-fetcher';
 import {
   readLocalBundle,
-} from '../infra/resolvers/local-resolver';
+} from '../../infra/resolvers/local-resolver';
 import {
   SourceDispatcher,
-} from '../infra/resolvers/resolver-registry';
+} from '../../infra/resolvers/resolver-registry';
 import {
   FileTreeTargetWriter,
-} from '../infra/writers/file-tree-writer';
+} from '../../infra/writers/file-tree-writer';
 import {
   type ExtractedFiles,
-} from '../ports/bundle-extractor';
+} from '../../ports/bundle-extractor';
 import type {
   FileSystem,
-} from '../ports/filesystem';
+} from '../../ports/filesystem';
 import {
   type HttpClient,
   type TokenProvider,
-} from '../ports/http';
+} from '../../ports/http';
 
 export interface ProfileActivatorDeps {
   /** Filesystem abstraction. */

@@ -16,16 +16,16 @@ import {
   type HubConfig,
   type HubReference,
   type RegistrySource,
-} from '../domain/registry';
-import {
-  ActiveHubStore,
-} from '../infra/stores/active-hub-store';
-import {
-  HubStore,
-} from '../infra/stores/yaml-hub-store';
+} from '../../domain/registry';
 import {
   type HubResolver,
-} from './hub-resolver';
+} from '../../infra/resolvers/hub-resolver';
+import {
+  ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
+import {
+  HubStore,
+} from '../../infra/stores/yaml-hub-store';
 
 export interface HubInfo {
   id: string;

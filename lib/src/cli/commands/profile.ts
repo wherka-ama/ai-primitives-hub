@@ -12,6 +12,12 @@
  */
 import * as path from 'node:path';
 import {
+  type ActivationOutcome,
+  HubManager,
+  ProfileActivator,
+  resolveUserConfigPaths,
+} from '../../app/registry';
+import {
   generateSourceId,
 } from '../../domain/source-id';
 import {
@@ -20,6 +26,12 @@ import {
 import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
+import {
+  CompositeHubResolver,
+  GitHubHubResolver,
+  LocalHubResolver,
+  UrlHubResolver,
+} from '../../infra/resolvers/hub-resolver';
 import {
   ActiveHubStore,
 } from '../../infra/stores/active-hub-store';
@@ -31,24 +43,18 @@ import {
   writeLockfile,
 } from '../../infra/stores/json-lockfile-store';
 import {
+  ProfileActivationStore,
+} from '../../infra/stores/profile-activation-store';
+import {
   readTargets,
 } from '../../infra/stores/target-store';
+import {
+  HubStore,
+} from '../../infra/stores/yaml-hub-store';
 import {
   type HttpClient,
   type TokenProvider,
 } from '../../ports/http';
-import {
-  type ActivationOutcome,
-  CompositeHubResolver,
-  GitHubHubResolver,
-  HubManager,
-  HubStore,
-  LocalHubResolver,
-  ProfileActivationStore,
-  ProfileActivator,
-  resolveUserConfigPaths,
-  UrlHubResolver,
-} from '../../registry-config';
 import {
   Command,
   Option,

@@ -10,6 +10,10 @@
  * Converted to clipanion class-based commands with property initializers.
  */
 import {
+  HubManager,
+  resolveUserConfigPaths,
+} from '../../app/registry';
+import {
   generateSourceId,
 } from '../../domain/source-id';
 import {
@@ -19,19 +23,21 @@ import {
 import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
+import {
+  CompositeHubResolver,
+  GitHubHubResolver,
+  LocalHubResolver,
+  UrlHubResolver,
+} from '../../infra/resolvers/hub-resolver';
+import {
+  ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
+import {
+  HubStore,
+} from '../../infra/stores/yaml-hub-store';
 import type {
   HttpClient,
 } from '../../ports/http';
-import {
-  ActiveHubStore,
-  CompositeHubResolver,
-  GitHubHubResolver,
-  HubManager,
-  HubStore,
-  LocalHubResolver,
-  resolveUserConfigPaths,
-  UrlHubResolver,
-} from '../../registry-config';
 import {
   Command,
   Option,
