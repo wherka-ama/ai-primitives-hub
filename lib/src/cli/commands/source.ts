@@ -92,7 +92,7 @@ abstract class BaseSourceCommand extends Command {
    */
   public commandContext!: SourceCommandContext;
 
-  public output = Option.String('-o,--output');
+  public output = Option.String('--output');
 }
 
 /**
@@ -232,6 +232,15 @@ const createSourceCommandDefinition = (
   }
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = (sourceCommandClass as any).paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(sourceCommandClass.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
+
   // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = Command.Usage({
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic paths access

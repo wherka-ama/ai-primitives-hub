@@ -91,7 +91,7 @@ abstract class BaseHubCommand extends Command {
    */
   public commandContext!: HubCommandContext;
 
-  public output = Option.String('-o,--output');
+  public output = Option.String('--output');
 }
 
 /**
@@ -321,6 +321,14 @@ const createHubCommandDefinition = (
   // Copy all static properties from the original class
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class config
   (ConfiguredCommand as any).paths = (hubCommandClass as any).paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(hubCommandClass.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, new-cap -- dynamic usage assignment; Command.Usage is a static factory, not a constructor
   (ConfiguredCommand as any).usage = Command.Usage({
