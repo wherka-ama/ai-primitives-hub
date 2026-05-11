@@ -10,8 +10,8 @@ Before working in any folder, **MUST READ** the corresponding AGENTS.md file:
 |---------------|------------|
 | `src/cli/` | `src/cli/AGENTS.md` — CLI framework, command patterns, argument parsing |
 | `src/domain/` | `src/domain/AGENTS.md` — Domain layer invariants, type definitions |
-| `src/primitive-index/` | `src/primitive-index/AGENTS.md` — Indexing, search, harvesting patterns |
-| `src/install/` | `src/install/AGENTS.md` — Installation, target management, scope writers |
+| `src/app/` | `src/app/AGENTS.md` — Application layer use cases |
+| `src/infra/` | `src/infra/AGENTS.md` — Infrastructure layer implementations |
 | `test/` | `test/AGENTS.md` — Test patterns, fixtures, mocking strategies |
 | `test/cli/` | `test/cli/AGENTS.md` — CLI testing patterns, framework testing |
 
@@ -27,18 +27,50 @@ A Node.js/TypeScript library providing:
 - **Installation system** — Local bundle installation with target management
 - **GitHub integration** — Hub harvesting, release analysis
 
-### Key Architecture Layers
+### Key Architecture Layers (Clean Architecture)
 
 ```
 src/
+├── app/              → Application layer (use cases)
+│   ├── collection/   → Collection management use cases
+│   ├── harvest/      → Harvesting use cases
+│   ├── install/      → Installation pipeline use cases
+│   ├── registry/     → Registry management use cases
+│   └── search/       → Search use cases
 ├── cli/              → CLI framework + commands (commands/, framework/)
 ├── domain/           → Core types: bundles, primitives, hubs, registry config
-├── primitive-index/  → BM25 search, harvesting, indexing
-├── install/          → Installation, targets, scope writers
-├── github/           → GitHub API client, asset fetching, blob cache
-├── core/             → Barrel exports
-├── public/           → Public API surface
-└── registry/         → Registry namespace exports
+│   ├── bundle/       → Bundle types and validation
+│   ├── collection/   → Collection types and validation
+│   ├── hub/          → Hub configuration types
+│   ├── install/      → Installation types
+│   ├── primitive/    → Primitive index types
+│   ├── registry/     → Registry configuration types
+│   ├── skill/        → Skill types and validation
+│   └── source/       → Source reference types
+├── infra/            → Infrastructure implementations
+│   ├── checksum/     → Checksum utilities
+│   ├── downloaders/  → Bundle downloaders
+│   ├── extractors/   → Bundle extractors
+│   ├── fs/           → Filesystem adapter
+│   ├── github/       → GitHub API client, asset fetching
+│   ├── harvest/      → Harvesting infrastructure
+│   ├── http/         → HTTP client adapter
+│   ├── resolvers/    → Bundle resolvers
+│   ├── search/       → Search infrastructure
+│   ├── stores/       → Storage implementations
+│   └── writers/      → Target writers
+├── ports/            → Port interfaces
+│   ├── bundle-downloader.ts
+│   ├── bundle-extractor.ts
+│   ├── clock.ts
+│   ├── filesystem.ts
+│   ├── github-api.ts
+│   ├── http.ts
+│   ├── index-store.ts
+│   ├── index.ts
+│   ├── source-resolver.ts
+│   └── target-writer.ts
+└── public/           → Public API surface
 ```
 
 ### Build & Test Commands
@@ -47,8 +79,7 @@ src/
 cd lib
 npm install                    # Install dependencies
 npm run build                  # Compile to dist/
-npm run compile-tests          # Compile tests to dist-test/
-npm test                       # Run mocha tests
+npm test                       # Run vitest tests
 npm run lint                   # ESLint (v9 flat config)
 npm run lint:report            # Generate eslint-report.json
 ```
@@ -67,10 +98,10 @@ npm run lint:report            # Generate eslint-report.json
 
 ### Testing Conventions
 
-- Tests compile to `lib/dist-test/` via `tsconfig.test.json`
-- Use `mocha` + `chai` (expect-style assertions)
+- Tests use vitest (no compilation step required)
+- Use `expect` assertions from vitest
 - HTTP mocking with `nock`
-- File system with `mock-fs` or temporary directories
+- File system with temporary directories
 - See `test/AGENTS.md` for detailed patterns
 
 ### Code Style
@@ -87,14 +118,14 @@ npm run lint:report            # Generate eslint-report.json
 
 ### Domain Layer Invariants
 
-**CRITICAL**: Domain layer (`src/domain/`) cannot import from feature layers.
+**CRITICAL**: Domain layer (`src/domain/`) cannot import from feature layers (app/, infra/, cli/).
 
 ```typescript
 // ✅ OK: domain imports domain
 import { BundleManifest } from '../bundle/types';
 
-// ❌ FORBIDDEN: domain importing from primitive-index
-import { PrimitiveIndex } from '../../primitive-index';
+// ❌ FORBIDDEN: domain importing from infra
+import { FileSystem } from '../../infra/fs';
 ```
 
 Enforced by custom ESLint rule `no-feature-imports-in-domain`.
@@ -119,9 +150,10 @@ Public API is curated through `src/public/` and re-exported via `src/index.ts`:
 export type { BundleManifest, Primitive } from './public';
 
 // Namespace exports for organization
-export * as registry from './registry';
-export * as hub from './hub';
-export * as core from './core';
+export * as domain from './domain';
+export * as app from './app';
+export * as infra from './infra';
+export * as ports from './ports';
 ```
 
 ---
@@ -130,13 +162,14 @@ export * as core from './core';
 
 | File | Purpose |
 |------|---------|
-| `src/cli/index.ts` | CLI argument parsing, command routing |
+| `src/cli/main.ts` | CLI composition root, command registration |
 | `src/cli/framework/` | CLI framework (Context, OutputStream, errors) |
-| `src/primitive-index/index.ts` | PrimitiveIndex class — main search API |
-| `src/install/target-state-store.ts` | Target management |
+| `src/app/install/pipeline.ts` | Installation pipeline use case |
+| `src/infra/search/primitive-index.ts` | PrimitiveIndex class — main search API |
+| `src/infra/stores/` | Storage implementations (YAML stores, lockfile, etc.) |
 | `src/domain/bundle/types.ts` | Core bundle type definitions |
-| `src/github/client.ts` | GitHub API client |
-| `src/validate.ts` | Collection validation logic |
+| `src/infra/github/` | GitHub API client, asset fetching |
+| `src/domain/collection/validate.ts` | Collection validation logic |
 
 ---
 
