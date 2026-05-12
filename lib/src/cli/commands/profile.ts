@@ -21,6 +21,9 @@ import {
   generateSourceId,
 } from '../../domain/source-id';
 import {
+  type ProfileBundle,
+} from '../../domain/registry';
+import {
   envTokenProvider,
 } from '../../infra/github/token';
 import {
@@ -341,7 +344,7 @@ export class ProfileDeactivateCommand extends BaseProfileCommand {
 }
 
 /**
- * profile current - show the active profile
+ * profile current - show currently active profile
  */
 export class ProfileCurrentCommand extends BaseProfileCommand {
   public static readonly paths = [['profile', 'current']];
@@ -350,13 +353,211 @@ export class ProfileCurrentCommand extends BaseProfileCommand {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
     const built = buildHubMgr(ctx, http, tokens);
-    const cur = await built.activations.getActive();
+    const mgr = built.mgr;
+    const activations = built.activations;
+
+    const active = await activations.getActive();
+    if (!active) {
+      formatOutput({
+        ctx, command: 'profile.current', output: fmt, status: 'ok',
+        data: { active: null },
+        textRenderer: () => 'No active profile.\n'
+      });
+      return 0;
+    }
     formatOutput({
       ctx, command: 'profile.current', output: fmt, status: 'ok',
-      data: { current: cur },
-      textRenderer: (d) => d.current === null
-        ? 'No active profile.\n'
-        : `Active profile: "${d.current.profileId}" (hub: ${d.current.hubId})\n`
+      data: { active: { hubId: active.hubId, profileId: active.profileId } },
+      textRenderer: (d) => `Active profile: ${d.active.profileId} (hub: ${d.active.hubId})\n`
+    });
+    return 0;
+  }
+}
+
+/**
+ * profile create - create a new local profile
+ */
+export class ProfileCreateCommand extends BaseProfileCommand {
+  public static readonly paths = [['profile', 'create']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Create a new local profile in the default-local hub.',
+    category: 'Configuration',
+    details: `
+      Usage: prompt-registry profile create <profile-id> --name <name> [options]
+
+      Examples:
+        prompt-registry profile create my-profile --name "My Profile" --description "A custom profile"
+        prompt-registry profile create dev-tools --name "Dev Tools" --bundles bundle1,bundle2
+
+      Options:
+        --name <name>           Profile display name (required)
+        --description <text>   Profile description
+        --bundles <list>        Comma-separated list of bundle IDs
+        --hub <id>             Hub ID (defaults to default-local)
+    `
+  });
+
+  public profileId = Option.String();
+  public name = Option.String('--name');
+  public description = Option.String('--description');
+  public bundles = Option.String('--bundles');
+
+  public async execute() {
+    const { ctx, http, tokens } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const built = buildHubMgr(ctx, http, tokens);
+    const mgr = built.mgr;
+
+    if (!this.profileId) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'profile create: <profile-id> is required'
+      }));
+    }
+
+    if (!this.name) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'profile create: --name is required'
+      }));
+    }
+
+    const hubId = this.hubId ?? 'default-local';
+    const bundleList = this.bundles ? this.bundles.split(',').map((b) => b.trim()) : [];
+    
+    // Convert bundle IDs to ProfileBundle format
+    const profileBundles: ProfileBundle[] = bundleList.map((bundleId) => ({
+      id: bundleId,
+      version: 'latest',
+      source: hubId,
+      required: false
+    }));
+
+    const profile = await mgr.addProfile(hubId, {
+      id: this.profileId,
+      name: this.name,
+      description: this.description,
+      bundles: profileBundles
+    });
+
+    formatOutput({
+      ctx, command: 'profile.create', output: fmt, status: 'ok',
+      data: { hubId, profile: { id: profile.id, name: profile.name, bundles: profile.bundles.length } },
+      textRenderer: (d) => `Created profile "${d.profile.id}" in hub "${d.hubId}" with ${String(d.profile.bundles)} bundle${d.profile.bundles === 1 ? '' : 's'}.\n`
+    });
+    return 0;
+  }
+}
+
+/**
+ * profile edit - edit an existing local profile
+ */
+export class ProfileEditCommand extends BaseProfileCommand {
+  public static readonly paths = [['profile', 'edit']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Edit an existing local profile (add/remove bundles, change description).',
+    category: 'Configuration',
+    details: `
+      Usage: prompt-registry profile edit <profile-id> [options]
+
+      Examples:
+        prompt-registry profile edit my-profile --description "Updated description"
+        prompt-registry profile edit my-profile --add-bundles bundle1,bundle2
+        prompt-registry profile edit my-profile --remove-bundles bundle1,bundle2
+        prompt-registry profile edit my-profile --name "New Name"
+
+      Options:
+        --name <name>           New profile display name
+        --description <text>   New profile description
+        --add-bundles <list>    Comma-separated list of bundle IDs to add
+        --remove-bundles <list> Comma-separated list of bundle IDs to remove
+        --hub <id>             Hub ID (defaults to default-local)
+    `
+  });
+
+  public profileId = Option.String();
+  public name = Option.String('--name');
+  public description = Option.String('--description');
+  public addBundles = Option.String('--add-bundles');
+  public removeBundles = Option.String('--remove-bundles');
+
+  public async execute() {
+    const { ctx, http, tokens } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const built = buildHubMgr(ctx, http, tokens);
+    const mgr = built.mgr;
+
+    if (!this.profileId) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'profile edit: <profile-id> is required'
+      }));
+    }
+
+    const hubId = this.hubId ?? 'default-local';
+    
+    // Load existing profile
+    const hubs = await mgr.listHubs();
+    const hub = hubs.find((h) => h.id === hubId);
+    if (!hub) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: `profile edit: hub "${hubId}" not found`
+      }));
+    }
+
+    const sources = await mgr.listSources(hubId);
+    const active = await mgr.getActiveHub();
+    const profiles = active?.id === hubId ? active.config.profiles : [];
+    const existingProfile = profiles.find((p) => p.id === this.profileId);
+    
+    if (!existingProfile) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: `profile edit: profile "${this.profileId}" not found in hub "${hubId}"`
+      }));
+    }
+
+    // Build updated profile
+    const updatedBundles = [...existingProfile.bundles];
+    
+    if (this.removeBundles) {
+      const toRemove = this.removeBundles.split(',').map((b) => b.trim());
+      for (const bundleId of toRemove) {
+        const idx = updatedBundles.findIndex((b) => b.id === bundleId);
+        if (idx >= 0) {
+          updatedBundles.splice(idx, 1);
+        }
+      }
+    }
+
+    if (this.addBundles) {
+      const toAdd = this.addBundles.split(',').map((b) => b.trim());
+      for (const bundleId of toAdd) {
+        if (!updatedBundles.find((b) => b.id === bundleId)) {
+          updatedBundles.push({
+            id: bundleId,
+            version: 'latest',
+            source: hubId,
+            required: false
+          });
+        }
+      }
+    }
+
+    const updatedProfile = await mgr.addProfile(hubId, {
+      id: existingProfile.id,
+      name: this.name ?? existingProfile.name,
+      description: this.description ?? existingProfile.description,
+      bundles: updatedBundles
+    });
+
+    formatOutput({
+      ctx, command: 'profile.edit', output: fmt, status: 'ok',
+      data: { hubId, profile: { id: updatedProfile.id, name: updatedProfile.name, bundles: updatedProfile.bundles.length } },
+      textRenderer: (d) => `Updated profile "${d.profile.id}" in hub "${d.hubId}" with ${String(d.profile.bundles)} bundle${d.profile.bundles === 1 ? '' : 's'}.\n`
     });
     return 0;
   }
@@ -555,3 +756,23 @@ export const createProfileDeactivateCommand = (ctx: Context, http?: HttpClient, 
  */
 export const createProfileCurrentCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
   createProfileCommandDefinition(ProfileCurrentCommand, ctx, http, tokens, defaultOutput);
+
+/**
+ * Create profile create command definition.
+ * @param ctx
+ * @param http
+ * @param tokens
+ * @param defaultOutput
+ */
+export const createProfileCreateCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
+  createProfileCommandDefinition(ProfileCreateCommand, ctx, http, tokens, defaultOutput);
+
+/**
+ * Create profile edit command definition.
+ * @param ctx
+ * @param http
+ * @param tokens
+ * @param defaultOutput
+ */
+export const createProfileEditCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
+  createProfileCommandDefinition(ProfileEditCommand, ctx, http, tokens, defaultOutput);

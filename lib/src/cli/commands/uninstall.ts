@@ -36,6 +36,10 @@ import {
   RepositoryScopeWriterAdapter,
 } from '../../infra/writers/repo-scope-writer';
 import {
+  Command,
+  Option,
+} from '../framework';
+import {
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -69,6 +73,165 @@ export interface UninstallOptions {
    */
   commitMode?: RepositoryCommitMode;
 }
+
+/**
+ * Check if target is in allowlist.
+ * @param targetName Target name.
+ * @param opts Uninstall options.
+ */
+function checkAllowTarget(targetName: string, opts: UninstallOptions): void {
+  // Uninstall doesn't have allowTarget option, so this is a no-op
+  // Kept for consistency with install command
+}
+
+/**
+ * Command context for install/uninstall commands.
+ */
+interface CommandContext {
+  ctx: Context;
+}
+
+/**
+ * Base class for install/uninstall commands.
+ */
+abstract class BaseUninstallCommand extends Command {
+  public commandContext: CommandContext = { ctx: null as any };
+  public output?: OutputFormat;
+}
+
+/**
+ * Native clipanion class command for uninstall.
+ */
+export class UninstallCommand extends BaseUninstallCommand {
+  public static readonly paths = [['uninstall']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Remove bundles from a configured target. Use <bundle-id> to uninstall a specific bundle, --lockfile <path> to uninstall from a lockfile, or --all to remove all bundles.',
+    category: 'Installation',
+    details: `
+      Usage: prompt-registry uninstall [options]
+
+      Examples:
+        prompt-registry uninstall --lockfile prompt-registry.lock.json --target my-vscode
+        prompt-registry uninstall --all --target my-vscode
+
+      Options:
+        --bundle <id>          Bundle id to uninstall
+        --lockfile <path>      Path to a lockfile for declarative uninstallation
+        --target <name>        Target name to uninstall from
+        --all                  Remove all bundles for target
+        --scope <scope>        Installation scope (user or repository)
+        --commit-mode <mode>   Commit mode for repository scope
+    `
+  });
+
+  public output = Option.String('-o', '--output') as OutputFormat | undefined;
+  public bundle = Option.String('--bundle');
+  public lockfile = Option.String('--lockfile');
+  public target = Option.String('--target');
+  public all = Option.Boolean('--all');
+  public scope = Option.String('--scope');
+  public commitMode = Option.String('--commit-mode');
+
+  public async execute(): Promise<number> {
+    const { ctx } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+
+    const opts: UninstallOptions = {
+      output: fmt,
+      bundle: this.bundle,
+      lockfile: this.lockfile,
+      target: this.target,
+      all: this.all,
+      scope: this.scope as 'user' | 'repository' | undefined,
+      commitMode: this.commitMode as RepositoryCommitMode | undefined
+    };
+
+    const { noBundle, noLockfile, noAll } = validateUninstallInputs(opts);
+    if (noBundle && noLockfile && noAll) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'uninstall: provide <bundle-id>, --lockfile <path>, or --all',
+        hint: 'Examples:\n'
+          + '  prompt-registry uninstall <bundle-id> --target my-vscode\n'
+          + '  prompt-registry uninstall --lockfile prompt-registry.lock.json\n'
+          + '  prompt-registry uninstall --all'
+      }));
+    }
+
+    try {
+      const targetName = await resolveTargetName(opts, ctx);
+      checkAllowTarget(targetName, opts);
+      const target = await resolveTarget(targetName, ctx);
+
+      if (opts.lockfile !== undefined && opts.lockfile.length > 0) {
+        return await performLockfileUninstall(opts, target, ctx, fmt);
+      }
+
+      if (opts.all) {
+        return await performAllUninstall(opts, target, ctx, fmt);
+      }
+
+      return await performBundleUninstall(opts, target, ctx, fmt);
+    } catch (err) {
+      if (err instanceof RegistryError) {
+        return failWith(ctx, fmt, err);
+      }
+      throw err;
+    }
+  }
+}
+
+/**
+ * Create a CommandDefinition wrapper for the uninstall command class.
+ * This adapts native clipanion classes to the framework's CommandDefinition pattern.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @returns CommandClass.
+ */
+const createUninstallCommandDefinition = (
+  ctx: Context,
+  defaultOutput?: string
+): typeof UninstallCommand => {
+  class ConfiguredCommand extends UninstallCommand {
+    public execute(): Promise<number> {
+      this.commandContext = { ctx };
+      if (defaultOutput !== undefined && !this.output) {
+        this.output = defaultOutput as OutputFormat;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+      return super.execute();
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  (ConfiguredCommand as any).paths = UninstallCommand.paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(UninstallCommand.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
+
+  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  (ConfiguredCommand as any).usage = UninstallCommand.usage;
+
+  return ConfiguredCommand as unknown as typeof UninstallCommand;
+};
+
+/**
+ * Factory function to create a configured uninstall command class.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @returns CommandClass.
+ */
+export const createUninstallCommandClass = (
+  ctx: Context,
+  defaultOutput?: string
+): typeof UninstallCommand => {
+  return createUninstallCommandDefinition(ctx, defaultOutput);
+};
 
 /**
  * Create a writer factory that routes to the appropriate writer based on target scope.
@@ -398,7 +561,7 @@ export const createUninstallCommand = (
 ): CommandDefinition =>
   defineCommand({
     path: ['uninstall'],
-    description: 'Remove bundles from a configured target. Supports three modes: by bundle ID, from lockfile, or all bundles.',
+    description: 'Remove bundles from a configured target. Use <bundle-id> to uninstall a specific bundle, --lockfile <path> to uninstall from a lockfile, or --all to remove all bundles.',
     category: 'Installation',
     run: async ({ ctx }: { ctx: Context }): Promise<number> => {
       const fmt = opts.output ?? 'text';

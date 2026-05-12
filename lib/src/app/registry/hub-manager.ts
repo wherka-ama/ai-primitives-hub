@@ -15,6 +15,8 @@ import {
   DEFAULT_LOCAL_HUB_ID,
   type HubConfig,
   type HubReference,
+  type Profile,
+  type ProfileBundle,
   type RegistrySource,
 } from '../../domain/registry';
 import {
@@ -257,6 +259,63 @@ export class HubManager {
       return false;
     }
     await this.store.save(DEFAULT_LOCAL_HUB_ID, { ...loaded.config, sources: after }, loaded.reference);
+    return true;
+  }
+
+  /**
+   * Add a profile to a hub. Creates the hub if it doesn't exist (for default-local).
+   * @param hubId Hub id.
+   * @param profile Profile to add.
+   * @returns The persisted profile.
+   */
+  public async addProfile(hubId: string, profile: Profile): Promise<Profile> {
+    let cfg: HubConfig;
+    let ref: HubReference;
+    
+    if (await this.store.has(hubId)) {
+      const loaded = await this.store.load(hubId);
+      cfg = loaded.config;
+      ref = loaded.reference;
+    } else {
+      // Auto-create hub for default-local
+      cfg = {
+        version: '1.0.0',
+        metadata: {
+          name: hubId === DEFAULT_LOCAL_HUB_ID ? 'Local sources' : hubId,
+          description: hubId === DEFAULT_LOCAL_HUB_ID ? 'Auto-managed default-local hub.' : `Hub: ${hubId}`,
+          maintainer: 'cli',
+          updatedAt: new Date().toISOString()
+        },
+        sources: [],
+        profiles: []
+      };
+      ref = { type: 'local', location: hubId };
+    }
+    
+    // Replace any existing profile with the same id; otherwise append
+    const filtered = cfg.profiles.filter((p) => p.id !== profile.id);
+    cfg = { ...cfg, profiles: [...filtered, profile] };
+    await this.store.save(hubId, cfg, ref);
+    return profile;
+  }
+
+  /**
+   * Remove a profile from a hub.
+   * @param hubId Hub id.
+   * @param profileId Profile id.
+   * @returns true iff a profile was actually removed.
+   */
+  public async removeProfile(hubId: string, profileId: string): Promise<boolean> {
+    if (!(await this.store.has(hubId))) {
+      return false;
+    }
+    const loaded = await this.store.load(hubId);
+    const before = loaded.config.profiles.length;
+    const after = loaded.config.profiles.filter((p) => p.id !== profileId);
+    if (after.length === before) {
+      return false;
+    }
+    await this.store.save(hubId, { ...loaded.config, profiles: after }, loaded.reference);
     return true;
   }
 }

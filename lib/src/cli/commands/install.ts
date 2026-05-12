@@ -68,6 +68,10 @@ import {
   type TokenProvider,
 } from '../../ports/http';
 import {
+  Command,
+  Option,
+} from '../framework';
+import {
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -134,6 +138,114 @@ export interface InstallOptions {
    * Only applies when scope=repository.
    */
   commitMode?: RepositoryCommitMode;
+}
+
+/**
+ * Command context for install/uninstall commands.
+ */
+interface CommandContext {
+  ctx: Context;
+  http?: HttpClient;
+  tokens?: TokenProvider;
+}
+
+/**
+ * Base class for install/uninstall commands.
+ */
+abstract class BaseInstallCommand extends Command {
+  public commandContext: CommandContext = { ctx: null as any };
+  public output?: OutputFormat;
+}
+
+/**
+ * Native clipanion class command for install.
+ */
+export class InstallCommand extends BaseInstallCommand {
+  public static readonly paths = [['install']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Install bundles from remote sources or local directories to a configured target. Use <bundle-id> for imperative mode or --lockfile <path> for declarative mode.',
+    category: 'Installation',
+    details: `
+      Usage: prompt-registry install [options]
+
+      Examples:
+        prompt-registry install --from <path> --target my-vscode
+        prompt-registry install --lockfile prompt-registry.lock.json --target my-vscode
+
+      Options:
+        --from <path>           Path to an already-built bundle directory
+        --lockfile <path>       Path to a lockfile for declarative installation
+        --target <name>         Target name to install to
+        --source <owner/repo>   Source slug for remote installs
+        --dry-run               Validate and plan without writing
+        --scope <scope>         Installation scope (user or repository)
+        --commit-mode <mode>    Commit mode for repository scope
+    `
+  });
+
+  public output = Option.String('-o', '--output') as OutputFormat | undefined;
+  public from = Option.String('--from');
+  public lockfile = Option.String('--lockfile');
+  public target = Option.String('--target');
+  public source = Option.String('--source');
+  public dryRun = Option.Boolean('--dry-run');
+  public scope = Option.String('--scope');
+  public commitMode = Option.String('--commit-mode');
+  public bundle = Option.String({ required: false }); // Optional positional argument
+
+  public async execute(): Promise<number> {
+    const { ctx } = this.commandContext;
+    const http = this.commandContext.http ?? new NodeHttpClient();
+    const tokens = this.commandContext.tokens ?? defaultTokenProvider(ctx.env);
+    const fmt = (this.output ?? 'text') as OutputFormat;
+
+    const opts: InstallOptions = {
+      output: fmt,
+      bundle: this.bundle,
+      lockfile: this.lockfile,
+      target: this.target,
+      from: this.from,
+      dryRun: this.dryRun,
+      source: this.source,
+      http,
+      tokens,
+      scope: this.scope as 'user' | 'repository' | undefined,
+      commitMode: this.commitMode as RepositoryCommitMode | undefined
+    };
+
+    const { noBundle, noLockfile } = validateInstallInputs(opts);
+    if (noBundle && noLockfile && !opts.from) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'install: provide either <bundle-id> (imperative), --lockfile <path> (declarative), or --from <path> (local directory)',
+        hint: 'Examples:\n'
+          + '  prompt-registry install --from <path> --target my-vscode\n'
+          + '  prompt-registry install --lockfile prompt-registry.lock.json'
+      }));
+    }
+
+    try {
+      const targetName = await resolveTargetName(opts, ctx);
+      checkAllowTarget(targetName, opts);
+      const target = await resolveTarget(targetName, ctx);
+
+      if (opts.from !== undefined && opts.from.length > 0) {
+        return await performLocalInstall(opts, target, ctx, fmt);
+      }
+
+      if (opts.lockfile !== undefined && opts.lockfile.length > 0) {
+        return await performLockfileInstall(opts, target, ctx, fmt);
+      }
+
+      return await performRemoteInstall(opts, target, ctx, fmt);
+    } catch (err) {
+      if (err instanceof RegistryError) {
+        return failWith(ctx, fmt, err);
+      }
+      throw err;
+    }
+  }
 }
 
 /**
@@ -631,7 +743,51 @@ async function updateTargetStateFromLockfile(ctx: Context, targetName: string, m
 }
 
 /**
- * Build the `install` command.
+ * Create a CommandDefinition wrapper for the install command class.
+ * This adapts the native clipanion class to the framework's CommandDefinition pattern.
+ * @param ctx CLI context.
+ * @param http HTTP client (optional test seam).
+ * @param tokens Token provider (optional test seam).
+ * @param defaultOutput Default output format (optional).
+ * @returns CommandClass.
+ */
+const createInstallCommandDefinition = (
+  ctx: Context,
+  http?: HttpClient,
+  tokens?: TokenProvider,
+  defaultOutput?: string
+): typeof InstallCommand => {
+  class ConfiguredCommand extends InstallCommand {
+    public execute(): Promise<number> {
+      this.commandContext = { ctx, http, tokens };
+      if (defaultOutput !== undefined && !this.output) {
+        this.output = defaultOutput as OutputFormat;
+      }
+      return super.execute();
+    }
+  }
+  return ConfiguredCommand as unknown as typeof InstallCommand;
+};
+
+/**
+ * Factory function to create a configured install command class.
+ * @param ctx CLI context.
+ * @param http HTTP client (optional test seam).
+ * @param tokens Token provider (optional test seam).
+ * @param defaultOutput Default output format (optional).
+ * @returns CommandClass.
+ */
+export const createInstallCommandClass = (
+  ctx: Context,
+  http?: HttpClient,
+  tokens?: TokenProvider,
+  defaultOutput?: string
+): typeof InstallCommand => {
+  return createInstallCommandDefinition(ctx, http, tokens, defaultOutput);
+};
+
+/**
+ * Build the `install` command (factory function for backward compatibility).
  * @param opts - Command options.
  * @returns CommandDefinition wired to the framework adapter.
  */
@@ -640,7 +796,7 @@ export const createInstallCommand = (
 ): CommandDefinition =>
   defineCommand({
     path: ['install'],
-    description: 'Install bundles to a configured target.',
+    description: 'Install bundles from remote sources or local directories to a configured target. Use <bundle-id> for imperative mode or --lockfile <path> for declarative mode.',
     category: 'Installation',
     run: async ({ ctx }: { ctx: Context }): Promise<number> => {
       const fmt = opts.output ?? 'text';

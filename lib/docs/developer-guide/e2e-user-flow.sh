@@ -728,8 +728,95 @@ scenario_17_verify_resources_removed() {
     fi
 }
 
-scenario_18_cleanup() {
-    log_section "Scenario 18: Cleanup"
+scenario_18_search_and_install_bundle() {
+    log_section "Scenario 18: Search and Install Bundle via Local Directory"
+
+    log_info "Searching for bundle in index"
+    local output
+    output=$(run_cmd "$PR_BIN index search --query hello --index \"$XDG_CACHE_HOME/primitive-index.json\" -o json") || true
+
+    if assert_json_status "$output"; then
+        local total
+        total=$(echo "$output" | jq -r '.data.total')
+        log_success "Search completed: $total results"
+    else
+        log_error "Search failed"
+        echo "$output"
+        return 1
+    fi
+
+    log_info "Installing bundle from local directory using --from with bundle ID"
+    cd "$PR_TEST_ROOT/project"
+    # Use the bundle ID from the synthetic bundle
+    output=$(run_cmd "$PR_BIN install $BUNDLE_ID --from \"$PR_TEST_ROOT/bundles/local-foo\" --target $TARGET_NAME -o json") || true
+
+    if assert_json_status "$output"; then
+        log_success "Bundle installed from local directory"
+        
+        # Verify resources are installed
+        local target_path="$PR_TEST_ROOT/copilot-cli"
+        if assert_file_exists "$target_path/prompts/hello.prompt.md"; then
+            log_success "Prompt installed after --from install"
+        else
+            log_error "Prompt not installed after --from install"
+            return 1
+        fi
+    else
+        log_error "Failed to install bundle from local directory"
+        echo "$output"
+        return 1
+    fi
+}
+
+scenario_19_uninstall_bundle() {
+    log_section "Scenario 19: Uninstall Bundle"
+
+    cd "$PR_TEST_ROOT/project"
+
+    log_info "Uninstalling bundle via lockfile"
+    # Create a lockfile for the bundle we just installed
+    cat > "$PR_TEST_ROOT/project/test-lockfile.json" <<EOF
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "target": "$TARGET_NAME",
+      "sourceId": "$SOURCE_ID",
+      "bundleId": "$BUNDLE_ID",
+      "bundleVersion": "1.0.0",
+      "installedAt": "2026-05-12T00:00:00Z",
+      "files": [
+        "prompts/hello.prompt.md",
+        "skills/test-skill/SKILL.md"
+      ],
+      "fileChecksums": {}
+    }
+  ]
+}
+EOF
+
+    local output
+    output=$(run_cmd "$PR_BIN uninstall --lockfile \"$PR_TEST_ROOT/project/test-lockfile.json\" --target $TARGET_NAME -o json") || true
+
+    if assert_json_status "$output"; then
+        log_success "Bundle uninstalled successfully"
+        
+        # Verify resources are removed
+        local target_path="$PR_TEST_ROOT/copilot-cli"
+        if assert_file_not_exists "$target_path/prompts/hello.prompt.md"; then
+            log_success "Prompt removed after uninstall"
+        else
+            log_warning "Prompt still exists after uninstall"
+        fi
+    else
+        log_error "Failed to uninstall bundle"
+        echo "$output"
+        return 1
+    fi
+}
+
+scenario_20_cleanup() {
+    log_section "Scenario 20: Cleanup"
 
     log_info "Removing target"
     cd "$PR_TEST_ROOT/project"
@@ -813,7 +900,9 @@ main() {
     scenario_15_verify_resources_still_installed || failures=$((failures + 1))
     scenario_16_deactivate_profile || failures=$((failures + 1))
     scenario_17_verify_resources_removed || failures=$((failures + 1))
-    scenario_18_cleanup || true  # Cleanup always runs
+    scenario_18_search_and_install_bundle || failures=$((failures + 1))
+    scenario_19_uninstall_bundle || failures=$((failures + 1))
+    scenario_20_cleanup || true  # Cleanup always runs
 
     # Print summary
     log_section "Test Summary"

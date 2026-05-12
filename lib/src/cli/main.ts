@@ -83,8 +83,8 @@ import {
 } from './commands/index-search';
 import {
   createIndexShortlistCommand,
-  IndexShortlistNewCommand,
   IndexShortlistAddCommand,
+  IndexShortlistNewCommand,
   IndexShortlistRemoveCommand,
   IndexShortlistListCommand,
 } from './commands/index-shortlist';
@@ -93,17 +93,31 @@ import {
 } from './commands/index-stats';
 import {
   createInstallCommand,
+  createInstallCommandClass,
+  InstallCommand,
 } from './commands/install';
 import {
   createPluginsListCommand,
 } from './commands/plugins-list';
 import {
+  ProfileActivateCommand,
+  ProfileCreateCommand,
+  ProfileCurrentCommand,
+  ProfileDeactivateCommand,
+  ProfileEditCommand,
   createProfileActivateCommand,
+  createProfileCreateCommand,
   createProfileCurrentCommand,
   createProfileDeactivateCommand,
+  createProfileEditCommand,
   createProfileListCommand,
   createProfileShowCommand,
 } from './commands/profile';
+import {
+  createUninstallCommand,
+  createUninstallCommandClass,
+  UninstallCommand,
+} from './commands/uninstall';
 import {
   createSkillNewCommand,
 } from './commands/skill-new';
@@ -124,9 +138,6 @@ import {
 import {
   createTargetRemoveCommand,
 } from './commands/target-remove';
-import {
-  createUninstallCommand,
-} from './commands/uninstall';
 import {
   createVersionComputeCommand,
 } from './commands/version-compute';
@@ -192,6 +203,7 @@ export const main = async (argv: string[]): Promise<number> => {
     // createIndexBenchCommand({ goldFile: '' }), // Removed: IndexBenchCommand is now registered as a class
     // createIndexHarvestCommand(), // Removed: IndexHarvestCommand is now registered as a class
     // createIndexReportCommand(), // Removed: IndexReportCommand is now registered as a class
+    // createConfigListCommand(), // Removed: ConfigListCommand is now registered as a class
     createSkillNewCommand({
       output: parsed.output,
       skillName: parsed.skillName ?? '',
@@ -209,8 +221,6 @@ export const main = async (argv: string[]): Promise<number> => {
     }),
     createConfigListCommand({ output: parsed.output }),
     createPluginsListCommand({ output: parsed.output }),
-    createInstallCommand({ output: parsed.output }),
-    createUninstallCommand({ output: parsed.output }),
     createConfigGetCommand({
       output: parsed.output,
       key: parsed.positional.length >= 3
@@ -249,7 +259,11 @@ export const main = async (argv: string[]): Promise<number> => {
     createProfileShowCommand(ctx, httpClient, tokenProvider, parsed.output),
     createProfileActivateCommand(ctx, httpClient, tokenProvider, parsed.output),
     createProfileDeactivateCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createProfileCurrentCommand(ctx, httpClient, tokenProvider, parsed.output)
+    createProfileCurrentCommand(ctx, httpClient, tokenProvider, parsed.output),
+    createProfileCreateCommand(ctx, httpClient, tokenProvider, parsed.output),
+    createProfileEditCommand(ctx, httpClient, tokenProvider, parsed.output),
+    createInstallCommandClass(ctx, httpClient, tokenProvider, parsed.output),
+    createUninstallCommandClass(ctx, parsed.output)
   ];
 
   return runCli(argv, {
