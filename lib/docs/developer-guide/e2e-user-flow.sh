@@ -591,10 +591,34 @@ scenario_13_add_exported_profile_to_hub() {
         local hub_config_file
         hub_config_file="$PR_TEST_ROOT/local-hub/hub-config.yml"
         
-        # Use sed to append the profile to the hub config
-        # For simplicity, we'll just verify the profile file exists
-        log_success "Profile file exists and can be added to hub"
+        # Append the profile to the hub config using a heredoc
+        # We need to add a profiles section if it doesn't exist, or append to it
+        cat >> "$hub_config_file" <<EOF
+  - id: $LOCAL_PROFILE_ID
+    name: Custom Profile
+    description: Profile exported from shortlist
+    bundles:
+      - id: $BUNDLE_ID
+        version: 1.0.0
+        source: $SOURCE_ID
+        required: true
+EOF
+        
+        log_success "Profile added to hub config"
         log_info "Profile file: $profile_file"
+        
+        # Re-sync the hub to pick up the new profile
+        log_info "Re-syncing hub to pick up new profile"
+        cd "$PR_TEST_ROOT/project"
+        local output
+        output=$(run_cmd "$PR_BIN hub sync local-test-hub -o json") || true
+        
+        if assert_json_status "$output"; then
+            log_success "Hub re-synced successfully"
+        else
+            log_warning "Failed to re-sync hub (profile may not be available)"
+            echo "$output"
+        fi
     else
         log_warning "Profile file not found, skipping hub update"
         return 0
