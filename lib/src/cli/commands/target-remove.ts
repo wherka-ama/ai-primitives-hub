@@ -10,6 +10,10 @@ import {
   removeTargetByName,
 } from '../../infra/stores/target-store';
 import {
+  Command,
+  Option,
+} from '../framework';
+import {
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -27,6 +31,140 @@ export interface TargetRemoveOptions {
   /** Target name (required). */
   name: string;
 }
+
+/**
+ * Command context for target remove command.
+ */
+interface TargetRemoveContext {
+  ctx: Context;
+}
+
+/**
+ * Base class for target remove command.
+ */
+abstract class BaseTargetRemoveCommand extends Command {
+  public commandContext: TargetRemoveContext = { ctx: null as any };
+}
+
+/**
+ * Native clipanion class command for target remove.
+ */
+export class TargetRemoveCommand extends BaseTargetRemoveCommand {
+  public static readonly paths = [['target', 'remove']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Remove a configured install target from the project config (`prompt-registry.yml`).',
+    category: 'Installation',
+    details: `
+      Usage: prompt-registry target remove <name> [options]
+
+      Options:
+        -o, --output <format>  Output format (text, json, yaml, ndjson)
+    `
+  });
+
+  public output = Option.String('-o', '--output') as OutputFormat | undefined;
+  public name = Option.String(); // Positional argument
+
+  public async execute(): Promise<number> {
+    const { ctx } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const name = this.name ?? '';
+
+    if (name.length === 0) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'target remove: missing target name',
+        hint: 'Usage: `prompt-registry target remove <name>`'
+      }));
+    }
+    try {
+      const result = await removeTargetByName(
+        { cwd: ctx.cwd(), fs: ctx.fs },
+        name
+      );
+      formatOutput({
+        ctx,
+        command: 'target.remove',
+        output: fmt,
+        status: 'ok',
+        data: { name, file: result.file },
+        textRenderer: (d) => `Removed target "${d.name}" from ${d.file}.\n`
+      });
+      return 0;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const isMissing = message.includes('not found');
+      return failWith(ctx, fmt, new RegistryError({
+        code: isMissing ? 'USAGE.MISSING_FLAG' : 'INTERNAL.UNEXPECTED',
+        message: `target remove: ${message}`,
+        hint: isMissing
+          ? 'Run `prompt-registry target list` to see configured targets.'
+          : 'See `prompt-registry doctor` for environment diagnostics.',
+        context: { name },
+        cause: cause instanceof Error ? cause : undefined
+      }));
+    }
+  }
+}
+
+/**
+ * Create a CommandDefinition wrapper for the target remove command class.
+ * This adapts native clipanion classes to the framework's CommandDefinition pattern.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @param defaultName Default target name (optional).
+ * @returns CommandClass.
+ */
+const createTargetRemoveCommandDefinition = (
+  ctx: Context,
+  defaultOutput?: string,
+  defaultName?: string
+): typeof TargetRemoveCommand => {
+  class ConfiguredCommand extends TargetRemoveCommand {
+    public execute(): Promise<number> {
+      this.commandContext = { ctx };
+      if (defaultOutput !== undefined && !this.output) {
+        this.output = defaultOutput as OutputFormat;
+      }
+      if (defaultName !== undefined && !this.name) {
+        this.name = defaultName;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+      return super.execute();
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  (ConfiguredCommand as any).paths = TargetRemoveCommand.paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(TargetRemoveCommand.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
+
+  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  (ConfiguredCommand as any).usage = TargetRemoveCommand.usage;
+
+  return ConfiguredCommand as unknown as typeof TargetRemoveCommand;
+};
+
+/**
+ * Factory function to create a configured target remove command class.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @param defaultName Default target name (optional).
+ * @returns CommandClass.
+ */
+export const createTargetRemoveCommandClass = (
+  ctx: Context,
+  defaultOutput?: string,
+  defaultName?: string
+): typeof TargetRemoveCommand => {
+  return createTargetRemoveCommandDefinition(ctx, defaultOutput, defaultName);
+};
 
 /**
  * Build the `target remove` command.

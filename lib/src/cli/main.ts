@@ -143,6 +143,8 @@ import {
 } from './commands/target-list';
 import {
   createTargetRemoveCommand,
+  createTargetRemoveCommandClass,
+  TargetRemoveCommand,
 } from './commands/target-remove';
 import {
   createVersionComputeCommand,
@@ -236,7 +238,7 @@ export const main = async (argv: string[]): Promise<number> => {
     //     ? parsed.positional[2]
     //     : ''
     // }),
-    createTargetRemoveCommand({ name: '' })
+    // createTargetRemoveCommand({ name: '' }) // Removed: TargetRemoveCommand is now registered as a class
   ];
 
   const commandClasses = [
@@ -247,6 +249,7 @@ export const main = async (argv: string[]): Promise<number> => {
     ConfigGetCommand,
     TargetAddCommand,
     TargetListCommand,
+    TargetRemoveCommand,
     IndexSearchCommand,
     IndexBuildCommand,
     IndexShortlistNewCommand,
