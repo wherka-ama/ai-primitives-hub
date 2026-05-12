@@ -16,6 +16,10 @@ import {
   resolveCollectionItemPaths,
 } from '../..';
 import {
+  Command,
+  Option,
+} from '../framework';
+import {
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -43,6 +47,139 @@ export interface CollectionAffectedOptions {
    */
   changedPaths?: string[];
 }
+
+/**
+ * Command context for collection affected command.
+ */
+interface CollectionAffectedContext {
+  ctx: Context;
+}
+
+/**
+ * Base class for collection affected command.
+ */
+abstract class BaseCollectionAffectedCommand extends Command {
+  public commandContext: CollectionAffectedContext = { ctx: null as any };
+}
+
+/**
+ * Native clipanion class command for collection affected.
+ */
+export class CollectionAffectedCommand extends BaseCollectionAffectedCommand {
+  public static readonly paths = [['collection', 'affected']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Print collections whose files or items overlap with the supplied changed-path list. (Replaces `detect-affected-collections`.)',
+    category: 'Collection Management',
+    details: `
+      Usage: prompt-registry collection affected [options]
+
+      Options:
+        -o, --output <format>       Output format (text, json, yaml, ndjson)
+        --changed-path <path>       Changed path to check against (can be repeated)
+    `
+  });
+
+  public output = Option.String('-o', '--output') as OutputFormat | undefined;
+  public changedPath = Option.Array('--changed-path');
+
+  public async execute(): Promise<number> {
+    const { ctx } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const cwd = ctx.cwd();
+    const changed = (this.changedPath ?? [])
+      .map((p) => normalize(p))
+      .filter((s) => s.length > 0);
+    const changedSet = new Set(changed);
+
+    const collectionFiles = listCollectionFiles(cwd);
+    const affected: AffectedRecord[] = [];
+    for (const file of collectionFiles) {
+      const collection = readCollection(cwd, file);
+      const itemPaths = resolveCollectionItemPaths(cwd, collection).map((p) => normalize(p));
+      const itemPathsSet = new Set(itemPaths);
+      const normalizedFile = normalize(file);
+      if (changedSet.has(normalizedFile)) {
+        affected.push({ id: collection.id, file });
+        continue;
+      }
+      for (const c of changed) {
+        if (itemPathsSet.has(c)) {
+          affected.push({ id: collection.id, file });
+          break;
+        }
+      }
+    }
+
+    formatOutput({
+      ctx,
+      command: 'collection.affected',
+      output: fmt,
+      status: 'ok',
+      data: { affected },
+      textRenderer: renderText
+    });
+    return 0;
+  }
+}
+
+/**
+ * Create a CommandDefinition wrapper for the collection affected command class.
+ * This adapts native clipanion classes to the framework's CommandDefinition pattern.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @param defaultChangedPaths Default changed paths (optional).
+ * @returns CommandClass.
+ */
+const createCollectionAffectedCommandDefinition = (
+  ctx: Context,
+  defaultOutput?: string,
+  defaultChangedPaths?: string[]
+): typeof CollectionAffectedCommand => {
+  class ConfiguredCommand extends CollectionAffectedCommand {
+    public async execute(): Promise<number> {
+      this.commandContext = { ctx };
+      if (defaultOutput !== undefined && !this.output) {
+        this.output = defaultOutput as OutputFormat;
+      }
+      if (defaultChangedPaths !== undefined && (!this.changedPath || this.changedPath.length === 0)) {
+        this.changedPath = defaultChangedPaths;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+      return super.execute();
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  (ConfiguredCommand as any).paths = CollectionAffectedCommand.paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(CollectionAffectedCommand.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
+
+  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  (ConfiguredCommand as any).usage = CollectionAffectedCommand.usage;
+
+  return ConfiguredCommand as unknown as typeof CollectionAffectedCommand;
+};
+
+/**
+ * Factory function to create a configured collection affected command class.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @param defaultChangedPaths Default changed paths (optional).
+ * @returns CommandClass.
+ */
+export const createCollectionAffectedCommandClass = (
+  ctx: Context,
+  defaultOutput?: string,
+  defaultChangedPaths?: string[]
+): typeof CollectionAffectedCommand => {
+  return createCollectionAffectedCommandDefinition(ctx, defaultOutput, defaultChangedPaths);
+};
 
 /**
  * Build the `collection affected` command.

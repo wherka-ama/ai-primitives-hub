@@ -31,6 +31,8 @@ import {
 } from './commands/bundle-manifest';
 import {
   createCollectionAffectedCommand,
+  createCollectionAffectedCommandClass,
+  CollectionAffectedCommand,
 } from './commands/collection-affected';
 import {
   createCollectionListCommand,
@@ -203,10 +205,10 @@ export const main = async (argv: string[]): Promise<number> => {
     //   version: parsed.version ?? '',
     //   collectionFile: parsed.collectionFile ?? ''
     // }),
-    createCollectionAffectedCommand({
-      output: parsed.output,
-      changedPaths: parseCsv(parsed.changedPath)
-    }),
+    // createCollectionAffectedCommand({ // Removed: CollectionAffectedCommand is now registered as a class
+    //   output: parsed.output,
+    //   changedPaths: parseCsv(parsed.changedPath)
+    // }),
     // createCollectionListCommand({ output: parsed.output }), // Removed: CollectionListCommand is now registered as a class
     // createCollectionValidateCommand({ // Removed: CollectionValidateCommand is now registered as a class
     //   output: parsed.output,
@@ -254,6 +256,7 @@ export const main = async (argv: string[]): Promise<number> => {
     TargetRemoveCommand,
     BundleBuildCommand,
     BundleManifestCommand,
+    CollectionAffectedCommand,
     CollectionListCommand,
     CollectionValidateCommand,
     IndexSearchCommand,
