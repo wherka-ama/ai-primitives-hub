@@ -58,12 +58,14 @@ import {
 } from './commands/index-bench';
 import {
   createIndexBuildCommand,
+  IndexBuildCommand,
 } from './commands/index-build';
 import {
   createIndexEvalCommand,
 } from './commands/index-eval';
 import {
   createIndexExportCommand,
+  IndexExportCommand,
 } from './commands/index-export';
 import {
   createIndexHarvestCommand,
@@ -77,6 +79,10 @@ import {
 } from './commands/index-search';
 import {
   createIndexShortlistCommand,
+  IndexShortlistNewCommand,
+  IndexShortlistAddCommand,
+  IndexShortlistRemoveCommand,
+  IndexShortlistListCommand,
 } from './commands/index-shortlist';
 import {
   createIndexStatsCommand,
@@ -175,9 +181,9 @@ export const main = async (argv: string[]): Promise<number> => {
     }),
     createDoctorCommand({ output: parsed.output }),
     createIndexStatsCommand(),
-    createIndexBuildCommand({ root: '' }),
-    createIndexShortlistCommand({ subcommand: 'new' }),
-    createIndexExportCommand({ shortlistId: '', profileId: '' }),
+    // createIndexBuildCommand({ root: '' }), // Removed: IndexBuildCommand is now registered as a class
+    // createIndexShortlistCommand({ subcommand: 'new' }), // Removed: IndexShortlist*Commands are now registered as classes
+    // createIndexExportCommand({ shortlistId: '', profileId: '' }), // Removed: IndexExportCommand is now registered as a class
     createIndexEvalCommand({ goldFile: '' }),
     createIndexBenchCommand({ goldFile: '' }),
     createIndexHarvestCommand(),
@@ -217,6 +223,12 @@ export const main = async (argv: string[]): Promise<number> => {
     TargetAddCommand,
     TargetListCommand,
     IndexSearchCommand,
+    IndexBuildCommand,
+    IndexShortlistNewCommand,
+    IndexShortlistAddCommand,
+    IndexShortlistRemoveCommand,
+    IndexShortlistListCommand,
+    IndexExportCommand,
     createHubListCommand(ctx, httpClient, tokenProvider, parsed.output),
     createHubAddCommand(ctx, httpClient, tokenProvider, parsed.output),
     createHubUseCommand(ctx, httpClient, tokenProvider, parsed.output),

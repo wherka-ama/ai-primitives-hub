@@ -21,6 +21,9 @@ import {
   saveIndex,
 } from '../../infra/stores/json-index-store';
 import {
+  Command,
+  Option,
+  type CommandClass,
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -114,6 +117,80 @@ const failWith = (ctx: Context, output: OutputFormat, err: RegistryError): numbe
   }
   return 1;
 };
+
+/**
+ * Index build command class.
+ * Builds a primitive index from a local folder of bundles.
+ */
+export class IndexBuildCommand extends Command {
+  public static readonly paths = [['index', 'build']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Build a primitive index from a local folder of bundles.',
+    category: 'Index Management',
+    details: `
+      Usage: prompt-registry index build --root <DIR> [options]
+
+      Examples:
+        prompt-registry index build --root ./bundles
+        prompt-registry index build --root ./bundles --out /tmp/index.json
+        prompt-registry index build --root ./bundles --source-id my-source
+    `
+  });
+
+  public root = Option.String('--root');
+  public out = Option.String('--out,--out-file');
+  public sourceId = Option.String('--source-id');
+  public output = Option.String('-o,--output');
+
+  public async execute(): Promise<number> {
+    const ctx = (this as any).commandContext?.ctx as Context;
+    if (!ctx) {
+      throw new Error('CommandContext not available');
+    }
+
+    const fmt = (this.output ?? 'text') as OutputFormat;
+
+    if (!this.root || this.root.length === 0) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'index build: --root <DIR> is required'
+      }));
+    }
+
+    try {
+      const outFile = this.out ?? path.join(this.root, 'primitive-index.json');
+      const provider = new LocalFolderBundleProvider({
+        root: this.root,
+        sourceId: this.sourceId
+      });
+      const idx = await PrimitiveIndex.buildFrom(provider, {
+        hubId: this.sourceId
+      });
+      saveIndex(idx, outFile);
+      const stats = idx.stats();
+      const data: BuildResult = { outFile, stats };
+      formatOutput({
+        ctx,
+        command: 'index.build',
+        output: fmt,
+        status: 'ok',
+        data,
+        textRenderer: (d) =>
+          `built ${String(d.stats.primitives)} primitives `
+          + `from ${String(d.stats.bundles)} bundles → ${d.outFile}\n`
+      });
+      return 0;
+    } catch (cause) {
+      const err = new RegistryError({
+        code: 'INDEX.BUILD_FAILED',
+        message: `index build failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause: cause instanceof Error ? cause : undefined
+      });
+      return failWith(ctx, fmt, err);
+    }
+  }
+}
 
 // Re-export for symmetry with other commands' default-path helpers.
 

@@ -24,6 +24,9 @@ import {
   loadIndex,
 } from '../../infra/stores/json-index-store';
 import {
+  Command,
+  Option,
+  type CommandClass,
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -155,3 +158,113 @@ const failWith = async (ctx: Context, output: OutputFormat, err: RegistryError):
   }
   return 1;
 };
+
+/**
+ * Index export command class.
+ * Exports a shortlist as a hub profile YAML.
+ */
+export class IndexExportCommand extends Command {
+  public static readonly paths = [['index', 'export']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Export a shortlist as a hub profile YAML.',
+    category: 'Index Management',
+    details: `
+      Usage: prompt-registry index export --shortlist <SHORTLIST_ID> --profile-id <ID> [options]
+
+      Examples:
+        prompt-registry index export --shortlist my-list --profile-id custom-profile
+        prompt-registry index export --shortlist my-list --profile-id custom-profile --out-dir ./exports
+        prompt-registry index export --shortlist my-list --profile-id custom-profile --suggest-collection
+    `
+  });
+
+  public shortlist = Option.String('--shortlist');
+  public profileId = Option.String('--profile-id');
+  public outDir = Option.String('--out-dir');
+  public profileName = Option.String('--profile-name');
+  public description = Option.String('--description');
+  public icon = Option.String('--icon');
+  public suggestCollection = Option.Boolean('--suggest-collection');
+  public index = Option.String('--index');
+  public output = Option.String('-o,--output');
+
+  public async execute(): Promise<number> {
+    const ctx = (this as any).commandContext?.ctx as Context;
+    if (!ctx) {
+      throw new Error('CommandContext not available');
+    }
+
+    const fmt = (this.output ?? 'text') as OutputFormat;
+
+    if (!this.shortlist || this.shortlist.length === 0) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'index export: --shortlist <SHORTLIST_ID> is required'
+      }));
+    }
+    if (!this.profileId || this.profileId.length === 0) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'index export: --profile-id <ID> is required'
+      }));
+    }
+
+    const indexPath = this.index ?? defaultIndexFile(ctx.env);
+
+    try {
+      const idx = loadIndex(indexPath);
+      const sl = idx.getShortlist(this.shortlist);
+      if (sl === undefined) {
+        return failWith(ctx, fmt, new RegistryError({
+          code: 'INDEX.SHORTLIST_NOT_FOUND',
+          message: `index export: unknown shortlist "${this.shortlist}"`
+        }));
+      }
+      const result = exportShortlistAsProfile(idx, sl, {
+        profileId: this.profileId,
+        profileName: this.profileName,
+        description: this.description,
+        icon: this.icon,
+        suggestCollection: this.suggestCollection
+      });
+      const outDir = this.outDir ?? '.';
+      fs.mkdirSync(outDir, { recursive: true });
+      const profileFile = path.join(outDir, `${this.profileId}.profile.yml`);
+      fs.writeFileSync(profileFile, toYaml(result.profile), 'utf8');
+      const data: ExportResult = {
+        profileFile,
+        warnings: result.warnings
+      };
+      if (result.suggestedCollection !== undefined) {
+        const collectionFile = path.join(outDir, `${result.suggestedCollection.id}.collection.yml`);
+        fs.writeFileSync(collectionFile, toYaml(result.suggestedCollection), 'utf8');
+        data.collectionFile = collectionFile;
+      }
+      formatOutput({
+        ctx, command: 'index.export', output: fmt, status: 'ok',
+        data,
+        warnings: result.warnings,
+        textRenderer: (d) =>
+          `wrote ${d.profileFile}`
+          + (d.collectionFile === undefined ? '' : `\nwrote ${d.collectionFile}`)
+          + '\n'
+      });
+      return Promise.resolve(0);
+    } catch (cause) {
+      const msg = cause instanceof Error ? cause.message : String(cause);
+      const err = /ENOENT|no such file/i.test(msg)
+        ? new RegistryError({
+          code: 'INDEX.NOT_FOUND',
+          message: `index not found: ${indexPath}`,
+          cause: cause instanceof Error ? cause : undefined
+        })
+        : new RegistryError({
+          code: 'INDEX.EXPORT_FAILED',
+          message: `index export failed: ${msg}`,
+          cause: cause instanceof Error ? cause : undefined
+        });
+      return failWith(ctx, fmt, err);
+    }
+  }
+}
