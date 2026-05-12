@@ -94,6 +94,8 @@ import {
 } from './commands/index-shortlist';
 import {
   createIndexStatsCommand,
+  createIndexStatsCommandClass,
+  IndexStatsCommand,
 } from './commands/index-stats';
 import {
   createInstallCommand,
@@ -205,7 +207,7 @@ export const main = async (argv: string[]): Promise<number> => {
       verbose: parsed.verbose
     }),
     // createDoctorCommand({ output: parsed.output }), // Removed: DoctorCommand is now registered as a class
-    createIndexStatsCommand(),
+    // createIndexStatsCommand(), // Removed: IndexStatsCommand is now registered as a class
     // createIndexBuildCommand({ root: '' }), // Removed: IndexBuildCommand is now registered as a class
     // createIndexShortlistCommand({ subcommand: 'new' }), // Removed: IndexShortlist*Commands are now registered as classes
     // createIndexExportCommand({ shortlistId: '', profileId: '' }), // Removed: IndexExportCommand is now registered as a class
@@ -251,6 +253,7 @@ export const main = async (argv: string[]): Promise<number> => {
     TargetListCommand,
     TargetRemoveCommand,
     IndexSearchCommand,
+    IndexStatsCommand,
     IndexBuildCommand,
     IndexShortlistNewCommand,
     IndexShortlistAddCommand,

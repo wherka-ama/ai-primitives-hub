@@ -16,6 +16,10 @@ import {
   loadIndex,
 } from '../../infra/stores/json-index-store';
 import {
+  Command,
+  Option,
+} from '../framework';
+import {
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -30,6 +34,134 @@ export interface IndexStatsOptions {
   /** Path to the index JSON. Defaults to `<XDG cache>/primitive-index.json`. */
   indexFile?: string;
 }
+
+/**
+ * Command context for index stats command.
+ */
+interface IndexStatsContext {
+  ctx: Context;
+}
+
+/**
+ * Base class for index stats command.
+ */
+abstract class BaseIndexStatsCommand extends Command {
+  public commandContext: IndexStatsContext = { ctx: null as any };
+}
+
+/**
+ * Native clipanion class command for index stats.
+ */
+export class IndexStatsCommand extends BaseIndexStatsCommand {
+  public static readonly paths = [['index', 'stats']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Show summary statistics for a primitive index.',
+    category: 'Index Management',
+    details: `
+      Usage: prompt-registry index stats [options]
+
+      Options:
+        -o, --output <format>  Output format (text, json, yaml, ndjson)
+        --index <path>         Path to index JSON (default: XDG cache/primitive-index.json)
+    `
+  });
+
+  public output = Option.String('-o', '--output') as OutputFormat | undefined;
+  public indexFile = Option.String('--index');
+
+  public async execute(): Promise<number> {
+    const { ctx } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const indexPath = this.indexFile ?? defaultIndexFile(ctx.env);
+    try {
+      const idx = loadIndex(indexPath);
+      const stats = idx.stats();
+      formatOutput({
+        ctx,
+        command: 'index.stats',
+        output: fmt,
+        status: 'ok',
+        data: stats,
+        textRenderer: (s) => renderStatsText(s)
+      });
+      return Promise.resolve(0);
+    } catch (cause) {
+      const msg = cause instanceof Error ? cause.message : String(cause);
+      const err = /ENOENT|no such file/i.test(msg)
+        ? new RegistryError({
+          code: 'INDEX.NOT_FOUND',
+          message: `index not found: ${indexPath}`,
+          hint: 'Run `prompt-registry index build` or `prompt-registry index harvest` first.',
+          cause: cause instanceof Error ? cause : undefined
+        })
+        : new RegistryError({
+          code: 'INDEX.LOAD_FAILED',
+          message: `failed to load index ${indexPath}: ${msg}`,
+          cause: cause instanceof Error ? cause : undefined
+        });
+      return failWith(ctx, fmt, err);
+    }
+  }
+}
+
+/**
+ * Create a CommandDefinition wrapper for the index stats command class.
+ * This adapts native clipanion classes to the framework's CommandDefinition pattern.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @param defaultIndexFile Default index file path (optional).
+ * @returns CommandClass.
+ */
+const createIndexStatsCommandDefinition = (
+  ctx: Context,
+  defaultOutput?: string,
+  defaultIndexFile?: string
+): typeof IndexStatsCommand => {
+  class ConfiguredCommand extends IndexStatsCommand {
+    public execute(): Promise<number> {
+      this.commandContext = { ctx };
+      if (defaultOutput !== undefined && !this.output) {
+        this.output = defaultOutput as OutputFormat;
+      }
+      if (defaultIndexFile !== undefined && !this.indexFile) {
+        this.indexFile = defaultIndexFile;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+      return super.execute();
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  (ConfiguredCommand as any).paths = IndexStatsCommand.paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(IndexStatsCommand.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
+
+  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  (ConfiguredCommand as any).usage = IndexStatsCommand.usage;
+
+  return ConfiguredCommand as unknown as typeof IndexStatsCommand;
+};
+
+/**
+ * Factory function to create a configured index stats command class.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @param defaultIndexFile Default index file path (optional).
+ * @returns CommandClass.
+ */
+export const createIndexStatsCommandClass = (
+  ctx: Context,
+  defaultOutput?: string,
+  defaultIndexFile?: string
+): typeof IndexStatsCommand => {
+  return createIndexStatsCommandDefinition(ctx, defaultOutput, defaultIndexFile);
+};
 
 /**
  * Build the `index stats` command.
