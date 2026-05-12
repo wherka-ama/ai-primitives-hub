@@ -21,6 +21,8 @@ import {
 } from '../infra/http/node-http-client';
 import {
   createBundleBuildCommand,
+  createBundleBuildCommandClass,
+  BundleBuildCommand,
 } from './commands/bundle-build';
 import {
   createBundleManifestCommand,
@@ -182,13 +184,13 @@ export const main = async (argv: string[]): Promise<number> => {
   const tokenProvider = envTokenProvider(ctx.env);
 
   const commands = [
-    createBundleBuildCommand({
-      output: parsed.output,
-      collectionFile: parsed.collectionFile ?? '',
-      version: parsed.version ?? '0.0.0-dev',
-      outDir: parsed.outDir,
-      repoSlug: parsed.repoSlug
-    }),
+    // createBundleBuildCommand({ // Removed: BundleBuildCommand is now registered as a class
+    //   output: parsed.output,
+    //   collectionFile: parsed.collectionFile ?? '',
+    //   version: parsed.version ?? '0.0.0-dev',
+    //   outDir: parsed.outDir,
+    //   repoSlug: parsed.repoSlug
+    // }),
     createBundleManifestCommand({
       output: parsed.output,
       outFile: parsed.outFile ?? '',
@@ -206,14 +208,6 @@ export const main = async (argv: string[]): Promise<number> => {
       collectionFiles: parseCsv(parsed.collectionFile),
       verbose: parsed.verbose
     }),
-    // createDoctorCommand({ output: parsed.output }), // Removed: DoctorCommand is now registered as a class
-    // createIndexStatsCommand(), // Removed: IndexStatsCommand is now registered as a class
-    // createIndexBuildCommand({ root: '' }), // Removed: IndexBuildCommand is now registered as a class
-    // createIndexShortlistCommand({ subcommand: 'new' }), // Removed: IndexShortlist*Commands are now registered as classes
-    // createIndexExportCommand({ shortlistId: '', profileId: '' }), // Removed: IndexExportCommand is now registered as a class
-    // createIndexEvalCommand({ goldFile: '' }), // Removed: IndexEvalCommand is now registered as a class
-    // createIndexBenchCommand({ goldFile: '' }), // Removed: IndexBenchCommand is now registered as a class
-    // createIndexHarvestCommand(), // Removed: IndexHarvestCommand is now registered as a class
     // createIndexReportCommand(), // Removed: IndexReportCommand is now registered as a class
     // createConfigListCommand(), // Removed: ConfigListCommand is now registered as a class
     createSkillNewCommand({
@@ -252,6 +246,7 @@ export const main = async (argv: string[]): Promise<number> => {
     TargetAddCommand,
     TargetListCommand,
     TargetRemoveCommand,
+    BundleBuildCommand,
     IndexSearchCommand,
     IndexStatsCommand,
     IndexBuildCommand,

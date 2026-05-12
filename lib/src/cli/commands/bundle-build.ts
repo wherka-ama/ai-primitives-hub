@@ -33,6 +33,10 @@ import {
   resolveCollectionItemPaths,
 } from '../..';
 import {
+  Command,
+  Option,
+} from '../framework';
+import {
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -75,6 +79,228 @@ export interface BundleBuildOptions {
 
 /** Fixed date for reproducible bundle timestamps. */
 const FIXED_DATE = new Date('1980-01-01T00:00:00.000Z');
+
+/**
+ * Command context for bundle build command.
+ */
+interface BundleBuildContext {
+  ctx: Context;
+}
+
+/**
+ * Base class for bundle build command.
+ */
+abstract class BaseBundleBuildCommand extends Command {
+  public commandContext: BundleBuildContext = { ctx: null as any };
+}
+
+/**
+ * Native clipanion class command for bundle build.
+ */
+export class BundleBuildCommand extends BaseBundleBuildCommand {
+  public static readonly paths = [['bundle', 'build']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Generate a deployment manifest and zip the collection items into a reproducible bundle. (Replaces `build-collection-bundle`.)',
+    category: 'Bundle Management',
+    details: `
+      Usage: prompt-registry bundle build [options]
+
+      Options:
+        -o, --output <format>       Output format (text, json, yaml, ndjson)
+        --collection-file <path>    Collection file path (repo-relative)
+        --version <version>         Bundle version (e.g. 1.0.0)
+        --out-dir <dir>             Output directory (default: dist)
+        --repo-slug <slug>          Repo slug (owner-repo, or GITHUB_REPOSITORY env var)
+    `
+  });
+
+  public output = Option.String('-o', '--output') as OutputFormat | undefined;
+  public collectionFile = Option.String('--collection-file');
+  public version = Option.String('--version');
+  public outDir = Option.String('--out-dir');
+  public repoSlug = Option.String('--repo-slug');
+
+  public async execute(): Promise<number> {
+    const { ctx } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const collectionFile = this.collectionFile ?? '';
+    const version = this.version ?? '';
+
+    try {
+      const cwd = ctx.cwd();
+      const repoSlug = this.repoSlug
+        ?? (ctx.env.GITHUB_REPOSITORY ?? '').replaceAll('/', '-');
+      if (repoSlug.length === 0) {
+        throw new RegistryError({
+          code: 'USAGE.MISSING_FLAG',
+          message: 'Missing --repo-slug (or set GITHUB_REPOSITORY)',
+          hint: 'Pass --repo-slug owner-repo or run inside GitHub Actions where GITHUB_REPOSITORY is set.'
+        });
+      }
+      // Resolve outDir against ctx.cwd() so the command honors
+      // injected working directories (Context invariant). Legacy
+      // script relied on process.cwd() implicitly.
+      const outDirRel = this.outDir ?? 'dist';
+      const outDir = path.isAbsolute(outDirRel) ? outDirRel : path.join(cwd, outDirRel);
+      const collection = readCollection(cwd, collectionFile);
+      const collectionId = collection.id;
+      if (typeof collectionId !== 'string' || collectionId.length === 0) {
+        throw new RegistryError({
+          code: 'BUNDLE.INVALID_MANIFEST',
+          message: 'collection.id is required'
+        });
+      }
+
+      const bundleId = generateBundleId(repoSlug, collectionId, version);
+      const collectionOutDir = path.join(outDir, collectionId);
+      await ctx.fs.mkdir(collectionOutDir, { recursive: true });
+
+      // Generate the deployment-manifest.yml in the bundle output
+      // directory by running the iter-7 command in-process. This
+      // avoids the legacy script's `spawnSync('node', ...)` step.
+      const standaloneManifestPath = path.join(collectionOutDir, 'deployment-manifest.yml');
+      const manifestCmd = createBundleManifestCommand({
+        output: 'json',
+        version,
+        collectionFile,
+        outFile: standaloneManifestPath
+      });
+      // Capture the manifest command's output so it doesn't pollute
+      // the bundle-build command's own envelope. The OutputStream
+      // contract is just `{ write(chunk: string): void }`.
+      const subCtx: Context = {
+        ...ctx,
+        stdout: { write: () => undefined }
+      };
+      const manifestExit = await manifestCmd.run({ ctx: subCtx });
+      if (manifestExit !== 0) {
+        throw new RegistryError({
+          code: 'BUNDLE.MANIFEST_FAILED',
+          message: 'manifest sub-step exited non-zero',
+          context: { manifestExit }
+        });
+      }
+
+      const itemPaths = resolveCollectionItemPaths(cwd, collection);
+      const zipPath = path.join(collectionOutDir, `${collectionId}.bundle.zip`);
+      await createDeterministicZip({
+        repoRoot: cwd,
+        zipPath,
+        manifestPath: standaloneManifestPath,
+        itemPaths
+      });
+
+      const data: BundleBuildData = {
+        collectionId,
+        version,
+        outDir: collectionOutDir.replaceAll('\\', '/'),
+        manifestAsset: standaloneManifestPath.replaceAll('\\', '/'),
+        zipAsset: zipPath.replaceAll('\\', '/'),
+        bundleId
+      };
+      formatOutput({
+        ctx,
+        command: 'bundle.build',
+        output: fmt,
+        status: 'ok',
+        data,
+        textRenderer: (d) =>
+          `Built ${d.zipAsset} (bundle id: ${d.bundleId}, version: ${d.version})\n`
+      });
+      return 0;
+    } catch (err) {
+      const re = err instanceof RegistryError
+        ? err
+        : new RegistryError({
+          code: 'INTERNAL.UNEXPECTED',
+          message: err instanceof Error ? err.message : String(err),
+          cause: err
+        });
+      emitError(ctx, fmt, re);
+      return 1;
+    }
+  }
+}
+
+/**
+ * Create a CommandDefinition wrapper for the bundle build command class.
+ * This adapts native clipanion classes to the framework's CommandDefinition pattern.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @param defaultCollectionFile Default collection file (optional).
+ * @param defaultVersion Default version (optional).
+ * @param defaultOutDir Default output directory (optional).
+ * @param defaultRepoSlug Default repo slug (optional).
+ * @returns CommandClass.
+ */
+const createBundleBuildCommandDefinition = (
+  ctx: Context,
+  defaultOutput?: string,
+  defaultCollectionFile?: string,
+  defaultVersion?: string,
+  defaultOutDir?: string,
+  defaultRepoSlug?: string
+): typeof BundleBuildCommand => {
+  class ConfiguredCommand extends BundleBuildCommand {
+    public execute(): Promise<number> {
+      this.commandContext = { ctx };
+      if (defaultOutput !== undefined && !this.output) {
+        this.output = defaultOutput as OutputFormat;
+      }
+      if (defaultCollectionFile !== undefined && !this.collectionFile) {
+        this.collectionFile = defaultCollectionFile;
+      }
+      if (defaultVersion !== undefined && !this.version) {
+        this.version = defaultVersion;
+      }
+      if (defaultOutDir !== undefined && !this.outDir) {
+        this.outDir = defaultOutDir;
+      }
+      if (defaultRepoSlug !== undefined && !this.repoSlug) {
+        this.repoSlug = defaultRepoSlug;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+      return super.execute();
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  (ConfiguredCommand as any).paths = BundleBuildCommand.paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(BundleBuildCommand.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
+
+  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  (ConfiguredCommand as any).usage = BundleBuildCommand.usage;
+
+  return ConfiguredCommand as unknown as typeof BundleBuildCommand;
+};
+
+/**
+ * Factory function to create a configured bundle build command class.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @param defaultCollectionFile Default collection file (optional).
+ * @param defaultVersion Default version (optional).
+ * @param defaultOutDir Default output directory (optional).
+ * @param defaultRepoSlug Default repo slug (optional).
+ * @returns CommandClass.
+ */
+export const createBundleBuildCommandClass = (
+  ctx: Context,
+  defaultOutput?: string,
+  defaultCollectionFile?: string,
+  defaultVersion?: string,
+  defaultOutDir?: string,
+  defaultRepoSlug?: string
+): typeof BundleBuildCommand => {
+  return createBundleBuildCommandDefinition(ctx, defaultOutput, defaultCollectionFile, defaultVersion, defaultOutDir, defaultRepoSlug);
+};
 
 /**
  * Build the `bundle build` command.
