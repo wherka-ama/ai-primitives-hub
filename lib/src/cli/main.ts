@@ -73,6 +73,7 @@ import {
 } from './commands/index-report';
 import {
   createIndexSearchCommand,
+  IndexSearchCommand,
 } from './commands/index-search';
 import {
   createIndexShortlistCommand,
@@ -173,7 +174,6 @@ export const main = async (argv: string[]): Promise<number> => {
       verbose: parsed.verbose
     }),
     createDoctorCommand({ output: parsed.output }),
-    createIndexSearchCommand(),
     createIndexStatsCommand(),
     createIndexBuildCommand({ root: '' }),
     createIndexShortlistCommand({ subcommand: 'new' }),
@@ -216,6 +216,7 @@ export const main = async (argv: string[]): Promise<number> => {
     ExplainCommand,
     TargetAddCommand,
     TargetListCommand,
+    IndexSearchCommand,
     createHubListCommand(ctx, httpClient, tokenProvider, parsed.output),
     createHubAddCommand(ctx, httpClient, tokenProvider, parsed.output),
     createHubUseCommand(ctx, httpClient, tokenProvider, parsed.output),

@@ -280,3 +280,62 @@ else
 fi
 
 log_section "Section 6 Complete"
+
+# Section 7
+log_section "Section 7: Primitive Index Commands"
+
+log_info "Test 7.1: Index build from local bundles"
+output=$($PR_BIN index build --root "$PR_TEST_ROOT/bundles/local-foo" -o json 2>&1)
+if echo "$output" | jq -e '.status=="ok"' >/dev/null; then
+    log_success "Index build passed"
+else
+    log_error "Index build failed"
+    echo "$output"
+fi
+
+log_info "Test 7.2: Index search with --query"
+output=$($PR_BIN index search --query "prompt" -o json 2>&1)
+if echo "$output" | jq -e '.status=="ok"' >/dev/null; then
+    log_success "Index search with --query passed"
+else
+    log_error "Index search with --query failed"
+    echo "$output"
+fi
+
+log_info "Test 7.3: Index search with --kinds"
+output=$($PR_BIN index search --query "prompt" --kinds prompt -o json 2>&1)
+if echo "$output" | jq -e '.status=="ok"' >/dev/null; then
+    log_success "Index search with --kinds passed"
+else
+    log_error "Index search with --kinds failed"
+    echo "$output"
+fi
+
+log_info "Test 7.4: Index search with --limit"
+output=$($PR_BIN index search --query "prompt" --limit 1 -o json 2>&1)
+if echo "$output" | jq -e '.status=="ok"' >/dev/null; then
+    log_success "Index search with --limit passed"
+else
+    log_error "Index search with --limit failed"
+    echo "$output"
+fi
+
+log_info "Test 7.5: Index search with --output format variations"
+for fmt in text json yaml ndjson; do
+    if $PR_BIN index search --query "prompt" -o "$fmt" >/dev/null 2>&1; then
+        log_success "Index search output format $fmt passed"
+    else
+        log_error "Index search output format $fmt failed"
+    fi
+done
+
+log_info "Test 7.6: Index stats"
+output=$($PR_BIN index stats -o json 2>&1)
+if echo "$output" | jq -e '.status=="ok"' >/dev/null; then
+    log_success "Index stats passed"
+else
+    log_error "Index stats failed"
+    echo "$output"
+fi
+
+log_section "Section 7 Complete"

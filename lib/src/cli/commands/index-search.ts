@@ -22,11 +22,14 @@ import {
   loadIndex,
 } from '../../infra/stores/json-index-store';
 import {
-  type CommandDefinition,
+  Command,
+  Option,
+  type CommandClass,
   type Context,
   defineCommand,
   formatOutput,
   type OutputFormat,
+  type CommandDefinition,
   RegistryError,
   renderError,
 } from '../framework';
@@ -56,7 +59,7 @@ export interface IndexSearchOptions {
 }
 
 /**
- * Build the `index search` command.
+ * Build the `index search` command using defineCommand (for test compatibility).
  * @param opts CLI options.
  * @returns CommandDefinition wired to the framework adapter.
  */
@@ -98,6 +101,76 @@ export const createIndexSearchCommand = (
       }
     }
   });
+
+/**
+ * Index search command class.
+ * Supports free-text query and facet filters.
+ */
+export class IndexSearchCommand extends Command {
+  public static readonly paths = [['index', 'search']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Search a primitive index by free text + facets.',
+    category: 'Index Management',
+    details: `
+      Usage: prompt-registry index search [options] [query]
+
+      Examples:
+        prompt-registry index search "docker"
+        prompt-registry index search --query "docker" --kinds skill
+        prompt-registry index search --sources github --limit 10
+    `
+  });
+
+  public query = Option.String('--query');
+  public index = Option.String('--index');
+  public output = Option.String('-o,--output');
+  public kinds = Option.Array('--kinds');
+  public sources = Option.Array('--sources');
+  public bundles = Option.Array('--bundles');
+  public tags = Option.Array('--tags');
+  public installedOnly = Option.Boolean('--installed-only');
+  public limit = Option.String('--limit');
+  public offset = Option.String('--offset');
+  public explain = Option.Boolean('--explain');
+
+  public async execute(): Promise<number> {
+    const ctx = (this as any).commandContext?.ctx as Context;
+    if (!ctx) {
+      throw new Error('CommandContext not available');
+    }
+
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const indexPath = this.index ?? defaultIndexFile(ctx.env);
+
+    try {
+      const idx = loadIndex(indexPath);
+      const query: SearchQuery = {
+        q: this.query,
+        kinds: this.kinds as PrimitiveKind[],
+        sources: this.sources,
+        bundles: this.bundles,
+        tags: this.tags,
+        installedOnly: this.installedOnly,
+        limit: this.limit ? parseInt(this.limit, 10) : undefined,
+        offset: this.offset ? parseInt(this.offset, 10) : undefined,
+        explain: this.explain
+      };
+      const result = idx.search(query);
+      formatOutput({
+        ctx,
+        command: 'index.search',
+        output: fmt,
+        status: 'ok',
+        data: result,
+        textRenderer: (r) => renderSearchText(r)
+      });
+      return 0;
+    } catch (cause) {
+      return failWith(ctx, fmt, classifyError(cause, indexPath));
+    }
+  }
+}
 
 const classifyError = (cause: unknown, indexPath: string): RegistryError => {
   if (cause instanceof RegistryError) {
