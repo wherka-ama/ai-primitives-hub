@@ -38,6 +38,10 @@ import {
   HubStore,
 } from '../../infra/stores/yaml-hub-store';
 import {
+  Command,
+  Option,
+} from '../framework';
+import {
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -62,6 +66,108 @@ interface DoctorResult {
   checks: DoctorCheck[];
   summary: { ok: number; warn: number; fail: number };
 }
+
+/**
+ * Command context for doctor command.
+ */
+interface DoctorContext {
+  ctx: Context;
+}
+
+/**
+ * Base class for doctor command.
+ */
+abstract class BaseDoctorCommand extends Command {
+  public commandContext: DoctorContext = { ctx: null as any };
+}
+
+/**
+ * Native clipanion class command for doctor.
+ */
+export class DoctorCommand extends BaseDoctorCommand {
+  public static readonly paths = [['doctor']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Run environment self-checks and print a health report.',
+    category: 'Diagnostics',
+    details: `
+      Usage: prompt-registry doctor [options]
+
+      Options:
+        -o, --output <format>  Output format (text, json, yaml, ndjson)
+    `
+  });
+
+  public output = Option.String('-o', '--output') as OutputFormat | undefined;
+
+  public async execute(): Promise<number> {
+    const { ctx } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const result = await runDoctorChecks(ctx);
+    const statusValue = result.summary.warn > 0 ? 'warning' : 'ok';
+    const status: OutputStatus = result.summary.fail > 0 ? 'error' : statusValue;
+    formatOutput({
+      ctx,
+      command: 'doctor',
+      output: fmt,
+      status,
+      data: result,
+      textRenderer: renderDoctorText
+    });
+    return result.summary.fail > 0 ? 1 : 0;
+  }
+}
+
+/**
+ * Create a CommandDefinition wrapper for the doctor command class.
+ * This adapts native clipanion classes to the framework's CommandDefinition pattern.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @returns CommandClass.
+ */
+const createDoctorCommandDefinition = (
+  ctx: Context,
+  defaultOutput?: string
+): typeof DoctorCommand => {
+  class ConfiguredCommand extends DoctorCommand {
+    public execute(): Promise<number> {
+      this.commandContext = { ctx };
+      if (defaultOutput !== undefined && !this.output) {
+        this.output = defaultOutput as OutputFormat;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+      return super.execute();
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  (ConfiguredCommand as any).paths = DoctorCommand.paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(DoctorCommand.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
+
+  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  (ConfiguredCommand as any).usage = DoctorCommand.usage;
+
+  return ConfiguredCommand as unknown as typeof DoctorCommand;
+};
+
+/**
+ * Factory function to create a configured doctor command class.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @returns CommandClass.
+ */
+export const createDoctorCommandClass = (
+  ctx: Context,
+  defaultOutput?: string
+): typeof DoctorCommand => {
+  return createDoctorCommandDefinition(ctx, defaultOutput);
+};
 
 /**
  * Build the `doctor` command. Caller controls the output format so the

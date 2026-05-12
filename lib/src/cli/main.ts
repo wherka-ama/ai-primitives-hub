@@ -42,6 +42,8 @@ import {
 } from './commands/config-list';
 import {
   createDoctorCommand,
+  createDoctorCommandClass,
+  DoctorCommand,
 } from './commands/doctor';
 import {
   ExplainCommand,
@@ -98,6 +100,8 @@ import {
 } from './commands/install';
 import {
   createPluginsListCommand,
+  createPluginsListCommandClass,
+  PluginsListCommand,
 } from './commands/plugins-list';
 import {
   ProfileActivateCommand,
@@ -194,7 +198,7 @@ export const main = async (argv: string[]): Promise<number> => {
       collectionFiles: parseCsv(parsed.collectionFile),
       verbose: parsed.verbose
     }),
-    createDoctorCommand({ output: parsed.output }),
+    // createDoctorCommand({ output: parsed.output }), // Removed: DoctorCommand is now registered as a class
     createIndexStatsCommand(),
     // createIndexBuildCommand({ root: '' }), // Removed: IndexBuildCommand is now registered as a class
     // createIndexShortlistCommand({ subcommand: 'new' }), // Removed: IndexShortlist*Commands are now registered as classes
@@ -219,8 +223,7 @@ export const main = async (argv: string[]): Promise<number> => {
       output: parsed.output,
       collectionFile: parsed.collectionFile ?? ''
     }),
-    createConfigListCommand({ output: parsed.output }),
-    createPluginsListCommand({ output: parsed.output }),
+    // createPluginsListCommand({ output: parsed.output }), // Removed: PluginsListCommand is now registered as a class
     createConfigGetCommand({
       output: parsed.output,
       key: parsed.positional.length >= 3
@@ -234,6 +237,8 @@ export const main = async (argv: string[]): Promise<number> => {
 
   const commandClasses = [
     ExplainCommand,
+    DoctorCommand,
+    PluginsListCommand,
     TargetAddCommand,
     TargetListCommand,
     IndexSearchCommand,

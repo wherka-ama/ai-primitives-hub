@@ -15,6 +15,10 @@
  */
 import * as path from 'node:path';
 import {
+  Command,
+  Option,
+} from '../framework';
+import {
   type CommandDefinition,
   type Context,
   defineCommand,
@@ -33,6 +37,110 @@ export interface PluginsListOptions {
 }
 
 const PLUGIN_PREFIX = 'prompt-registry-';
+
+/**
+ * Command context for plugins list command.
+ */
+interface PluginsListContext {
+  ctx: Context;
+}
+
+/**
+ * Base class for plugins list command.
+ */
+abstract class BasePluginsListCommand extends Command {
+  public commandContext: PluginsListContext = { ctx: null as any };
+}
+
+/**
+ * Native clipanion class command for plugins list.
+ */
+export class PluginsListCommand extends BasePluginsListCommand {
+  public static readonly paths = [['plugins', 'list']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'List `prompt-registry-<name>` plugins discovered on $PATH (kubectl-style).',
+    category: 'Diagnostics',
+    details: `
+      Usage: prompt-registry plugins list [options]
+
+      Options:
+        -o, --output <format>  Output format (text, json, yaml, ndjson)
+    `
+  });
+
+  public output = Option.String('-o', '--output') as OutputFormat | undefined;
+
+  public async execute(): Promise<number> {
+    const { ctx } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const pathVar = ctx.env.PATH ?? '';
+    const plugins = await scanPathForPlugins(pathVar, ctx);
+    const records = [...plugins.values()].toSorted((a, b) => a.name.localeCompare(b.name));
+    const warnings = generateConflictWarnings(records);
+    formatOutput({
+      ctx,
+      command: 'plugins.list',
+      output: fmt,
+      status: warnings.length > 0 ? 'warning' : 'ok',
+      data: records,
+      warnings,
+      textRenderer: renderText
+    });
+    return 0;
+  }
+}
+
+/**
+ * Create a CommandDefinition wrapper for the plugins list command class.
+ * This adapts native clipanion classes to the framework's CommandDefinition pattern.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @returns CommandClass.
+ */
+const createPluginsListCommandDefinition = (
+  ctx: Context,
+  defaultOutput?: string
+): typeof PluginsListCommand => {
+  class ConfiguredCommand extends PluginsListCommand {
+    public execute(): Promise<number> {
+      this.commandContext = { ctx };
+      if (defaultOutput !== undefined && !this.output) {
+        this.output = defaultOutput as OutputFormat;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+      return super.execute();
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  (ConfiguredCommand as any).paths = PluginsListCommand.paths;
+
+  // Copy all property descriptors from the base class to ensure clipanion discovers options
+  const baseDescriptors = Object.getOwnPropertyDescriptors(PluginsListCommand.prototype);
+  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
+    if (key !== 'constructor') {
+      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
+    }
+  }
+
+  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  (ConfiguredCommand as any).usage = PluginsListCommand.usage;
+
+  return ConfiguredCommand as unknown as typeof PluginsListCommand;
+};
+
+/**
+ * Factory function to create a configured plugins list command class.
+ * @param ctx CLI context.
+ * @param defaultOutput Default output format (optional).
+ * @returns CommandClass.
+ */
+export const createPluginsListCommandClass = (
+  ctx: Context,
+  defaultOutput?: string
+): typeof PluginsListCommand => {
+  return createPluginsListCommandDefinition(ctx, defaultOutput);
+};
 
 async function scanPathForPlugins(pathVar: string, ctx: Context): Promise<Map<string, PluginRecord>> {
   const dirs = pathVar.split(path.delimiter).filter((d) => d.length > 0);
