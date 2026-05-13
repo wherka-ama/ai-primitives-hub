@@ -76,10 +76,10 @@ export interface UninstallOptions {
 
 /**
  * Check if target is in allowlist.
- * @param targetName Target name.
- * @param opts Uninstall options.
+ * @param _targetName Target name.
+ * @param _opts Uninstall options.
  */
-function checkAllowTarget(targetName: string, opts: UninstallOptions): void {
+function checkAllowTarget(_targetName: string, _opts: UninstallOptions): void {
   // Uninstall doesn't have allowTarget option, so this is a no-op
   // Kept for consistency with install command
 }
@@ -135,7 +135,7 @@ export class UninstallCommand extends BaseUninstallCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
 
     const opts: UninstallOptions = {
       output: fmt,
@@ -181,57 +181,6 @@ export class UninstallCommand extends BaseUninstallCommand {
     }
   }
 }
-
-/**
- * Create a CommandDefinition wrapper for the uninstall command class.
- * This adapts native clipanion classes to the framework's CommandDefinition pattern.
- * @param ctx CLI context.
- * @param defaultOutput Default output format (optional).
- * @returns CommandClass.
- */
-const createUninstallCommandDefinition = (
-  ctx: Context,
-  defaultOutput?: string
-): typeof UninstallCommand => {
-  class ConfiguredCommand extends UninstallCommand {
-    public execute(): Promise<number> {
-      this.commandContext = { ctx };
-      if (defaultOutput !== undefined && !this.output) {
-        this.output = defaultOutput as OutputFormat;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
-      return super.execute();
-    }
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
-  (ConfiguredCommand as any).paths = UninstallCommand.paths;
-
-  // Copy all property descriptors from the base class to ensure clipanion discovers options
-  const baseDescriptors = Object.getOwnPropertyDescriptors(UninstallCommand.prototype);
-  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
-    if (key !== 'constructor') {
-      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
-    }
-  }
-
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
-  (ConfiguredCommand as any).usage = UninstallCommand.usage;
-
-  return ConfiguredCommand as unknown as typeof UninstallCommand;
-};
-
-/**
- * Factory function to create a configured uninstall command class.
- * @param ctx CLI context.
- * @param defaultOutput Default output format (optional).
- * @returns CommandClass.
- */
-export const createUninstallCommandClass = (
-  ctx: Context,
-  defaultOutput?: string
-): typeof UninstallCommand => {
-  return createUninstallCommandDefinition(ctx, defaultOutput);
-};
 
 /**
  * Create a writer factory that routes to the appropriate writer based on target scope.

@@ -43,7 +43,6 @@ import {
   Option,
 } from '../framework';
 import {
-  type CommandClass,
   type Context,
   formatOutput,
   type OutputFormat,
@@ -202,80 +201,3 @@ export class SourceRemoveCommand extends BaseSourceCommand {
     return 0;
   }
 }
-
-/**
- * Create a CommandDefinition wrapper for a source command class.
- * This adapts native clipanion classes to the framework's CommandDefinition pattern.
- * @param sourceCommandClass The source command class.
- * @param ctx CLI context.
- * @param http HTTP client (optional test seam).
- * @param tokens Token provider (optional test seam).
- * @param defaultOutput Default output format (optional).
- * @returns CommandDefinition.
- */
-const createSourceCommandDefinition = (
-  sourceCommandClass: new () => BaseSourceCommand & Command,
-  ctx: Context,
-  http?: HttpClient,
-  tokens?: TokenProvider,
-  defaultOutput?: string
-): CommandClass => {
-  class ConfiguredCommand extends (sourceCommandClass as any) {
-    public execute(): Promise<number | void> {
-      this.commandContext = { ctx, http, tokens };
-      if (defaultOutput !== undefined && !this.output) {
-        this.output = defaultOutput;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
-      return super.execute();
-    }
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
-  (ConfiguredCommand as any).paths = (sourceCommandClass as any).paths;
-
-  // Copy all property descriptors from the base class to ensure clipanion discovers options
-  const baseDescriptors = Object.getOwnPropertyDescriptors(sourceCommandClass.prototype);
-  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
-    if (key !== 'constructor') {
-      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
-    }
-  }
-
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
-  (ConfiguredCommand as any).usage = Command.Usage({
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic paths access
-    description: `source ${(sourceCommandClass as any).paths[0][1]}`,
-    category: 'Source Management'
-  });
-  return ConfiguredCommand as unknown as CommandClass;
-};
-
-/**
- * Create source add command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createSourceAddCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createSourceCommandDefinition(SourceAddCommand, ctx, http, tokens, defaultOutput);
-
-/**
- * Create source list command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createSourceListCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createSourceCommandDefinition(SourceListCommand, ctx, http, tokens, defaultOutput);
-
-/**
- * Create source remove command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createSourceRemoveCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createSourceCommandDefinition(SourceRemoveCommand, ctx, http, tokens, defaultOutput);

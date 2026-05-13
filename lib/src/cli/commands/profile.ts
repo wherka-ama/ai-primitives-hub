@@ -18,11 +18,11 @@ import {
   resolveUserConfigPaths,
 } from '../../app/registry';
 import {
-  generateSourceId,
-} from '../../domain/source-id';
-import {
   type ProfileBundle,
 } from '../../domain/registry';
+import {
+  generateSourceId,
+} from '../../domain/source-id';
 import {
   envTokenProvider,
 } from '../../infra/github/token';
@@ -63,7 +63,6 @@ import {
   Option,
 } from '../framework';
 import {
-  type CommandClass,
   type Context,
   formatOutput,
   type OutputFormat,
@@ -353,7 +352,6 @@ export class ProfileCurrentCommand extends BaseProfileCommand {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
     const built = buildHubMgr(ctx, http, tokens);
-    const mgr = built.mgr;
     const activations = built.activations;
 
     const active = await activations.getActive();
@@ -425,7 +423,7 @@ export class ProfileCreateCommand extends BaseProfileCommand {
 
     const hubId = this.hubId ?? 'default-local';
     const bundleList = this.bundles ? this.bundles.split(',').map((b) => b.trim()) : [];
-    
+
     // Convert bundle IDs to ProfileBundle format
     const profileBundles: ProfileBundle[] = bundleList.map((bundleId) => ({
       id: bundleId,
@@ -497,7 +495,7 @@ export class ProfileEditCommand extends BaseProfileCommand {
     }
 
     const hubId = this.hubId ?? 'default-local';
-    
+
     // Load existing profile
     const hubs = await mgr.listHubs();
     const hub = hubs.find((h) => h.id === hubId);
@@ -508,11 +506,10 @@ export class ProfileEditCommand extends BaseProfileCommand {
       }));
     }
 
-    const sources = await mgr.listSources(hubId);
     const active = await mgr.getActiveHub();
     const profiles = active?.id === hubId ? active.config.profiles : [];
     const existingProfile = profiles.find((p) => p.id === this.profileId);
-    
+
     if (!existingProfile) {
       return failWith(ctx, fmt, new RegistryError({
         code: 'USAGE.MISSING_FLAG',
@@ -522,12 +519,12 @@ export class ProfileEditCommand extends BaseProfileCommand {
 
     // Build updated profile
     const updatedBundles = [...existingProfile.bundles];
-    
+
     if (this.removeBundles) {
       const toRemove = this.removeBundles.split(',').map((b) => b.trim());
       for (const bundleId of toRemove) {
         const idx = updatedBundles.findIndex((b) => b.id === bundleId);
-        if (idx >= 0) {
+        if (idx !== -1) {
           updatedBundles.splice(idx, 1);
         }
       }
@@ -536,7 +533,7 @@ export class ProfileEditCommand extends BaseProfileCommand {
     if (this.addBundles) {
       const toAdd = this.addBundles.split(',').map((b) => b.trim());
       for (const bundleId of toAdd) {
-        if (!updatedBundles.find((b) => b.id === bundleId)) {
+        if (!updatedBundles.some((b) => b.id === bundleId)) {
           updatedBundles.push({
             id: bundleId,
             version: 'latest',
@@ -562,53 +559,6 @@ export class ProfileEditCommand extends BaseProfileCommand {
     return 0;
   }
 }
-
-/**
- * Create a CommandDefinition wrapper for a profile command class.
- * This adapts native clipanion classes to the framework's CommandDefinition pattern.
- * @param profileCommandClass The profile command class.
- * @param ctx CLI context.
- * @param http HTTP client (optional test seam).
- * @param tokens Token provider (optional test seam).
- * @param defaultOutput Default output format (optional).
- * @returns CommandDefinition.
- */
-const createProfileCommandDefinition = (
-  profileCommandClass: new () => BaseProfileCommand & Command,
-  ctx: Context,
-  http?: HttpClient,
-  tokens?: TokenProvider,
-  defaultOutput?: string
-): CommandClass => {
-  class ConfiguredCommand extends (profileCommandClass as any) {
-    public execute(): Promise<number | void> {
-      this.commandContext = { ctx, http, tokens };
-      if (defaultOutput !== undefined && !this.output) {
-        this.output = defaultOutput;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
-      return super.execute();
-    }
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
-  (ConfiguredCommand as any).paths = (profileCommandClass as any).paths;
-
-  // Copy all property descriptors from the base class to ensure clipanion discovers options
-  const baseDescriptors = Object.getOwnPropertyDescriptors(profileCommandClass.prototype);
-  for (const [key, descriptor] of Object.entries(baseDescriptors)) {
-    if (key !== 'constructor') {
-      Object.defineProperty(ConfiguredCommand.prototype, key, descriptor);
-    }
-  }
-
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
-  (ConfiguredCommand as any).usage = Command.Usage({
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic paths access
-    description: `profile ${(profileCommandClass as any).paths[0][1]}`,
-    category: 'Profile Management'
-  });
-  return ConfiguredCommand as unknown as CommandClass;
-};
 
 /**
  * Update the lockfile after a successful profile activation.
@@ -706,73 +656,3 @@ const failWith = (ctx: Context, fmt: OutputFormat, err: RegistryError): number =
   }
   return 1;
 };
-
-/**
- * Create profile list command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createProfileListCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createProfileCommandDefinition(ProfileListCommand, ctx, http, tokens, defaultOutput);
-
-/**
- * Create profile show command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createProfileShowCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createProfileCommandDefinition(ProfileShowCommand, ctx, http, tokens, defaultOutput);
-
-/**
- * Create profile activate command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createProfileActivateCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createProfileCommandDefinition(ProfileActivateCommand, ctx, http, tokens, defaultOutput);
-
-/**
- * Create profile deactivate command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createProfileDeactivateCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createProfileCommandDefinition(ProfileDeactivateCommand, ctx, http, tokens, defaultOutput);
-
-/**
- * Create profile current command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createProfileCurrentCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createProfileCommandDefinition(ProfileCurrentCommand, ctx, http, tokens, defaultOutput);
-
-/**
- * Create profile create command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createProfileCreateCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createProfileCommandDefinition(ProfileCreateCommand, ctx, http, tokens, defaultOutput);
-
-/**
- * Create profile edit command definition.
- * @param ctx
- * @param http
- * @param tokens
- * @param defaultOutput
- */
-export const createProfileEditCommand = (ctx: Context, http?: HttpClient, tokens?: TokenProvider, defaultOutput?: string): CommandClass =>
-  createProfileCommandDefinition(ProfileEditCommand, ctx, http, tokens, defaultOutput);

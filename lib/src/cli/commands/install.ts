@@ -198,7 +198,7 @@ export class InstallCommand extends BaseInstallCommand {
     const { ctx } = this.commandContext;
     const http = this.commandContext.http ?? new NodeHttpClient();
     const tokens = this.commandContext.tokens ?? defaultTokenProvider(ctx.env);
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
 
     const opts: InstallOptions = {
       output: fmt,
@@ -741,50 +741,6 @@ async function updateTargetStateFromLockfile(ctx: Context, targetName: string, m
     lastUsedAt: new Date().toISOString()
   });
 }
-
-/**
- * Create a CommandDefinition wrapper for the install command class.
- * This adapts the native clipanion class to the framework's CommandDefinition pattern.
- * @param ctx CLI context.
- * @param http HTTP client (optional test seam).
- * @param tokens Token provider (optional test seam).
- * @param defaultOutput Default output format (optional).
- * @returns CommandClass.
- */
-const createInstallCommandDefinition = (
-  ctx: Context,
-  http?: HttpClient,
-  tokens?: TokenProvider,
-  defaultOutput?: string
-): typeof InstallCommand => {
-  class ConfiguredCommand extends InstallCommand {
-    public execute(): Promise<number> {
-      this.commandContext = { ctx, http, tokens };
-      if (defaultOutput !== undefined && !this.output) {
-        this.output = defaultOutput as OutputFormat;
-      }
-      return super.execute();
-    }
-  }
-  return ConfiguredCommand as unknown as typeof InstallCommand;
-};
-
-/**
- * Factory function to create a configured install command class.
- * @param ctx CLI context.
- * @param http HTTP client (optional test seam).
- * @param tokens Token provider (optional test seam).
- * @param defaultOutput Default output format (optional).
- * @returns CommandClass.
- */
-export const createInstallCommandClass = (
-  ctx: Context,
-  http?: HttpClient,
-  tokens?: TokenProvider,
-  defaultOutput?: string
-): typeof InstallCommand => {
-  return createInstallCommandDefinition(ctx, http, tokens, defaultOutput);
-};
 
 /**
  * Build the `install` command (factory function for backward compatibility).

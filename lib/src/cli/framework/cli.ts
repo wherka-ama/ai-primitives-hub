@@ -62,6 +62,8 @@ export interface RunCliOptions {
   http?: any;
   /** Optional token provider for hub/profile commands. */
   tokens?: any;
+  /** Default output format applied to commands that have no explicit -o flag. */
+  defaultOutput?: string;
 }
 
 /**
@@ -207,11 +209,21 @@ export const runCli = async (argv: string[], opts: RunCliOptions): Promise<numbe
     usage: (c: any, o: any) => cli.usage(c, o)
   };
 
-  // Inject commandContext for hub/profile/source commands that need it
+  // Inject commandContext for all native clipanion command classes.
+  // Simple commands only read .ctx; hub/profile/source commands also read .http/.tokens.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic property assignment on native clipanion command instance
+  (command as any).commandContext = { ctx: opts.ctx, http: opts.http, tokens: opts.tokens };
 
-  if (opts.http !== undefined || opts.tokens !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic property assignment on native clipanion command instance
-    (command as any).commandContext = { ctx: opts.ctx, http: opts.http, tokens: opts.tokens };
+  // Apply defaultOutput when the command declares an output field but the
+  // user did not pass an explicit -o / --output flag.
+  if (opts.defaultOutput !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic property on command instance
+    const cmd = command as any;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- duck-typed check for output field
+    if (cmd.output === undefined || cmd.output === null) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- setting default output format
+      cmd.output = opts.defaultOutput;
+    }
   }
 
   // Per-command --help: clipanion sets `command.help = true` when -h/

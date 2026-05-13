@@ -20,101 +20,70 @@ import {
   NodeHttpClient,
 } from '../infra/http/node-http-client';
 import {
-  createBundleBuildCommand,
-  createBundleBuildCommandClass,
   BundleBuildCommand,
 } from './commands/bundle-build';
 import {
-  createBundleManifestCommand,
-  createBundleManifestCommandClass,
   BundleManifestCommand,
 } from './commands/bundle-manifest';
 import {
-  createCollectionAffectedCommand,
-  createCollectionAffectedCommandClass,
   CollectionAffectedCommand,
 } from './commands/collection-affected';
 import {
-  createCollectionListCommand,
-  createCollectionListCommandClass,
   CollectionListCommand,
 } from './commands/collection-list';
 import {
-  createCollectionValidateCommand,
-  createCollectionValidateCommandClass,
   CollectionValidateCommand,
 } from './commands/collection-validate';
 import {
-  createConfigGetCommand,
-  createConfigGetCommandClass,
   ConfigGetCommand,
 } from './commands/config-get';
 import {
-  createConfigListCommand,
-} from './commands/config-list';
-import {
-  createDoctorCommand,
-  createDoctorCommandClass,
   DoctorCommand,
 } from './commands/doctor';
 import {
   ExplainCommand,
 } from './commands/explain';
 import {
-  createHubAddCommand,
-  createHubListCommand,
-  createHubRemoveCommand,
-  createHubSyncCommand,
-  createHubUseCommand,
+  HubAddCommand,
+  HubListCommand,
+  HubRemoveCommand,
+  HubSyncCommand,
+  HubUseCommand,
 } from './commands/hub';
 import {
-  createIndexBenchCommand,
   IndexBenchCommand,
 } from './commands/index-bench';
 import {
-  createIndexBuildCommand,
   IndexBuildCommand,
 } from './commands/index-build';
 import {
-  createIndexEvalCommand,
   IndexEvalCommand,
 } from './commands/index-eval';
 import {
-  createIndexExportCommand,
   IndexExportCommand,
 } from './commands/index-export';
 import {
-  createIndexHarvestCommand,
   IndexHarvestCommand,
 } from './commands/index-harvest';
 import {
-  createIndexReportCommand,
   IndexReportCommand,
 } from './commands/index-report';
 import {
-  createIndexSearchCommand,
   IndexSearchCommand,
 } from './commands/index-search';
 import {
-  createIndexShortlistCommand,
   IndexShortlistAddCommand,
+  IndexShortlistListCommand,
   IndexShortlistNewCommand,
   IndexShortlistRemoveCommand,
-  IndexShortlistListCommand,
 } from './commands/index-shortlist';
 import {
-  createIndexStatsCommand,
-  createIndexStatsCommandClass,
   IndexStatsCommand,
 } from './commands/index-stats';
 import {
-  createInstallCommand,
-  createInstallCommandClass,
   InstallCommand,
 } from './commands/install';
 import {
-  createPluginsListCommand,
-  createPluginsListCommandClass,
   PluginsListCommand,
 } from './commands/plugins-list';
 import {
@@ -123,33 +92,19 @@ import {
   ProfileCurrentCommand,
   ProfileDeactivateCommand,
   ProfileEditCommand,
-  createProfileActivateCommand,
-  createProfileCreateCommand,
-  createProfileCurrentCommand,
-  createProfileDeactivateCommand,
-  createProfileEditCommand,
-  createProfileListCommand,
-  createProfileShowCommand,
+  ProfileListCommand,
+  ProfileShowCommand,
 } from './commands/profile';
 import {
-  createUninstallCommand,
-  createUninstallCommandClass,
-  UninstallCommand,
-} from './commands/uninstall';
-import {
-  createSkillNewCommand,
-  createSkillNewCommandClass,
   SkillNewCommand,
 } from './commands/skill-new';
 import {
-  createSkillValidateCommand,
-  createSkillValidateCommandClass,
   SkillValidateCommand,
 } from './commands/skill-validate';
 import {
-  createSourceAddCommand,
-  createSourceListCommand,
-  createSourceRemoveCommand,
+  SourceAddCommand,
+  SourceListCommand,
+  SourceRemoveCommand,
 } from './commands/source';
 import {
   TargetAddCommand,
@@ -158,32 +113,26 @@ import {
   TargetListCommand,
 } from './commands/target-list';
 import {
-  createTargetRemoveCommand,
-  createTargetRemoveCommandClass,
   TargetRemoveCommand,
 } from './commands/target-remove';
 import {
-  createVersionComputeCommand,
-  createVersionComputeCommandClass,
+  UninstallCommand,
+} from './commands/uninstall';
+import {
   VersionComputeCommand,
 } from './commands/version-compute';
+import {
+  createProductionContext,
+} from './framework';
+import type {
+  CommandDefinition,
+} from './framework/cli';
 import {
   runCli,
 } from './framework/cli';
 import type {
-  CommandDefinition,
-} from './framework/cli';
-import type {
   OutputFormat,
 } from './framework/output';
-import {
-  parseCsv,
-} from './framework/parsers';
-import {
-  Command,
-  type Context,
-  createProductionContext,
-} from './framework';
 
 /**
  * Main CLI entry point.
@@ -275,23 +224,23 @@ export const main = async (argv: string[]): Promise<number> => {
     IndexBenchCommand,
     IndexHarvestCommand,
     IndexReportCommand,
-    createHubListCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createHubAddCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createHubUseCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createHubRemoveCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createHubSyncCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createSourceAddCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createSourceListCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createSourceRemoveCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createProfileListCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createProfileShowCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createProfileActivateCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createProfileDeactivateCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createProfileCurrentCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createProfileCreateCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createProfileEditCommand(ctx, httpClient, tokenProvider, parsed.output),
-    createInstallCommandClass(ctx, httpClient, tokenProvider, parsed.output),
-    createUninstallCommandClass(ctx, parsed.output)
+    HubListCommand,
+    HubAddCommand,
+    HubUseCommand,
+    HubRemoveCommand,
+    HubSyncCommand,
+    SourceAddCommand,
+    SourceListCommand,
+    SourceRemoveCommand,
+    ProfileListCommand,
+    ProfileShowCommand,
+    ProfileActivateCommand,
+    ProfileDeactivateCommand,
+    ProfileCurrentCommand,
+    ProfileCreateCommand,
+    ProfileEditCommand,
+    InstallCommand,
+    UninstallCommand
   ];
 
   return runCli(argv, {
@@ -301,7 +250,8 @@ export const main = async (argv: string[]): Promise<number> => {
     name: 'prompt-registry',
     version: readPackageVersion(),
     http: httpClient,
-    tokens: tokenProvider
+    tokens: tokenProvider,
+    defaultOutput: parsed.output
   });
 };
 
