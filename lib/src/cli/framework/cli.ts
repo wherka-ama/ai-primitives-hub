@@ -219,11 +219,8 @@ export const runCli = async (argv: string[], opts: RunCliOptions): Promise<numbe
   if (opts.defaultOutput !== undefined) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic property on command instance
     const cmd = command as any;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- duck-typed check for output field
-    if (cmd.output === undefined || cmd.output === null) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- setting default output format
-      cmd.output = opts.defaultOutput;
-    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- nullish coalescing to set default output
+    cmd.output ??= opts.defaultOutput;
   }
 
   // Per-command --help: clipanion sets `command.help = true` when -h/
