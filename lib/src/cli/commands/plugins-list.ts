@@ -73,7 +73,7 @@ export class PluginsListCommand extends BasePluginsListCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const pathVar = ctx.env.PATH ?? '';
     const plugins = await scanPathForPlugins(pathVar, ctx);
     const records = [...plugins.values()].toSorted((a, b) => a.name.localeCompare(b.name));
@@ -108,11 +108,11 @@ const createPluginsListCommandDefinition = (
       if (defaultOutput !== undefined && !this.output) {
         this.output = defaultOutput as OutputFormat;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = PluginsListCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -123,7 +123,7 @@ const createPluginsListCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = PluginsListCommand.usage;
 
   return ConfiguredCommand as unknown as typeof PluginsListCommand;

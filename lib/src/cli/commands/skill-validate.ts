@@ -69,7 +69,7 @@ export class SkillValidateCommand extends BaseSkillValidateCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const cwd = ctx.cwd();
     const result = validateAllSkills(cwd, this.skillsDir ?? 'skills');
     formatOutput({
@@ -111,11 +111,11 @@ const createSkillValidateCommandDefinition = (
       if (defaultVerbose !== undefined && !this.verbose) {
         this.verbose = defaultVerbose;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = SkillValidateCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -126,7 +126,7 @@ const createSkillValidateCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = SkillValidateCommand.usage;
 
   return ConfiguredCommand as unknown as typeof SkillValidateCommand;

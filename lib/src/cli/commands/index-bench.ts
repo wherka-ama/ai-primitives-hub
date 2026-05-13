@@ -22,12 +22,11 @@ import {
 } from '../../infra/stores/json-index-store';
 import {
   Command,
-  Option,
-  type CommandClass,
   type CommandDefinition,
   type Context,
   defineCommand,
   formatOutput,
+  Option,
   type OutputFormat,
   RegistryError,
   renderError,
@@ -149,7 +148,7 @@ export class IndexBenchCommand extends Command {
     }
 
     const indexPath = this.index ?? defaultIndexFile(ctx.env);
-    const iterations = this.iterations ? parseInt(this.iterations, 10) : 50;
+    const iterations = this.iterations ? Number.parseInt(this.iterations, 10) : 50;
 
     try {
       const idx = loadIndex(indexPath);

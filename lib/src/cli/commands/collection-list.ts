@@ -77,7 +77,7 @@ export class CollectionListCommand extends BaseCollectionListCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const cwd = ctx.cwd();
     const collectionsDir = path.join(cwd, 'collections');
     const dirExists = await ctx.fs.exists(collectionsDir);
@@ -137,11 +137,11 @@ const createCollectionListCommandDefinition = (
       if (defaultOutput !== undefined && !this.output) {
         this.output = defaultOutput as OutputFormat;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = CollectionListCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -152,7 +152,7 @@ const createCollectionListCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = CollectionListCommand.usage;
 
   return ConfiguredCommand as unknown as typeof CollectionListCommand;

@@ -68,7 +68,7 @@ export class TargetRemoveCommand extends BaseTargetRemoveCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const name = this.name ?? '';
 
     if (name.length === 0) {
@@ -130,11 +130,11 @@ const createTargetRemoveCommandDefinition = (
       if (defaultName !== undefined && !this.name) {
         this.name = defaultName;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = TargetRemoveCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -145,7 +145,7 @@ const createTargetRemoveCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = TargetRemoveCommand.usage;
 
   return ConfiguredCommand as unknown as typeof TargetRemoveCommand;

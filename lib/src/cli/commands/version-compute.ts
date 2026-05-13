@@ -98,7 +98,7 @@ export class VersionComputeCommand extends BaseVersionComputeCommand {
 
   public async execute(): Promise<number> {
     const { ctx, gitTagsProvider } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const cwd = ctx.cwd();
     try {
       const provider = gitTagsProvider ?? defaultGitTagsProvider;
@@ -154,11 +154,11 @@ const createVersionComputeCommandDefinition = (
       if (collectionFile !== undefined && !this.collectionFile) {
         this.collectionFile = collectionFile;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = VersionComputeCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -169,7 +169,7 @@ const createVersionComputeCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = VersionComputeCommand.usage;
 
   return ConfiguredCommand as unknown as typeof VersionComputeCommand;

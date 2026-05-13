@@ -23,13 +23,12 @@ import {
 } from '../../infra/stores/json-index-store';
 import {
   Command,
-  Option,
-  type CommandClass,
+  type CommandDefinition,
   type Context,
   defineCommand,
   formatOutput,
+  Option,
   type OutputFormat,
-  type CommandDefinition,
   RegistryError,
   renderError,
 } from '../framework';
@@ -152,8 +151,8 @@ export class IndexSearchCommand extends Command {
         bundles: this.bundles,
         tags: this.tags,
         installedOnly: this.installedOnly,
-        limit: this.limit ? parseInt(this.limit, 10) : undefined,
-        offset: this.offset ? parseInt(this.offset, 10) : undefined,
+        limit: this.limit ? Number.parseInt(this.limit, 10) : undefined,
+        offset: this.offset ? Number.parseInt(this.offset, 10) : undefined,
         explain: this.explain
       };
       const result = idx.search(query);

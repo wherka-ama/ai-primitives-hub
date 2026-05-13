@@ -21,14 +21,14 @@
  *      dispatch; this helper only composes.
  */
 import type {
+  CommandClass,
+} from 'clipanion';
+import type {
   CommandDefinition,
 } from './cli';
 import {
   runCli,
 } from './cli';
-import type {
-  CommandClass,
-} from 'clipanion';
 import type {
   TestContextOptions,
 } from './test-context';

@@ -102,7 +102,7 @@ export class DoctorCommand extends BaseDoctorCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const result = await runDoctorChecks(ctx);
     const statusValue = result.summary.warn > 0 ? 'warning' : 'ok';
     const status: OutputStatus = result.summary.fail > 0 ? 'error' : statusValue;
@@ -135,11 +135,11 @@ const createDoctorCommandDefinition = (
       if (defaultOutput !== undefined && !this.output) {
         this.output = defaultOutput as OutputFormat;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = DoctorCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -150,7 +150,7 @@ const createDoctorCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = DoctorCommand.usage;
 
   return ConfiguredCommand as unknown as typeof DoctorCommand;
@@ -232,7 +232,8 @@ const runDoctorChecks = async (ctx: Context): Promise<DoctorResult> => {
  */
 const checkNodeVersion = (ctx: Context): DoctorCheck => {
   const v = ctx.env.NODE_VERSION ?? extractRuntimeNodeVersion();
-  const major = Number.parseInt(v.replace(/^v/, '').split('.')[0] ?? '0', 10);
+  const vStripped = v.startsWith('v') ? v.slice(1) : v;
+  const major = Number.parseInt(vStripped.split('.')[0] ?? '0', 10);
   if (Number.isFinite(major) && major >= 20) {
     return { name: 'node-version', status: 'ok', detail: `Node ${v} satisfies >=20.` };
   }

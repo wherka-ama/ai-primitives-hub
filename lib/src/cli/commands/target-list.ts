@@ -17,14 +17,13 @@
  */
 import {
   Command,
-  Option,
+  type CommandDefinition,
+  type Context,
+  defineCommand,
   formatOutput,
   loadConfig,
-  type CommandClass,
-  type Context,
+  Option,
   type OutputFormat,
-  type CommandDefinition,
-  defineCommand,
 } from '../framework';
 
 /**

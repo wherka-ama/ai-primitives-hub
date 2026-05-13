@@ -25,12 +25,11 @@ import {
 } from '../../infra/stores/json-index-store';
 import {
   Command,
-  Option,
-  type CommandClass,
   type CommandDefinition,
   type Context,
   defineCommand,
   formatOutput,
+  Option,
   type OutputFormat,
   RegistryError,
   renderError,

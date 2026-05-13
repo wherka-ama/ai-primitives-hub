@@ -85,7 +85,7 @@ export class CollectionAffectedCommand extends BaseCollectionAffectedCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const cwd = ctx.cwd();
     const changed = (this.changedPath ?? [])
       .map((p) => normalize(p))
@@ -145,11 +145,11 @@ const createCollectionAffectedCommandDefinition = (
       if (defaultChangedPaths !== undefined && (!this.changedPath || this.changedPath.length === 0)) {
         this.changedPath = defaultChangedPaths;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = CollectionAffectedCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -160,7 +160,7 @@ const createCollectionAffectedCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = CollectionAffectedCommand.usage;
 
   return ConfiguredCommand as unknown as typeof CollectionAffectedCommand;
@@ -237,7 +237,7 @@ export const createCollectionAffectedCommand = (
  * @returns Normalized path.
  */
 const normalize = (p: string): string =>
-  String(p).replaceAll('\\', '/').replace(/^\/+/, '').trim();
+  String(p).replaceAll('\\', '/').replaceAll(/^\/+/g, '').trim();
 
 /**
  * Render affected collections as text.

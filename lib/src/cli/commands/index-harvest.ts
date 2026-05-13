@@ -14,12 +14,11 @@ import {
 } from '../../infra/harvest/hub-harvester';
 import {
   Command,
-  Option,
-  type CommandClass,
   type CommandDefinition,
   type Context,
   defineCommand,
   formatOutput,
+  Option,
   type OutputFormat,
   RegistryError,
   renderError,
@@ -208,7 +207,7 @@ export class IndexHarvestCommand extends Command {
       cacheDir: this.cacheDir,
       progressFile: this.progressFile,
       outFile: this.outFile,
-      concurrency: this.concurrency ? parseInt(this.concurrency, 10) : undefined,
+      concurrency: this.concurrency ? Number.parseInt(this.concurrency, 10) : undefined,
       explicitToken,
       sourcesInclude: this.sourcesInclude,
       sourcesExclude: this.sourcesExclude,

@@ -69,7 +69,7 @@ export class ConfigGetCommand extends BaseConfigGetCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const key = this.key ?? '';
 
     if (key.length === 0) {
@@ -143,11 +143,11 @@ const createConfigGetCommandDefinition = (
       if (defaultKey !== undefined && !this.key) {
         this.key = defaultKey;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = ConfigGetCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -158,7 +158,7 @@ const createConfigGetCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = ConfigGetCommand.usage;
 
   return ConfiguredCommand as unknown as typeof ConfigGetCommand;

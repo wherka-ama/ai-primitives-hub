@@ -72,7 +72,7 @@ export class IndexStatsCommand extends BaseIndexStatsCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const indexPath = this.indexFile ?? defaultIndexFile(ctx.env);
     try {
       const idx = loadIndex(indexPath);
@@ -110,13 +110,13 @@ export class IndexStatsCommand extends BaseIndexStatsCommand {
  * This adapts native clipanion classes to the framework's CommandDefinition pattern.
  * @param ctx CLI context.
  * @param defaultOutput Default output format (optional).
- * @param defaultIndexFile Default index file path (optional).
+ * @param indexFileDefault Default index file path (optional).
  * @returns CommandClass.
  */
 const createIndexStatsCommandDefinition = (
   ctx: Context,
   defaultOutput?: string,
-  defaultIndexFile?: string
+  indexFileDefault?: string
 ): typeof IndexStatsCommand => {
   class ConfiguredCommand extends IndexStatsCommand {
     public execute(): Promise<number> {
@@ -124,14 +124,14 @@ const createIndexStatsCommandDefinition = (
       if (defaultOutput !== undefined && !this.output) {
         this.output = defaultOutput as OutputFormat;
       }
-      if (defaultIndexFile !== undefined && !this.indexFile) {
-        this.indexFile = defaultIndexFile;
+      if (indexFileDefault !== undefined && !this.indexFile) {
+        this.indexFile = indexFileDefault;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = IndexStatsCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -142,7 +142,7 @@ const createIndexStatsCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = IndexStatsCommand.usage;
 
   return ConfiguredCommand as unknown as typeof IndexStatsCommand;
@@ -152,15 +152,15 @@ const createIndexStatsCommandDefinition = (
  * Factory function to create a configured index stats command class.
  * @param ctx CLI context.
  * @param defaultOutput Default output format (optional).
- * @param defaultIndexFile Default index file path (optional).
+ * @param indexFileDefault Default index file path (optional).
  * @returns CommandClass.
  */
 export const createIndexStatsCommandClass = (
   ctx: Context,
   defaultOutput?: string,
-  defaultIndexFile?: string
+  indexFileDefault?: string
 ): typeof IndexStatsCommand => {
-  return createIndexStatsCommandDefinition(ctx, defaultOutput, defaultIndexFile);
+  return createIndexStatsCommandDefinition(ctx, defaultOutput, indexFileDefault);
 };
 
 /**

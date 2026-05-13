@@ -84,7 +84,7 @@ export class SkillNewCommand extends BaseSkillNewCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const cwd = ctx.cwd();
     const result = createSkill(cwd, this.skillName ?? '', this.description ?? '', this.skillsDir ?? 'skills');
     if (!result.success) {
@@ -140,11 +140,11 @@ const createSkillNewCommandDefinition = (
       if (defaultSkillsDir !== undefined && !this.skillsDir) {
         this.skillsDir = defaultSkillsDir;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = SkillNewCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -155,7 +155,7 @@ const createSkillNewCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = SkillNewCommand.usage;
 
   return ConfiguredCommand as unknown as typeof SkillNewCommand;

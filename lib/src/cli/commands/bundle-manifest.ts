@@ -98,7 +98,7 @@ export class BundleManifestCommand extends BaseBundleManifestCommand {
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const version = this.version ?? '';
     const collectionFile = this.collectionFile;
     const outFile = this.outFile ?? 'deployment-manifest.yml';
@@ -152,11 +152,11 @@ const createBundleManifestCommandDefinition = (
       if (defaultOutFile !== undefined && !this.outFile) {
         this.outFile = defaultOutFile;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- dynamic subclass super delegation
+
       return super.execute();
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dynamic class static property
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic class static property
   (ConfiguredCommand as any).paths = BundleManifestCommand.paths;
 
   // Copy all property descriptors from the base class to ensure clipanion discovers options
@@ -167,7 +167,7 @@ const createBundleManifestCommandDefinition = (
     }
   }
 
-  // eslint-disable-next-line new-cap, @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Command.Usage is a Clipanion factory method
   (ConfiguredCommand as any).usage = BundleManifestCommand.usage;
 
   return ConfiguredCommand as unknown as typeof BundleManifestCommand;

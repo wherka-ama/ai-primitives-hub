@@ -23,12 +23,12 @@ import {
 } from '../../infra/stores/target-store';
 import {
   Command,
+  type CommandDefinition,
   Context,
+  defineCommand,
   formatOutput,
   Option,
   type OutputFormat,
-  type CommandDefinition,
-  defineCommand,
   RegistryError,
   renderError,
 } from '../framework';
@@ -361,4 +361,3 @@ function buildStandardTarget(opts: TargetAddOptions, type: TargetType, scope: st
     ...(allowedKinds === undefined ? {} : { allowedKinds })
   } as Target;
 }
-

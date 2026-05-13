@@ -16,7 +16,6 @@ import {
   type HubConfig,
   type HubReference,
   type Profile,
-  type ProfileBundle,
   type RegistrySource,
 } from '../../domain/registry';
 import {
@@ -271,7 +270,7 @@ export class HubManager {
   public async addProfile(hubId: string, profile: Profile): Promise<Profile> {
     let cfg: HubConfig;
     let ref: HubReference;
-    
+
     if (await this.store.has(hubId)) {
       const loaded = await this.store.load(hubId);
       cfg = loaded.config;
@@ -291,7 +290,7 @@ export class HubManager {
       };
       ref = { type: 'local', location: hubId };
     }
-    
+
     // Replace any existing profile with the same id; otherwise append
     const filtered = cfg.profiles.filter((p) => p.id !== profile.id);
     cfg = { ...cfg, profiles: [...filtered, profile] };

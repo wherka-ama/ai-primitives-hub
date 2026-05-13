@@ -11,14 +11,14 @@
  */
 import {
   Command,
-  Option,
+  type CommandDefinition,
+  type Context,
+  defineCommand,
   formatOutput,
+  Option,
+  type OutputFormat,
   RegistryError,
   renderError,
-  type Context,
-  type OutputFormat,
-  type CommandDefinition,
-  defineCommand,
 } from '../framework';
 
 /**
