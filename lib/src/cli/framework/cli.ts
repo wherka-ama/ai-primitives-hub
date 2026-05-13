@@ -217,7 +217,6 @@ export const runCli = async (argv: string[], opts: RunCliOptions): Promise<numbe
   // Apply defaultOutput when the command declares an output field but the
   // user did not pass an explicit -o / --output flag.
   if (opts.defaultOutput !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic property on command instance
     const cmd = command as any;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- nullish coalescing to set default output
     cmd.output ??= opts.defaultOutput;

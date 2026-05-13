@@ -23,8 +23,8 @@ node --experimental-sea-config sea-config.json
 echo "Copying Node executable..."
 cp "$(command -v node)" "$OUTPUT_PATH"
 
-echo "Removing signature (macOS)..."
 if [ "$(uname)" = "Darwin" ]; then
+  echo "Removing signature (macOS)..."
   codesign --remove-signature "$OUTPUT_PATH" || true
 fi
 
@@ -33,8 +33,8 @@ npx -y postject "$OUTPUT_PATH" NODE_SEA_BLOB sea-prep.blob \
   --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 \
   --macho-segment-name NODE_SEA
 
-echo "Signing binary (macOS)..."
 if [ "$(uname)" = "Darwin" ]; then
+  echo "Signing binary (macOS)..."
   codesign --sign - "$OUTPUT_PATH" || true
 fi
 

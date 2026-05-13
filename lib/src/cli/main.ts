@@ -1,16 +1,12 @@
 /**
- * Phase 2D / Iter 1 — CLI composition root.
+ * CLI composition root.
  *
- * Replaces the 918-line src/cli/index.ts monolith with a clean
- * composition root pattern. This file:
+ * This file:
  * - Creates production Context (FileSystem, HttpClient, Clock, TokenProvider)
  * - Registers all CLI commands
  * - Dispatches via clipanion
- *
- * Commands are still using the defineCommand wrapper during this iter.
- * Subsequent iters will convert each command to native clipanion
- * Command subclasses with Option decorators.
  */
+
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import {
@@ -149,52 +145,7 @@ export const main = async (argv: string[]): Promise<number> => {
   const httpClient = new NodeHttpClient();
   const tokenProvider = envTokenProvider(ctx.env);
 
-  const commands: CommandDefinition[] = [
-    // createBundleBuildCommand({ // Removed: BundleBuildCommand is now registered as a class
-    //   output: parsed.output,
-    //   collectionFile: parsed.collectionFile ?? '',
-    //   version: parsed.version ?? '0.0.0-dev',
-    //   outDir: parsed.outDir,
-    //   repoSlug: parsed.repoSlug
-    // }),
-    // createBundleManifestCommand({ // Removed: BundleManifestCommand is now registered as a class
-    //   output: parsed.output,
-    //   outFile: parsed.outFile ?? '',
-    //   version: parsed.version ?? '',
-    //   collectionFile: parsed.collectionFile ?? ''
-    // }),
-    // createCollectionAffectedCommand({ // Removed: CollectionAffectedCommand is now registered as a class
-    //   output: parsed.output,
-    //   changedPaths: parseCsv(parsed.changedPath)
-    // }),
-    // createCollectionListCommand({ output: parsed.output }), // Removed: CollectionListCommand is now registered as a class
-    // createCollectionValidateCommand({ // Removed: CollectionValidateCommand is now registered as a class
-    //   output: parsed.output,
-    //   markdownPath: parsed.markdownPath,
-    //   collectionFiles: parseCsv(parsed.collectionFile),
-    //   verbose: parsed.verbose
-    // }),
-    // createSkillNewCommand({ // Removed: SkillNewCommand is now registered as a class
-    //   output: parsed.output,
-    //   skillName: parsed.skillName ?? '',
-    //   description: parsed.description ?? '',
-    //   skillsDir: parsed.skillsDir
-    // }),
-    // createSkillValidateCommand({ // Removed: SkillValidateCommand is now registered as a class
-    //   output: parsed.output,
-    //   skillsDir: parsed.skillsDir,
-    //   verbose: parsed.verbose
-    // }),
-    // createVersionComputeCommand({ // Removed: VersionComputeCommand is now registered as a class
-    //   output: parsed.output,
-    //   key: parsed.positional.length >= 3
-    //     && parsed.positional[0] === 'config'
-    //     && parsed.positional[1] === 'get'
-    //     ? parsed.positional[2]
-    //     : ''
-    // }),
-    // createTargetRemoveCommand({ name: '' }) // Removed: TargetRemoveCommand is now registered as a class
-  ];
+  const commands: CommandDefinition[] = [];
 
   const commandClasses = [
     ExplainCommand,
@@ -248,7 +199,7 @@ export const main = async (argv: string[]): Promise<number> => {
     commands,
     commandClasses,
     name: 'prompt-registry',
-    version: readPackageVersion(),
+    version: CLI_VERSION_CONST,
     http: httpClient,
     tokens: tokenProvider,
     defaultOutput: parsed.output
@@ -412,6 +363,11 @@ const readPackageVersion = (): string => {
     return '0.0.0-dev';
   }
 };
+
+// Build-time version injection for bundled/SEA distributions.
+// Falls back to reading package.json for development builds.
+declare const CLI_VERSION: string | undefined;
+export const CLI_VERSION_CONST = typeof CLI_VERSION !== 'undefined' ? CLI_VERSION : readPackageVersion();
 
 /**
  * CLI binary entry: only place where process.exit/console.error are
