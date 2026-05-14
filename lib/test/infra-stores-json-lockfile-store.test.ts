@@ -4,23 +4,29 @@
  * Tests lockfile functions: readLockfile, writeLockfile, upsertEntry,
  * upsertSource, upsertHub, upsertProfile, upsertUseProfile, removeEntry.
  */
-import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
-  readLockfile,
-  writeLockfile,
-  upsertEntry,
-  upsertSource,
-  upsertHub,
-  upsertProfile,
-  upsertUseProfile,
-  removeEntry,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import {
   type Lockfile,
   type LockfileEntry,
-  type LockfileSource,
+  type LockfileFs,
   type LockfileHub,
   type LockfileProfile,
-  type LockfileFs,
-  type LockfileUseProfile
+  type LockfileSource,
+  type LockfileUseProfile,
+  readLockfile,
+  removeEntry,
+  upsertEntry,
+  upsertHub,
+  upsertProfile,
+  upsertSource,
+  upsertUseProfile,
+  writeLockfile,
 } from '../src/infra/stores/json-lockfile-store';
 
 describe('readLockfile', () => {

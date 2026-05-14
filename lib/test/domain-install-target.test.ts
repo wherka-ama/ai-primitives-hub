@@ -3,7 +3,11 @@
  *
  * Tests the isTarget type guard function.
  */
-import { describe, expect, it } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
 import {
   isTarget,
   TARGET_TYPES,
@@ -105,7 +109,7 @@ describe('isTarget type guard', () => {
     for (const type of TARGET_TYPES) {
       const target = {
         name: `test-${type}`,
-        type: type as typeof TARGET_TYPES[number],
+        type: type,
         scope: 'user' as const
       };
       expect(isTarget(target)).toBe(true);

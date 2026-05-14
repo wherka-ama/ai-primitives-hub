@@ -4,18 +4,26 @@
  * Tests parseFrontmatter, detectKindFromPath, computePrimitiveId, hashContent,
  * buildBodyPreview, extractFromFile, extractMcpPrimitives.
  */
-import { describe, expect, it } from 'vitest';
 import {
-  parseFrontmatter,
-  detectKindFromPath,
-  computePrimitiveId,
-  hashContent,
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
   buildBodyPreview,
+  computePrimitiveId,
+  detectKindFromPath,
+  type ExtractContext,
   extractFromFile,
   extractMcpPrimitives,
-  type ExtractContext
+  hashContent,
+  parseFrontmatter,
 } from '../src/infra/harvest/extractor';
-import type { BundleRef, BundleManifest, HarvestedFile } from '../src/infra/search/types';
+import type {
+  BundleManifest,
+  BundleRef,
+  HarvestedFile,
+} from '../src/infra/search/types';
 
 describe('parseFrontmatter', () => {
   it('parses valid YAML frontmatter', () => {
@@ -178,8 +186,8 @@ describe('buildBodyPreview', () => {
 });
 
 describe('extractFromFile', () => {
-  const ref: BundleRef = { 
-    sourceId: 'source123', 
+  const ref: BundleRef = {
+    sourceId: 'source123',
     bundleId: 'bundle456',
     sourceType: 'github',
     bundleVersion: '1.0.0',
@@ -231,8 +239,8 @@ describe('extractFromFile', () => {
 });
 
 describe('extractMcpPrimitives', () => {
-  const ref: BundleRef = { 
-    sourceId: 'source123', 
+  const ref: BundleRef = {
+    sourceId: 'source123',
     bundleId: 'bundle456',
     sourceType: 'github',
     bundleVersion: '1.0.0',

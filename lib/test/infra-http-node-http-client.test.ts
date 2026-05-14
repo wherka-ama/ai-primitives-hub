@@ -3,9 +3,19 @@
  *
  * Tests NodeHttpClient class.
  */
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { NodeHttpClient } from '../src/infra/http/node-http-client';
-import type { HttpRequest } from '../src/ports/http';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  NodeHttpClient,
+} from '../src/infra/http/node-http-client';
+import type {
+  HttpRequest,
+} from '../src/ports/http';
 
 // Mock global fetch
 const mockFetch = vi.fn();

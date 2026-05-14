@@ -3,10 +3,18 @@
  *
  * Tests NodeFileSystem class methods.
  */
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { NodeFileSystem } from '../src/infra/fs/node-filesystem';
 import * as fsp from 'node:fs/promises';
-import * as fs from 'node:fs';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import {
+  NodeFileSystem,
+} from '../src/infra/fs/node-filesystem';
 
 // Mock fs/promises
 vi.mock('node:fs/promises', () => ({

@@ -3,13 +3,17 @@
  *
  * Tests tuning constants for search ranking.
  */
-import { describe, expect, it } from 'vitest';
 import {
-  FIELD_WEIGHTS,
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
   BM25,
+  FIELD_WEIGHTS,
   HYBRID_ALPHA,
+  SEARCHABLE_FIELDS,
   type SearchableField,
-  SEARCHABLE_FIELDS
 } from '../src/infra/search/tuning';
 
 describe('tuning constants', () => {

@@ -3,8 +3,15 @@
  *
  * Tests GitHubApiError and GitHubNetworkError classes.
  */
-import { describe, expect, it } from 'vitest';
-import { GitHubApiError, GitHubNetworkError } from '../src/infra/github/errors';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  GitHubApiError,
+  GitHubNetworkError,
+} from '../src/infra/github/errors';
 
 describe('GitHubApiError', () => {
   it('creates error with all fields', () => {

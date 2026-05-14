@@ -3,12 +3,16 @@
  *
  * Tests ClientEvent types and NOOP_EVENT_HANDLER.
  */
-import { describe, expect, it } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
 import {
   type ClientEvent,
-  type ClientEventKind,
   type ClientEventHandler,
-  NOOP_EVENT_HANDLER
+  type ClientEventKind,
+  NOOP_EVENT_HANDLER,
 } from '../src/infra/github/events';
 
 describe('NOOP_EVENT_HANDLER', () => {

@@ -3,8 +3,14 @@
  *
  * Tests the generateBundleId function.
  */
-import { describe, expect, it } from 'vitest';
-import { generateBundleId } from '../src/domain/bundle/id';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  generateBundleId,
+} from '../src/domain/bundle/id';
 
 describe('generateBundleId', () => {
   it('generates canonical bundle ID with slash separator', () => {

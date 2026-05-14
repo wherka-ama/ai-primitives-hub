@@ -3,14 +3,18 @@
  *
  * Tests skill validation functions: parseFrontmatter, validateSkillName, validateSkillDescription.
  */
-import { describe, expect, it } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
 import {
   parseFrontmatter,
-  validateSkillName,
-  validateSkillDescription,
-  SKILL_NAME_MAX_LENGTH,
+  SKILL_DESCRIPTION_MAX_LENGTH,
   SKILL_DESCRIPTION_MIN_LENGTH,
-  SKILL_DESCRIPTION_MAX_LENGTH
+  SKILL_NAME_MAX_LENGTH,
+  validateSkillDescription,
+  validateSkillName,
 } from '../src/domain/skill/validate';
 
 describe('parseFrontmatter', () => {

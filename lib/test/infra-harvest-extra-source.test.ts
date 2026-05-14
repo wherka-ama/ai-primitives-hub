@@ -3,8 +3,14 @@
  *
  * Tests parseExtraSource function.
  */
-import { describe, expect, it } from 'vitest';
-import { parseExtraSource } from '../src/infra/harvest/extra-source';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  parseExtraSource,
+} from '../src/infra/harvest/extra-source';
 
 describe('parseExtraSource', () => {
   it('parses valid github source', () => {

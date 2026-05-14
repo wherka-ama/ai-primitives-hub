@@ -3,8 +3,15 @@
  *
  * Tests checksumFile and checksumFiles functions.
  */
-import { describe, expect, it } from 'vitest';
-import { checksumFile, checksumFiles } from '../src/infra/checksum';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  checksumFile,
+  checksumFiles,
+} from '../src/infra/checksum';
 
 describe('checksumFile', () => {
   it('computes SHA-256 hash for string content', () => {

@@ -5,15 +5,19 @@
  * validateItemKind, normalizeRepoRelativePath, isSafeRepoRelativePath,
  * validateCollectionObject.
  */
-import { describe, expect, it } from 'vitest';
 import {
-  validateCollectionId,
-  validateVersion,
-  validateItemKind,
-  normalizeRepoRelativePath,
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  DEFAULT_VALIDATION_RULES,
   isSafeRepoRelativePath,
+  normalizeRepoRelativePath,
+  validateCollectionId,
   validateCollectionObject,
-  DEFAULT_VALIDATION_RULES
+  validateItemKind,
+  validateVersion,
 } from '../src/domain/collection/validate';
 
 describe('validateCollectionId', () => {
@@ -299,7 +303,7 @@ describe('validateCollectionObject', () => {
     };
     const result = validateCollectionObject(collection, 'test');
     expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.includes('deprecated'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('deprecated'))).toBe(true);
   });
 
   it('rejects item with invalid kind', () => {

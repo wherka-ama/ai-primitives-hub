@@ -3,14 +3,20 @@
  *
  * Tests validateManifest, ManifestValidationError, MANIFEST_FILENAME.
  */
-import { describe, expect, it } from 'vitest';
 import {
-  validateManifest,
-  ManifestValidationError,
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
   MANIFEST_FILENAME,
-  type ManifestValidationOptions
+  ManifestValidationError,
+  type ManifestValidationOptions,
+  validateManifest,
 } from '../src/domain/collection/manifest-validator';
-import type { ExtractedFiles } from '../src/ports/bundle-extractor';
+import type {
+  ExtractedFiles,
+} from '../src/ports/bundle-extractor';
 
 describe('validateManifest', () => {
   it('validates manifest with required fields', () => {
@@ -25,7 +31,7 @@ describe('validateManifest', () => {
   });
 
   it('throws error when manifest is missing', () => {
-    const files: ExtractedFiles = new Map([]);
+    const files: ExtractedFiles = new Map();
     const opts: ManifestValidationOptions = {};
     expect(() => validateManifest(files, opts)).toThrow(ManifestValidationError);
     try {

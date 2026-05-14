@@ -3,15 +3,25 @@
  *
  * Tests resolveLayout, expandPath, FileTreeTargetWriter.
  */
-import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
-  resolveLayout,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import type {
+  Target,
+} from '../src/domain/install';
+import {
   expandPath,
   FileTreeTargetWriter,
-  type WriterFs
+  resolveLayout,
+  type WriterFs,
 } from '../src/infra/writers/file-tree-writer';
-import type { Target } from '../src/domain/install';
-import type { ExtractedFiles } from '../src/ports/bundle-extractor';
+import type {
+  ExtractedFiles,
+} from '../src/ports/bundle-extractor';
 
 describe('resolveLayout', () => {
   it('resolves vscode user scope layout', () => {

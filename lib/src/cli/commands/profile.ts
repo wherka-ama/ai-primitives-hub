@@ -724,7 +724,7 @@ export class ProfilePublishCommand extends BaseProfileCommand {
     // Resolve hub config path via hub store
     const paths = resolveUserConfigPaths(ctx.env);
     const hubStore = new HubStore(paths.hubs, ctx.fs);
-    const hubConfigPath = hubStore['configPath'](this.hubId);
+    const hubConfigPath = hubStore.configPath(this.hubId);
     const hubConfigYaml = await ctx.fs.readFile(hubConfigPath);
     const hubConfig = load.load(hubConfigYaml) as { profiles?: Record<string, unknown> };
     if (!hubConfig.profiles) {

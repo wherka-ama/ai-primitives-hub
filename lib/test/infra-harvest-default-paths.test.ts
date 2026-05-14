@@ -3,13 +3,17 @@
  *
  * Tests default path resolution functions.
  */
-import { describe, expect, it } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
 import {
   defaultCacheDir,
-  defaultIndexFile,
   defaultHubCacheDir,
+  defaultIndexFile,
+  type DefaultPathEnv,
   defaultProgressFile,
-  type DefaultPathEnv
 } from '../src/infra/harvest/default-paths';
 
 describe('defaultCacheDir', () => {

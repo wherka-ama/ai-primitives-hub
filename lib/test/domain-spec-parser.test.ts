@@ -3,8 +3,15 @@
  *
  * Tests parseBundleSpec and BundleSpecParseError.
  */
-import { describe, expect, it } from 'vitest';
-import { parseBundleSpec, BundleSpecParseError } from '../src/domain/spec-parser';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  BundleSpecParseError,
+  parseBundleSpec,
+} from '../src/domain/spec-parser';
 
 describe('parseBundleSpec', () => {
   it('parses bundleId only', () => {

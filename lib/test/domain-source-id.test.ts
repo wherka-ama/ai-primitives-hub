@@ -3,8 +3,16 @@
  *
  * Tests source ID generation functions: normalizeUrl, generateSourceId, generateHubKey.
  */
-import { describe, expect, it } from 'vitest';
-import { normalizeUrl, generateSourceId, generateHubKey } from '../src/domain/source-id';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
+  generateHubKey,
+  generateSourceId,
+  normalizeUrl,
+} from '../src/domain/source-id';
 
 describe('normalizeUrl', () => {
   it('normalizes HTTPS URL', () => {

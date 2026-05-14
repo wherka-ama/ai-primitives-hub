@@ -3,12 +3,16 @@
  *
  * Tests RegistryError class, validateCode, and isRegistryError type guard.
  */
-import { describe, expect, it } from 'vitest';
 import {
-  RegistryError,
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import {
   isRegistryError,
+  RegistryError,
+  type RegistryErrorJson,
   type RegistryErrorOptions,
-  type RegistryErrorJson
 } from '../src/domain/errors';
 
 describe('RegistryError', () => {

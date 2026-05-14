@@ -46,8 +46,8 @@ import {
   HubAddCommand,
   HubCreateCommand,
   HubListCommand,
-  HubRemoveCommand,
   HubRefreshCommand,
+  HubRemoveCommand,
   HubSyncCommand,
   HubUseCommand,
 } from './commands/hub';
@@ -96,8 +96,8 @@ import {
   ProfileCurrentCommand,
   ProfileDeactivateCommand,
   ProfileEditCommand,
-  ProfilePublishCommand,
   ProfileListCommand,
+  ProfilePublishCommand,
   ProfileShowCommand,
 } from './commands/profile';
 import {
