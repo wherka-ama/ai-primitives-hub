@@ -89,7 +89,8 @@ function getTargetTypeDisplayName(type: TargetType): string {
 
 /** Options for the init command (programmatic API + test seam). */
 export interface InitOptions {
-  output?: OutputFormat;
+  /** Output format (default: text). */
+  output?: string;
   /** Target name (default: 'copilot'). */
   targetName?: string;
   /** Target type (default: 'copilot-cli'). */
@@ -100,6 +101,8 @@ export interface InitOptions {
   hubType?: 'github' | 'local' | 'url';
   /** Skip confirmation prompt. */
   yes?: boolean;
+  /** Verbose output with file paths and verification commands. */
+  verbose?: boolean;
   /** HTTP client seam for testing. */
   http?: HttpClient;
   /** Token provider seam for testing. */
@@ -150,8 +153,9 @@ export class InitCommand extends Command {
   public targetType = Option.String('--target-type');
   public hub = Option.String('--hub');
   public hubType = Option.String('--hub-type');
-  public yes = Option.Boolean('--yes');
+  public yes = Option.Boolean('-y,--yes', false);
   public output = Option.String('-o,--output');
+  public verbose = Option.Boolean('-v,--verbose', false);
   public commandContext!: { ctx: Context; http?: HttpClient; tokens?: TokenProvider };
 
   public async execute(): Promise<number> {
@@ -163,6 +167,7 @@ export class InitCommand extends Command {
       hub: this.hub,
       hubType: this.hubType as 'github' | 'local' | 'url' | undefined,
       yes: this.yes,
+      verbose: this.verbose,
       http,
       tokens
     });
@@ -176,7 +181,7 @@ export class InitCommand extends Command {
  * @returns Exit code.
  */
 async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
-  const fmt = opts.output ?? 'text';
+  const fmt = (opts.output ?? 'text') as OutputFormat;
   const isInteractive = !opts.yes && process.stdout.isTTY;
 
   let targetName = opts.targetName ?? DEFAULT_TARGET_NAME;
@@ -338,6 +343,25 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
         for (const step of d.steps) {
           lines.push(`  ✓ ${step}\n`);
         }
+
+        // Verbose output with file paths and verification commands
+        if (opts.verbose) {
+          lines.push('\nConfiguration:\n');
+          lines.push(`  Config file: ${d.target.file}\n`);
+          lines.push(`  Target name: ${d.target.name}\n`);
+          lines.push(`  Target type: ${d.target.type}\n`);
+          if (d.hub !== null) {
+            lines.push(`  Hub ID: ${d.hub.id}\n`);
+          }
+          lines.push('\nVerification commands:\n');
+          lines.push('  prompt-registry status\n');
+          lines.push('  prompt-registry target list\n');
+          if (d.hub !== null) {
+            lines.push('  prompt-registry hub list\n');
+            lines.push('  prompt-registry profile list\n');
+          }
+        }
+
         if (d.hub === null) {
           lines.push(
             '\nNext steps:\n',
@@ -345,6 +369,10 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
             '  2. prompt-registry profile activate <profileId>\n'
           );
         } else {
+          if (opts.verbose) {
+            lines.push('\nAvailable profiles:\n');
+            lines.push('  Run: prompt-registry profile list\n');
+          }
           lines.push('\nNext step:\n', '  prompt-registry profile activate <profileId>\n');
         }
         return lines.join('');
