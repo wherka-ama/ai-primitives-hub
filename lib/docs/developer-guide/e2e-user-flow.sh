@@ -3,10 +3,10 @@
 # End-to-End User Flow Test Script
 # Simulates realistic user workflows from scratch
 #
-# This script tests the complete lifecycle (20 scenarios):
+# This script tests the complete lifecycle (22 scenarios):
 #
 # Setup:
-#   1. Create install target (copilot-cli type, local path)
+#   1. Create install target via init wizard (F-01) with --yes flag
 #   2. Create synthetic local bundle (prompts + skills)
 #   3. Create local hub configuration file (hub-config.yml)
 #   4. Add hub to project (hub add --type local)
@@ -35,8 +35,13 @@
 #  18. Install bundle from local directory (install --from)
 #  19. Uninstall bundle via lockfile (uninstall --lockfile)
 #
+# New UX features (F-01, F-03, F-06, F-07):
+#  20. Verify error hints (INDEX.NOT_FOUND includes hint)
+#  21. Status command shows current configuration (F-03)
+#  22. Search alias works as top-level command (F-07)
+#
 # Cleanup:
-#  20. Remove target config and delete test directories
+#  23. Remove target config and delete test directories
 #
 # Usage:
 #   ./e2e-user-flow.sh [--use-real-hub] [--verbose]
@@ -236,17 +241,17 @@ check_prerequisites() {
 # Test Scenarios
 # ============================================================================
 
-scenario_1_create_target() {
-    log_section "Scenario 1: Create Target (copilot-cli)"
+scenario_1_init_wizard() {
+    log_section "Scenario 1: Init Wizard (F-01) - Non-Interactive Mode"
 
     cd "$PR_TEST_ROOT/project"
 
-    log_info "Adding copilot-cli target"
+    log_info "Running init wizard with --yes flag"
     local output
-    output=$(run_cmd "$PR_BIN target add $TARGET_NAME --type copilot-cli --path \"$PR_TEST_ROOT/copilot-cli\" -o json") || true
+    output=$(run_cmd "$PR_BIN init --target-name $TARGET_NAME --target-type copilot-cli --path \"$PR_TEST_ROOT/copilot-cli\" --yes -o json") || true
 
     if assert_json_status "$output"; then
-        log_success "Target created successfully"
+        log_success "Init wizard created target successfully"
         log_info "Target path: $PR_TEST_ROOT/copilot-cli"
         
         # Verify prompt-registry.yml was created
@@ -257,7 +262,7 @@ scenario_1_create_target() {
             return 1
         fi
     else
-        log_error "Failed to create target"
+        log_error "Failed to create target via init wizard"
         echo "$output"
         return 1
     fi
@@ -836,8 +841,68 @@ EOF
     fi
 }
 
-scenario_20_cleanup() {
-    log_section "Scenario 20: Cleanup"
+scenario_20_error_hints() {
+    log_section "Scenario 20: Error Hints (F-06)"
+
+    log_info "Testing INDEX.NOT_FOUND error includes hint"
+    local non_existent_index="$XDG_CACHE_HOME/nonexistent-index.json"
+    local output
+    output=$(run_cmd "$PR_BIN index search --query test --index \"$non_existent_index\" -o json") || true
+
+    # Should fail with INDEX.NOT_FOUND
+    if echo "$output" | jq -e '.status == "error"' > /dev/null; then
+        local error_code
+        error_code=$(echo "$output" | jq -r '.errors[0].code')
+        if [ "$error_code" = "INDEX.NOT_FOUND" ]; then
+            local hint
+            hint=$(echo "$output" | jq -r '.errors[0].hint')
+            if echo "$hint" | grep -q "index build"; then
+                log_success "INDEX.NOT_FOUND error includes hint: $hint"
+            else
+                log_warning "INDEX.NOT_FOUND error missing hint"
+            fi
+        else
+            log_warning "Expected INDEX.NOT_FOUND error, got $error_code"
+        fi
+    else
+        log_warning "Expected error status"
+    fi
+}
+
+scenario_21_status_command() {
+    log_section "Scenario 21: Status Command (F-03)"
+
+    cd "$PR_TEST_ROOT/project"
+
+    log_info "Running status command"
+    local output
+    output=$(run_cmd "$PR_BIN status -o json") || true
+
+    if assert_json_status "$output"; then
+        log_success "Status command shows current configuration"
+    else
+        log_warning "Status command failed (may not be implemented yet)"
+    fi
+}
+
+scenario_22_search_alias() {
+    log_section "Scenario 22: Search Alias (F-07)"
+
+    log_info "Using search alias (top-level command)"
+    local output
+    output=$(run_cmd "$PR_BIN search --query hello --index \"$XDG_CACHE_HOME/primitive-index.json\" -o json") || true
+
+    if assert_json_status "$output"; then
+        local total
+        total=$(echo "$output" | jq -r '.data.total')
+        log_success "Search alias completed: $total results"
+    else
+        log_warning "Search alias failed (may not be implemented yet)"
+    fi
+}
+
+scenario_23_cleanup() {
+    log_section "Scenario 23: Cleanup"
 
     log_info "Removing target"
     cd "$PR_TEST_ROOT/project"
@@ -903,7 +968,7 @@ main() {
     local failures=0
 
     # Run scenarios
-    scenario_1_create_target || failures=$((failures + 1))
+    scenario_1_init_wizard || failures=$((failures + 1))
     scenario_2_create_synthetic_bundle || failures=$((failures + 1))
     scenario_3_create_local_hub || failures=$((failures + 1))
     scenario_4_add_hub || failures=$((failures + 1))
@@ -923,7 +988,10 @@ main() {
     scenario_17_verify_resources_removed || failures=$((failures + 1))
     scenario_18_search_and_install_bundle || failures=$((failures + 1))
     scenario_19_uninstall_bundle || failures=$((failures + 1))
-    scenario_20_cleanup || true  # Cleanup always runs
+    scenario_20_error_hints || true  # Non-critical
+    scenario_21_status_command || true  # Non-critical
+    scenario_22_search_alias || true  # Non-critical
+    scenario_23_cleanup || true  # Cleanup always runs
 
     # Print summary
     log_section "Test Summary"

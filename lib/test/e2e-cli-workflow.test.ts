@@ -470,14 +470,92 @@ This is a test prompt.
     });
   });
 
+  describe('Init Wizard Workflow (F-01)', () => {
+    it('init creates target with --yes flag', () => {
+      const targetDir = path.join(tmp, 'copilot-cli');
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.mkdirSync(path.join(targetDir, 'prompts'), { recursive: true });
+      fs.mkdirSync(path.join(targetDir, 'skills'), { recursive: true });
+
+      const r = runCli(['init', '--target-name', 'test-target', '--target-type', 'copilot-cli', '--yes', '-o', 'json'], tmp);
+      expect(r.code).toBe(0);
+      const parsed = JSON.parse(r.stdout) as { status: string };
+      expect(parsed.status).toBe('ok');
+      expect(fs.existsSync(path.join(tmp, 'prompt-registry.yml'))).toBe(true);
+    });
+  });
+
+  describe('Status Command Workflow (F-03)', () => {
+    it('status shows current configuration', () => {
+      const targetDir = path.join(tmp, 'copilot-cli');
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.mkdirSync(path.join(targetDir, 'prompts'), { recursive: true });
+      fs.mkdirSync(path.join(targetDir, 'skills'), { recursive: true });
+
+      // First create a target
+      runCli(['target', 'add', 'test-target', '--type', 'copilot-cli', '--path', targetDir, '-o', 'json'], tmp);
+
+      // Then run status
+      const r = runCli(['status', '-o', 'json'], tmp);
+      expect(r.code).toBe(0);
+      const parsed = JSON.parse(r.stdout) as { status: string };
+      expect(parsed.status).toBe('ok');
+    });
+  });
+
+  describe('Search Alias Workflow (F-07)', () => {
+    it('search alias works as top-level command', () => {
+      const bundleDir = path.join(tmp, 'bundles', 'test-bundle');
+      const indexFile = path.join(xdgCacheHome, 'index.json');
+      fs.mkdirSync(bundleDir, { recursive: true });
+
+      // Create deployment manifest
+      const manifest = `
+id: test-bundle
+version: 1.0.0
+name: Test Bundle
+description: A test bundle
+items:
+  - path: prompts/test.prompt.md
+    kind: prompt
+`;
+      fs.writeFileSync(path.join(bundleDir, 'deployment-manifest.yml'), manifest.trim());
+
+      // Create a prompt file
+      const prompt = `---
+title: Test Prompt
+description: A test prompt
+tags:
+  - test
+---
+# Test Prompt
+
+This is a test prompt.
+`;
+      fs.mkdirSync(path.join(bundleDir, 'prompts'), { recursive: true });
+      fs.writeFileSync(path.join(bundleDir, 'prompts', 'test.prompt.md'), prompt.trim());
+
+      // Build index
+      runCli(['index', 'build', '--root', bundleDir, '--out', indexFile, '--source-id', 'test-src', '-o', 'json']);
+
+      // Use search alias (not index search)
+      const r = runCli(['search', '--query', 'test', '--index', indexFile, '-o', 'json']);
+      expect(r.code).toBe(0);
+      const parsed = JSON.parse(r.stdout) as { status: string };
+      expect(parsed.status).toBe('ok');
+    });
+  });
+
   describe('Error Handling Workflow', () => {
     it('handles missing index file error', () => {
       const nonExistentIndex = path.join(tmp, 'nonexistent-index.json');
       const r = runCli(['index', 'search', '--query', 'test', '--index', nonExistentIndex, '-o', 'json']);
       expect(r.code).not.toBe(0);
-      const parsed = JSON.parse(r.stdout) as { status: string; errors: { code: string }[] };
+      const parsed = JSON.parse(r.stdout) as { status: string; errors: { code: string; hint?: string }[] };
       expect(parsed.status).toBe('error');
       expect(parsed.errors[0].code).toBe('INDEX.NOT_FOUND');
+      // F-06: Verify error hint is present
+      expect(parsed.errors[0].hint).toContain('index build');
     });
 
     it('handles invalid collection file error', () => {
