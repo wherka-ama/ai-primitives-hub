@@ -639,10 +639,12 @@ async function updateActivationLockfile(
         const bytes = await ctx.fs.readFile(f);
         fileChecksums[f] = crypto.createHash('sha256').update(bytes).digest('hex');
       }
+      // Use the actual manifest bundle ID from bundleIdMap instead of profile reference ID
+      const manifestId = out.bundleIdMap[bundleRef.id] || bundleRef.id;
       nextLock = upsertEntry(nextLock, {
         target: t,
         sourceId,
-        bundleId: bundleRef.id,
+        bundleId: manifestId,
         bundleVersion: bundleRef.version === 'latest' ? out.state.syncedBundleVersions[bundleRef.id] : bundleRef.version,
         installedAt: new Date().toISOString(),
         files: writtenFiles,
