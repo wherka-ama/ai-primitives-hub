@@ -4,15 +4,15 @@
  * Creates a target and optionally imports a hub in a single step,
  * replacing the 6-command manual sequence a new user previously needed.
  *
- * Non-interactive by default; accepts flags for all values so it
- * works well in CI and scripts. Without `--yes` it prints a summary
- * of what it will do and asks for confirmation (tty only).
+ * Interactive wizard mode: prompts for IDE, target, and hub connection.
+ * Non-interactive mode: accepts flags for all values so it works well in CI.
  *
  * Usage:
  *   prompt-registry init
  *   prompt-registry init --target-name copilot --target-type copilot-cli --hub owner/repo --yes
  */
 import * as path from 'node:path';
+import * as inquirer from 'inquirer';
 import {
   HubManager,
   resolveUserConfigPaths,
@@ -151,8 +151,65 @@ export class InitCommand extends Command {
  */
 async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
   const fmt = opts.output ?? 'text';
-  const targetName = opts.targetName ?? DEFAULT_TARGET_NAME;
-  const targetType = (opts.targetType ?? DEFAULT_TARGET_TYPE) as TargetType;
+  const isInteractive = !opts.yes && process.stdout.isTTY;
+
+  let targetName = opts.targetName ?? DEFAULT_TARGET_NAME;
+  let targetType = (opts.targetType ?? DEFAULT_TARGET_TYPE) as TargetType;
+  let hubRef = opts.hub;
+
+  // Interactive wizard mode
+  if (isInteractive) {
+    const answers = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'ide',
+        message: 'What IDE are you using?',
+        choices: [
+          { name: 'GitHub Copilot CLI (user scope)', value: 'copilot-cli' },
+          { name: 'GitHub Copilot (workspace scope)', value: 'copilot-ws' },
+          { name: 'Cursor', value: 'cursor' },
+          { name: 'Kiro', value: 'kiro' }
+        ],
+        default: 'copilot-cli'
+      },
+      {
+        type: 'confirm',
+        name: 'connectHub',
+        message: 'Connect to a hub? (recommended)',
+        default: true
+      },
+      {
+        type: 'list',
+        name: 'hubChoice',
+        message: 'Select hub:',
+        choices: [
+          { name: 'Amadeus Hub (default)', value: 'amadeus' },
+          { name: 'Local directory', value: 'local' },
+          { name: 'Skip for now', value: 'skip' }
+        ],
+        default: 'amadeus',
+        when: (a: { connectHub: boolean }) => a.connectHub
+      },
+      {
+        type: 'input',
+        name: 'hubPath',
+        message: 'Enter local hub path:',
+        default: './hub-config.yml',
+        when: (a: { hubChoice: string }) => a.hubChoice === 'local'
+      }
+    ]);
+
+    targetType = answers.ide as TargetType;
+    targetName = DEFAULT_TARGET_NAME;
+
+    if (answers.hubChoice === 'amadeus') {
+      hubRef = 'amadeus';
+    } else if (answers.hubChoice === 'local' && answers.hubPath) {
+      hubRef = `file:${answers.hubPath}`;
+    } else {
+      hubRef = undefined;
+    }
+  }
 
   if (!TARGET_TYPES.includes(targetType)) {
     return failWith(ctx, fmt, new RegistryError({
@@ -175,12 +232,12 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
 
     // Step 2: optionally import + sync hub
     let hubId: string | null = null;
-    if (opts.hub !== undefined && opts.hub.length > 0) {
+    if (hubRef !== undefined && hubRef.length > 0) {
       const mgr = buildHubManager(ctx, opts.http, opts.tokens);
-      const refType = opts.hubType ?? inferHubType(opts.hub);
-      const location = refType === 'local' && !path.isAbsolute(opts.hub)
-        ? path.resolve(ctx.cwd(), opts.hub)
-        : opts.hub;
+      const refType = opts.hubType ?? inferHubType(hubRef);
+      const location = refType === 'local' && !path.isAbsolute(hubRef)
+        ? path.resolve(ctx.cwd(), hubRef)
+        : hubRef;
 
       hubId = await mgr.importHub({ type: refType, location });
       await mgr.syncHub(hubId);

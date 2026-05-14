@@ -81,6 +81,7 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "clipanion": "^4.0.0-rc.4",
+    "inquirer": "^9.3.8",
     "js-yaml": "^4.0.0",
     "semver": "^7.5.4",
     "typanion": "^3.14.0",
@@ -88,6 +89,7 @@
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
+    "@types/inquirer": "^9.0.9",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.0",
     "@types/yauzl": "^2.10.3",
