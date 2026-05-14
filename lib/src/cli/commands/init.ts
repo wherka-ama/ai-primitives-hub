@@ -20,6 +20,7 @@ import {
 import {
   TARGET_TYPES,
   type TargetType,
+  type Target,
 } from '../../domain/install';
 import {
   envTokenProvider,
@@ -95,6 +96,8 @@ export interface InitOptions {
   targetName?: string;
   /** Target type (default: 'copilot-cli'). */
   targetType?: string;
+  /** Target scope (default: 'user'). */
+  scope?: 'user' | 'repository';
   /** Hub location ref (e.g. owner/repo or file:./hub-config.yml). */
   hub?: string;
   /** Hub type override (default: auto-detect from ref). */
@@ -186,12 +189,14 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
 
   let targetName = opts.targetName ?? DEFAULT_TARGET_NAME;
   let targetType = (opts.targetType ?? DEFAULT_TARGET_TYPE) as TargetType;
+  let targetScope = (opts.scope as 'user' | 'repository') ?? 'user';
   let hubRef = opts.hub;
 
   // Interactive wizard mode
   if (isInteractive) {
     interface WizardAnswers {
       ide: string;
+      scope: 'user' | 'repository';
       connectHub: boolean;
       hubChoice?: string;
       hubPath?: string;
@@ -209,6 +214,16 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
           value: type
         })),
         default: 'copilot-cli'
+      },
+      {
+        type: 'list',
+        name: 'scope',
+        message: 'Installation scope:',
+        choices: [
+          { name: 'User scope (installed in home directory)', value: 'user' },
+          { name: 'Project scope (installed in current project)', value: 'repository' }
+        ],
+        default: 'user'
       },
       {
         type: 'confirm',
@@ -239,6 +254,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
 
     targetType = answers.ide as TargetType;
     targetName = DEFAULT_TARGET_NAME;
+    const targetScope = answers.scope;
 
     // Check if target already exists
     const currentTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
@@ -297,7 +313,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
       // Create new target
       result = await addTarget(
         { cwd: ctx.cwd(), fs: ctx.fs },
-        { name: targetName, type: targetType, scope: 'user' }
+        { name: targetName, type: targetType as any, scope: targetScope } as Target
       );
     }
 

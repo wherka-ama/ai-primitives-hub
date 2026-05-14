@@ -640,11 +640,20 @@ async function updateActivationLockfile(
         fileChecksums[f] = crypto.createHash('sha256').update(bytes).digest('hex');
       }
       // Use the actual manifest bundle ID from bundleIdMap instead of profile reference ID
-      const manifestId = out.bundleIdMap[bundleRef.id] || bundleRef.id;
+      const manifestId = out.bundleIdMap[bundleRef.id];
+      if (!manifestId) {
+        // Fallback: try to find a manifest ID that contains the profile ref ID
+        const fallbackId = out.state.syncedBundles.find((id) => id.includes(bundleRef.id.split('-').pop() || ''));
+        if (fallbackId) {
+          console.error(`[DEBUG] bundleIdMap lookup failed for ${bundleRef.id}, using fallback: ${fallbackId}`);
+        } else {
+          console.error(`[DEBUG] bundleIdMap lookup failed for ${bundleRef.id}, no fallback found. bundleIdMap keys: ${Object.keys(out.bundleIdMap).join(', ')}`);
+        }
+      }
       nextLock = upsertEntry(nextLock, {
         target: t,
         sourceId,
-        bundleId: manifestId,
+        bundleId: manifestId || bundleRef.id,
         bundleVersion: bundleRef.version === 'latest' ? out.state.syncedBundleVersions[bundleRef.id] : bundleRef.version,
         installedAt: new Date().toISOString(),
         files: writtenFiles,
