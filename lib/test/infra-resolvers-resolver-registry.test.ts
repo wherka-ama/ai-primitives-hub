@@ -3,15 +3,15 @@ import {
   expect,
   it,
 } from 'vitest';
+import {
+  createTestContext,
+} from '../src/cli/framework';
 import type {
   RegistrySource,
 } from '../src/domain/registry';
 import {
   SourceDispatcher,
 } from '../src/infra/resolvers/resolver-registry';
-import {
-  createTestContext,
-} from '../src/cli/framework';
 
 const mockHttpClient = {
   fetch: async () => ({
@@ -20,12 +20,12 @@ const mockHttpClient = {
     headers: new Headers(),
     arrayBuffer: async () => new ArrayBuffer(0),
     text: async () => '',
-    json: async () => ({}),
-  }),
+    json: async () => ({})
+  })
 };
 
 const mockTokenProvider = {
-  getToken: async () => 'token',
+  getToken: async () => 'token'
 };
 
 describe('SourceDispatcher', () => {
@@ -36,7 +36,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     const source: RegistrySource = {
       id: 'github-001',
       name: 'GitHub Source',
@@ -46,7 +46,7 @@ describe('SourceDispatcher', () => {
       priority: 1,
       hubId: 'default-local'
     };
-    
+
     const resolver = dispatcher.resolverFor(source);
     expect(resolver).not.toBeNull();
     expect(resolver?.constructor.name).toBe('GitHubBundleResolver');
@@ -59,7 +59,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     const source: RegistrySource = {
       id: 'ac-001',
       name: 'Awesome Copilot Source',
@@ -70,7 +70,7 @@ describe('SourceDispatcher', () => {
       hubId: 'default-local',
       config: { branch: 'main', collectionsPath: 'collections' }
     };
-    
+
     const resolver = dispatcher.resolverFor(source);
     expect(resolver).not.toBeNull();
     expect(resolver?.constructor.name).toBe('AwesomeCopilotBundleResolver');
@@ -83,7 +83,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     const source: RegistrySource = {
       id: 'skills-001',
       name: 'Skills Source',
@@ -94,7 +94,7 @@ describe('SourceDispatcher', () => {
       hubId: 'default-local',
       config: { ref: 'main' }
     };
-    
+
     const resolver = dispatcher.resolverFor(source);
     expect(resolver).not.toBeNull();
     expect(resolver?.constructor.name).toBe('SkillsBundleResolver');
@@ -107,7 +107,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     const source: RegistrySource = {
       id: 'local-skills-001',
       name: 'Local Skills Source',
@@ -117,7 +117,7 @@ describe('SourceDispatcher', () => {
       priority: 1,
       hubId: 'default-local'
     };
-    
+
     const resolver = dispatcher.resolverFor(source);
     expect(resolver).not.toBeNull();
     expect(resolver?.constructor.name).toBe('LocalSkillsBundleResolver');
@@ -130,7 +130,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     const source: RegistrySource = {
       id: 'local-ac-001',
       name: 'Local AC Source',
@@ -141,7 +141,7 @@ describe('SourceDispatcher', () => {
       hubId: 'default-local',
       config: { collectionsPath: 'collections' }
     };
-    
+
     const resolver = dispatcher.resolverFor(source);
     expect(resolver).not.toBeNull();
     expect(resolver?.constructor.name).toBe('LocalAwesomeCopilotBundleResolver');
@@ -154,7 +154,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     const source: RegistrySource = {
       id: 'local-001',
       name: 'Local Source',
@@ -164,7 +164,7 @@ describe('SourceDispatcher', () => {
       priority: 1,
       hubId: 'default-local'
     };
-    
+
     const resolver = dispatcher.resolverFor(source);
     expect(resolver).toBeNull();
   });
@@ -176,7 +176,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     const source: RegistrySource = {
       id: 'unknown-001',
       name: 'Unknown Source',
@@ -186,7 +186,7 @@ describe('SourceDispatcher', () => {
       priority: 1,
       hubId: 'default-local'
     };
-    
+
     const resolver = dispatcher.resolverFor(source);
     expect(resolver).toBeNull();
   });
@@ -198,7 +198,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     const source: RegistrySource = {
       id: 'github-git-001',
       name: 'GitHub Git Source',
@@ -208,7 +208,7 @@ describe('SourceDispatcher', () => {
       priority: 1,
       hubId: 'default-local'
     };
-    
+
     const resolver = dispatcher.resolverFor(source);
     expect(resolver).not.toBeNull();
   });
@@ -220,7 +220,7 @@ describe('SourceDispatcher', () => {
       tokens: mockTokenProvider,
       fs: ctx.fs
     });
-    
+
     expect(dispatcher.isRemote('github')).toBe(true);
     expect(dispatcher.isRemote('awesome-copilot')).toBe(true);
     expect(dispatcher.isRemote('skills')).toBe(true);

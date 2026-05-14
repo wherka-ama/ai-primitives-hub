@@ -151,6 +151,8 @@ export class HubAddCommand extends BaseHubCommand {
   public refLocation = Option.String('--location');
   public refRef = Option.String('--ref');
   public hubId = Option.String('--id');
+  public noSync = Option.Boolean('--no-sync');
+  public noUse = Option.Boolean('--no-use');
 
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
@@ -177,13 +179,28 @@ export class HubAddCommand extends BaseHubCommand {
       ref: this.refRef
     }, this.hubId);
 
-    // F-05: sync immediately after import so profiles are usable right away
-    await mgr.syncHub(id);
+    // F-05: auto-use and auto-sync after import (unless flags disable)
+    if (!this.noUse) {
+      await mgr.useHub(id);
+    }
+
+    if (!this.noSync) {
+      await mgr.syncHub(id);
+    }
 
     formatOutput({
       ctx, command: 'hub.add', output: fmt, status: 'ok',
-      data: { id, location, type: refType, synced: true },
-      textRenderer: (d) => `Imported and synced hub "${d.id}" from ${d.type}:${d.location}.\n`
+      data: { id, location, type: refType, used: !this.noUse, synced: !this.noSync },
+      textRenderer: (d) => {
+        const actions: string[] = [`Imported hub "${d.id}" from ${d.type}:${d.location}`];
+        if (d.used) {
+          actions.push('marked as active');
+        }
+        if (d.synced) {
+          actions.push('synced');
+        }
+        return `${actions.join(', ')}.\n`;
+      }
     });
     return 0;
   }
@@ -346,6 +363,36 @@ export class HubSyncCommand extends BaseHubCommand {
       ctx, command: 'hub.sync', output: fmt, status: 'ok',
       data: { id },
       textRenderer: (d) => `Synced hub "${d.id}".\n`
+    });
+    return 0;
+  }
+}
+
+/**
+ * hub refresh - sync the active hub (F-05 shorthand)
+ */
+export class HubRefreshCommand extends BaseHubCommand {
+  public static readonly paths = [['hub', 'refresh']];
+
+  public async execute() {
+    const { ctx, http, tokens } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const mgr = buildManager(ctx, http, tokens);
+
+    const active = await mgr.getActiveHub();
+    if (!active) {
+      return renderError(new RegistryError({
+        code: 'HUB.NO_ACTIVE',
+        message: 'hub refresh: no active hub',
+        hint: 'Run `prompt-registry hub use <id>` first.'
+      }), ctx);
+    }
+
+    await mgr.syncHub(active.id);
+    formatOutput({
+      ctx, command: 'hub.refresh', output: fmt, status: 'ok',
+      data: { id: active.id },
+      textRenderer: (d) => `Refreshed hub "${d.id}".\n`
     });
     return 0;
   }

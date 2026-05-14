@@ -54,13 +54,13 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const files = new Map<string, Uint8Array>();
     files.set('deployment-manifest.yml', new TextEncoder().encode(SAMPLE_MANIFEST));
     files.set('prompts/test.md', new TextEncoder().encode('# Test Prompt'));
-    
+
     const result = await writer.write(files);
-    
+
     expect(result.written).toContain(path.join(tmp, '.github', 'copilot', 'prompts', 'test.md'));
     expect(await realFs.exists(path.join(tmp, '.github', 'copilot', 'prompts', 'test.md'))).toBe(true);
   });
@@ -71,13 +71,13 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const files = new Map<string, Uint8Array>();
     files.set('deployment-manifest.yml', new TextEncoder().encode(SAMPLE_MANIFEST));
     files.set('instructions/test.md', new TextEncoder().encode('# Test Instruction'));
-    
+
     const result = await writer.write(files);
-    
+
     expect(result.written).toContain(path.join(tmp, '.github', 'copilot', 'instructions', 'test.md'));
     expect(await realFs.exists(path.join(tmp, '.github', 'copilot', 'instructions', 'test.md'))).toBe(true);
   });
@@ -88,13 +88,13 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const files = new Map<string, Uint8Array>();
     files.set('deployment-manifest.yml', new TextEncoder().encode(SAMPLE_MANIFEST));
     files.set('agents/test.md', new TextEncoder().encode('# Test Agent'));
-    
+
     const result = await writer.write(files);
-    
+
     expect(result.written).toContain(path.join(tmp, '.github', 'copilot', 'agents', 'test.md'));
     expect(await realFs.exists(path.join(tmp, '.github', 'copilot', 'agents', 'test.md'))).toBe(true);
   });
@@ -105,14 +105,14 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const files = new Map<string, Uint8Array>();
     files.set('deployment-manifest.yml', new TextEncoder().encode(SAMPLE_MANIFEST));
     files.set('skills/test-skill/skill.json', new TextEncoder().encode('{"name": "Test Skill"}'));
     files.set('skills/test-skill/api.ts', new TextEncoder().encode('// API code'));
-    
+
     const result = await writer.write(files);
-    
+
     expect(result.skillDirs).toContain(path.join(tmp, '.github', 'skills', 'test-skill'));
     expect(await realFs.exists(path.join(tmp, '.github', 'skills', 'test-skill', 'skill.json'))).toBe(true);
     expect(await realFs.exists(path.join(tmp, '.github', 'skills', 'test-skill', 'api.ts'))).toBe(true);
@@ -124,12 +124,12 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const files = new Map<string, Uint8Array>();
     files.set('prompts/test.md', new TextEncoder().encode('# Test Prompt'));
-    
+
     const result = await writer.write(files);
-    
+
     expect(result.written).toEqual([]);
     expect(result.skipped).toEqual([]);
     expect(result.skillDirs).toEqual([]);
@@ -141,16 +141,16 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'local-only'
     });
-    
+
     const files = new Map<string, Uint8Array>();
     files.set('deployment-manifest.yml', new TextEncoder().encode(SAMPLE_MANIFEST));
     files.set('prompts/test.md', new TextEncoder().encode('# Test Prompt'));
-    
+
     await writer.write(files);
-    
+
     const excludePath = path.join(tmp, '.git', 'info', 'exclude');
     expect(await realFs.exists(excludePath)).toBe(true);
-    
+
     const content = await realFs.readFile(excludePath);
     expect(content).toContain('# Prompt Registry (local)');
   });
@@ -161,13 +161,13 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const files = new Map<string, Uint8Array>();
     files.set('deployment-manifest.yml', new TextEncoder().encode(SAMPLE_MANIFEST));
     files.set('prompts/test.md', new TextEncoder().encode('# Test Prompt'));
-    
+
     await writer.write(files);
-    
+
     const excludePath = path.join(tmp, '.git', 'info', 'exclude');
     expect(await realFs.exists(excludePath)).toBe(false);
   });
@@ -178,13 +178,13 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const testFile = path.join(tmp, '.github', 'copilot', 'prompts', 'test.md');
     await fs.mkdir(path.dirname(testFile), { recursive: true });
     await fs.writeFile(testFile, '# Test');
-    
+
     await writer.removeFile('copilot/prompts/test.md');
-    
+
     expect(await realFs.exists(testFile)).toBe(false);
   });
 
@@ -194,19 +194,19 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     // Create test files
     const promptFile = path.join(tmp, '.github', 'copilot', 'prompts', 'test.md');
     await fs.mkdir(path.dirname(promptFile), { recursive: true });
     await fs.writeFile(promptFile, '# Test');
-    
+
     const manifest = {
       id: 'test-bundle',
       prompts: [{ id: 'test-prompt', file: 'prompts/test.md', type: 'prompt' }]
     };
-    
+
     await writer.remove('test-bundle', manifest);
-    
+
     expect(await realFs.exists(promptFile)).toBe(false);
   });
 
@@ -216,19 +216,19 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     // Create skill directory
     const skillDir = path.join(tmp, '.github', 'skills', 'test-skill');
     await fs.mkdir(skillDir, { recursive: true });
     await fs.writeFile(path.join(skillDir, 'skill.json'), '{"name": "Test"}');
-    
+
     const manifest = {
       id: 'test-bundle',
       skills: [{ id: 'test-skill', file: 'skills/test-skill/skill.json', type: 'skill' }]
     };
-    
+
     await writer.remove('test-bundle', manifest);
-    
+
     expect(await realFs.exists(skillDir)).toBe(false);
   });
 
@@ -238,19 +238,19 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'local-only'
     });
-    
+
     // Create .git/info/exclude with test file
     const excludePath = path.join(tmp, '.git', 'info', 'exclude');
     await fs.mkdir(path.dirname(excludePath), { recursive: true });
     await fs.writeFile(excludePath, '# Prompt Registry (local)\n.github/copilot/prompts/test.md');
-    
+
     const manifest = {
       id: 'test-bundle',
       prompts: [{ id: 'test-prompt', file: 'prompts/test.md', type: 'prompt' }]
     };
-    
+
     await writer.remove('test-bundle', manifest);
-    
+
     const content = await realFs.readFile(excludePath);
     expect(content).not.toContain('.github/copilot/prompts/test.md');
   });
@@ -261,11 +261,11 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const paths = [path.join(tmp, '.github', 'copilot', 'prompts', 'test.md')];
-    
+
     await writer.switchCommitMode(paths, 'local-only');
-    
+
     const excludePath = path.join(tmp, '.git', 'info', 'exclude');
     expect(await realFs.exists(excludePath)).toBe(true);
   });
@@ -276,14 +276,14 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'local-only'
     });
-    
+
     // Add to exclude first
     const paths = [path.join(tmp, '.github', 'copilot', 'prompts', 'test.md')];
     await writer.switchCommitMode(paths, 'local-only');
-    
+
     // Then switch to commit
     await writer.switchCommitMode(paths, 'commit');
-    
+
     const excludePath = path.join(tmp, '.git', 'info', 'exclude');
     const content = await realFs.readFile(excludePath);
     expect(content).not.toContain('.github/copilot/prompts/test.md');
@@ -295,19 +295,19 @@ describe('RepositoryScopeWriter', () => {
       workspaceRoot: tmp,
       commitMode: 'commit'
     });
-    
+
     const manifest = `id: test-bundle
 skills:
   - id: My_Skill_123
     file: skills/My_Skill_123/skill.json
     type: skill`;
-    
+
     const files = new Map<string, Uint8Array>();
     files.set('deployment-manifest.yml', new TextEncoder().encode(manifest));
     files.set('skills/My_Skill_123/skill.json', new TextEncoder().encode('{"name": "Test"}'));
-    
+
     const result = await writer.write(files);
-    
+
     expect(result.skillDirs).toContain(path.join(tmp, '.github', 'skills', 'my-skill-123'));
   });
 });

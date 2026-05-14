@@ -36,15 +36,15 @@ const SAMPLE_CONFIG: HubConfig = {
     name: 'Test Hub',
     description: 'A test hub',
     maintainer: 'test-maintainer',
-    updatedAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z'
   },
   sources: [],
-  profiles: [],
+  profiles: []
 };
 
 const SAMPLE_REFERENCE: HubReference = {
   type: 'github',
-  location: 'test-owner/test-repo',
+  location: 'test-owner/test-repo'
 };
 
 describe('HubStore', () => {
@@ -52,10 +52,10 @@ describe('HubStore', () => {
     const store = new HubStore(tmp, realFs);
     const safeId = await store.save('my-hub', SAMPLE_CONFIG, SAMPLE_REFERENCE);
     expect(safeId).toBe('my-hub');
-    
+
     const cfgPath = path.join(tmp, 'my-hub.yml');
     expect(await realFs.exists(cfgPath)).toBe(true);
-    
+
     const metaPath = path.join(tmp, 'my-hub.meta.json');
     expect(await realFs.exists(metaPath)).toBe(true);
   });
@@ -76,7 +76,7 @@ describe('HubStore', () => {
   it('loads a saved hub', async () => {
     const store = new HubStore(tmp, realFs);
     await store.save('my-hub', SAMPLE_CONFIG, SAMPLE_REFERENCE);
-    
+
     const saved = await store.load('my-hub');
     expect(saved.id).toBe('my-hub');
     expect(saved.config.metadata.name).toBe('Test Hub');
@@ -93,7 +93,7 @@ describe('HubStore', () => {
     const store = new HubStore(tmp, realFs);
     const cfgPath = path.join(tmp, 'bad-hub.yml');
     await fs.writeFile(cfgPath, 'name: Local Hub\ninvalid: yaml');
-    
+
     await expect(store.load('bad-hub')).rejects.toThrow('Hub config is malformed: bad-hub');
   });
 
@@ -109,7 +109,7 @@ metadata:
 sources: []
 profiles: []`;
     await fs.writeFile(cfgPath, validConfig);
-    
+
     const saved = await store.load('local-hub');
     expect(saved.reference).toEqual({ type: 'local', location: cfgPath });
   });
@@ -119,7 +119,7 @@ profiles: []`;
     await store.save('hub-a', SAMPLE_CONFIG, SAMPLE_REFERENCE);
     await store.save('hub-b', SAMPLE_CONFIG, SAMPLE_REFERENCE);
     await store.save('hub-c', SAMPLE_CONFIG, SAMPLE_REFERENCE);
-    
+
     const ids = await store.list();
     expect(ids).toEqual(['hub-a', 'hub-b', 'hub-c']);
   });
@@ -135,7 +135,7 @@ profiles: []`;
     await store.save('z-hub', SAMPLE_CONFIG, SAMPLE_REFERENCE);
     await store.save('a-hub', SAMPLE_CONFIG, SAMPLE_REFERENCE);
     await store.save('m-hub', SAMPLE_CONFIG, SAMPLE_REFERENCE);
-    
+
     const ids = await store.list();
     expect(ids).toEqual(['a-hub', 'm-hub', 'z-hub']);
   });
@@ -143,15 +143,15 @@ profiles: []`;
   it('removes a hub and its sidecar', async () => {
     const store = new HubStore(tmp, realFs);
     await store.save('my-hub', SAMPLE_CONFIG, SAMPLE_REFERENCE);
-    
+
     const cfgPath = path.join(tmp, 'my-hub.yml');
     const metaPath = path.join(tmp, 'my-hub.meta.json');
-    
+
     expect(await realFs.exists(cfgPath)).toBe(true);
     expect(await realFs.exists(metaPath)).toBe(true);
-    
+
     await store.remove('my-hub');
-    
+
     expect(await realFs.exists(cfgPath)).toBe(false);
     expect(await realFs.exists(metaPath)).toBe(false);
   });
@@ -164,7 +164,7 @@ profiles: []`;
   it('checks if a hub exists', async () => {
     const store = new HubStore(tmp, realFs);
     expect(await store.has('my-hub')).toBe(false);
-    
+
     await store.save('my-hub', SAMPLE_CONFIG, SAMPLE_REFERENCE);
     expect(await store.has('my-hub')).toBe(true);
   });
@@ -172,7 +172,7 @@ profiles: []`;
   it('checks hub existence with sanitized id', async () => {
     const store = new HubStore(tmp, realFs);
     await store.save('My Hub!', SAMPLE_CONFIG, SAMPLE_REFERENCE);
-    
+
     expect(await store.has('My Hub!')).toBe(true);
     expect(await store.has('my-hub')).toBe(true);
   });

@@ -14,9 +14,9 @@ describe('zip-writer', () => {
       const entries = [
         { path: 'test.txt', bytes: new TextEncoder().encode('Hello, World!') }
       ];
-      
+
       const zipBytes = buildZip(entries);
-      
+
       expect(zipBytes.length).toBeGreaterThan(0);
       // Check for ZIP signature (0x04_03_4B_50 = PK\x03\x04)
       expect(zipBytes[0]).toBe(0x50);
@@ -31,9 +31,9 @@ describe('zip-writer', () => {
         { path: 'file2.txt', bytes: new TextEncoder().encode('Content 2') },
         { path: 'dir/file3.txt', bytes: new TextEncoder().encode('Content 3') }
       ];
-      
+
       const zipBytes = buildZip(entries);
-      
+
       expect(zipBytes.length).toBeGreaterThan(0);
       expect(zipBytes[0]).toBe(0x50); // 'P'
       expect(zipBytes[1]).toBe(0x4B); // 'K'
@@ -41,9 +41,9 @@ describe('zip-writer', () => {
 
     it('creates a zip file with empty entries', () => {
       const entries: readonly { path: string; bytes: Uint8Array }[] = [];
-      
+
       const zipBytes = buildZip(entries);
-      
+
       expect(zipBytes.length).toBeGreaterThan(0);
       // Should have end of central directory record
       expect(zipBytes[0]).toBe(0x50); // 'P'
@@ -54,9 +54,9 @@ describe('zip-writer', () => {
       const entries = [
         { path: '日本語.txt', bytes: new TextEncoder().encode('Content') }
       ];
-      
+
       const zipBytes = buildZip(entries);
-      
+
       expect(zipBytes.length).toBeGreaterThan(0);
       expect(zipBytes[0]).toBe(0x50);
     });
@@ -66,9 +66,9 @@ describe('zip-writer', () => {
       const entries = [
         { path: 'large.txt', bytes: new TextEncoder().encode(largeContent) }
       ];
-      
+
       const zipBytes = buildZip(entries);
-      
+
       expect(zipBytes.length).toBeLessThan(largeContent.length + 100); // Should be compressed
     });
 
@@ -76,9 +76,9 @@ describe('zip-writer', () => {
       const entries = [
         { path: 'small.txt', bytes: new TextEncoder().encode('Hi') }
       ];
-      
+
       const zipBytes = buildZip(entries);
-      
+
       expect(zipBytes.length).toBeGreaterThan(0);
     });
   });
@@ -88,9 +88,9 @@ describe('zip-writer', () => {
       const entries = [
         { path: 'test.txt', bytes: new TextEncoder().encode('Hello') }
       ];
-      
+
       const hash = fileSetSha256(entries);
-      
+
       expect(hash).toMatch(/^[a-f0-9]{64}$/);
     });
 
@@ -99,9 +99,9 @@ describe('zip-writer', () => {
         { path: 'a.txt', bytes: new TextEncoder().encode('Content A') },
         { path: 'b.txt', bytes: new TextEncoder().encode('Content B') }
       ];
-      
+
       const hash = fileSetSha256(entries);
-      
+
       expect(hash).toMatch(/^[a-f0-9]{64}$/);
     });
 
@@ -110,15 +110,15 @@ describe('zip-writer', () => {
         { path: 'a.txt', bytes: new TextEncoder().encode('Content') },
         { path: 'b.txt', bytes: new TextEncoder().encode('Content') }
       ];
-      
+
       const entries2 = [
         { path: 'b.txt', bytes: new TextEncoder().encode('Content') },
         { path: 'a.txt', bytes: new TextEncoder().encode('Content') }
       ];
-      
+
       const hash1 = fileSetSha256(entries1);
       const hash2 = fileSetSha256(entries2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
@@ -126,22 +126,22 @@ describe('zip-writer', () => {
       const entries1 = [
         { path: 'a.txt', bytes: new TextEncoder().encode('Content A') }
       ];
-      
+
       const entries2 = [
         { path: 'a.txt', bytes: new TextEncoder().encode('Content B') }
       ];
-      
+
       const hash1 = fileSetSha256(entries1);
       const hash2 = fileSetSha256(entries2);
-      
+
       expect(hash1).not.toBe(hash2);
     });
 
     it('computes hash for empty entries', () => {
       const entries: readonly { path: string; bytes: Uint8Array }[] = [];
-      
+
       const hash = fileSetSha256(entries);
-      
+
       expect(hash).toMatch(/^[a-f0-9]{64}$/);
     });
   });

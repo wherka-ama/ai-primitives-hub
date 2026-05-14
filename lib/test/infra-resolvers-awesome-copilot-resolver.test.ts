@@ -1,9 +1,9 @@
+import nock from 'nock';
 import {
   describe,
   expect,
   it,
 } from 'vitest';
-import nock from 'nock';
 import {
   AwesomeCopilotBundleResolver,
 } from '../src/infra/resolvers/awesome-copilot-resolver';
@@ -14,13 +14,13 @@ const mockHttpClient = {
     const body = await response.arrayBuffer();
     return {
       statusCode: response.status,
-      body: new Uint8Array(body),
+      body: new Uint8Array(body)
     };
-  },
+  }
 };
 
 const mockTokenProvider = {
-  getToken: async () => null,
+  getToken: async () => null
 };
 
 describe('AwesomeCopilotBundleResolver', () => {
@@ -28,7 +28,7 @@ describe('AwesomeCopilotBundleResolver', () => {
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -43,7 +43,7 @@ describe('AwesomeCopilotBundleResolver', () => {
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -58,7 +58,7 @@ describe('AwesomeCopilotBundleResolver', () => {
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -73,7 +73,7 @@ describe('AwesomeCopilotBundleResolver', () => {
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -96,7 +96,7 @@ describe('AwesomeCopilotBundleResolver', () => {
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -120,7 +120,7 @@ describe('AwesomeCopilotBundleResolver', () => {
       repoSlug: 'test/repo',
       branch: 'develop',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -138,7 +138,7 @@ describe('AwesomeCopilotBundleResolver', () => {
       repoSlug: 'test/repo',
       collectionsPath: 'custom-collections',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -155,7 +155,7 @@ describe('AwesomeCopilotBundleResolver', () => {
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -172,7 +172,7 @@ describe('AwesomeCopilotBundleResolver', () => {
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -190,7 +190,7 @@ describe('AwesomeCopilotBundleResolver', () => {
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://raw.githubusercontent.com')
@@ -203,13 +203,13 @@ describe('AwesomeCopilotBundleResolver', () => {
 
   it('uses token from token provider', async () => {
     const tokenProvider = {
-      getToken: async () => 'test-token',
+      getToken: async () => 'test-token'
     };
 
     const resolver = new AwesomeCopilotBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: tokenProvider,
+      tokens: tokenProvider
     });
 
     nock('https://raw.githubusercontent.com')

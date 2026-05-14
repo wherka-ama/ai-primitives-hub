@@ -522,8 +522,8 @@ maybeDescribe('Full Lifecycle (Blank Slate to Teardown)', () => {
       env: {
         ...process.env,
         XDG_CONFIG_HOME: lifecycleXdgConfig,
-        XDG_CACHE_HOME: lifecycleXdgCache,
-      },
+        XDG_CACHE_HOME: lifecycleXdgCache
+      }
     });
     return { code: proc.status ?? 1, stdout: proc.stdout ?? '', stderr: proc.stderr ?? '' };
   };
@@ -542,7 +542,7 @@ maybeDescribe('Full Lifecycle (Blank Slate to Teardown)', () => {
       lifecycleXdgConfig, lifecycleXdgCache, projectDir,
       path.join(targetDir, 'prompts'), path.join(targetDir, 'skills'),
       path.join(bundleDir, 'prompts'), path.join(bundleDir, 'skills', 'test-skill'),
-      hubDir, path.join(lifecycleTmp, 'exports'),
+      hubDir, path.join(lifecycleTmp, 'exports')
     ]) {
       await fsp.mkdir(dir, { recursive: true });
     }
@@ -590,7 +590,7 @@ maybeDescribe('Full Lifecycle (Blank Slate to Teardown)', () => {
         '  - path: prompts/hello.prompt.md',
         '    kind: prompt',
         '  - path: skills/test-skill/SKILL.md',
-        '    kind: skill',
+        '    kind: skill'
       ].join('\n'));
       expect(fs.existsSync(path.join(bundleDir, 'deployment-manifest.yml'))).toBe(true);
     });
@@ -606,7 +606,7 @@ maybeDescribe('Full Lifecycle (Blank Slate to Teardown)', () => {
         '---',
         '# Hello Prompt',
         '',
-        'This is a test prompt for end-to-end testing.',
+        'This is a test prompt for end-to-end testing.'
       ].join('\n'));
       expect(fs.existsSync(path.join(bundleDir, 'prompts', 'hello.prompt.md'))).toBe(true);
     });
@@ -618,7 +618,7 @@ maybeDescribe('Full Lifecycle (Blank Slate to Teardown)', () => {
         'A test skill for end-to-end testing.',
         '',
         '## Purpose',
-        'Tests the installation system.',
+        'Tests the installation system.'
       ].join('\n'));
       expect(fs.existsSync(path.join(bundleDir, 'skills', 'test-skill', 'SKILL.md'))).toBe(true);
     });
@@ -650,7 +650,7 @@ maybeDescribe('Full Lifecycle (Blank Slate to Teardown)', () => {
         '      - id: local-foo',
         '        version: 1.0.0',
         '        source: local-foo-src',
-        '        required: true',
+        '        required: true'
       ].join('\n'));
       expect(fs.existsSync(path.join(hubDir, 'hub-config.yml'))).toBe(true);
     });
@@ -846,8 +846,8 @@ maybeDescribe('Full Lifecycle (Blank Slate to Teardown)', () => {
           bundleVersion: '1.0.0',
           installedAt: '2026-05-12T00:00:00Z',
           files: ['prompts/hello.prompt.md', 'skills/test-skill/SKILL.md'],
-          fileChecksums: {},
-        }],
+          fileChecksums: {}
+        }]
       }, null, 2));
       const r = cli(['uninstall', '--lockfile', lockfile, '--target', 'copilot-target', '-o', 'json']);
       expect(r.code).toBe(0);

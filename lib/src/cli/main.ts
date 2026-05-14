@@ -47,6 +47,7 @@ import {
   HubCreateCommand,
   HubListCommand,
   HubRemoveCommand,
+  HubRefreshCommand,
   HubSyncCommand,
   HubUseCommand,
 } from './commands/hub';
@@ -95,6 +96,7 @@ import {
   ProfileCurrentCommand,
   ProfileDeactivateCommand,
   ProfileEditCommand,
+  ProfilePublishCommand,
   ProfileListCommand,
   ProfileShowCommand,
 } from './commands/profile';
@@ -195,6 +197,7 @@ export const main = async (argv: string[]): Promise<number> => {
     HubAddCommand,
     HubUseCommand,
     HubRemoveCommand,
+    HubRefreshCommand,
     HubSyncCommand,
     SourceAddCommand,
     SourceListCommand,
@@ -206,6 +209,7 @@ export const main = async (argv: string[]): Promise<number> => {
     ProfileCurrentCommand,
     ProfileCreateCommand,
     ProfileEditCommand,
+    ProfilePublishCommand,
     InstallCommand,
     UninstallCommand,
     InitCommand,

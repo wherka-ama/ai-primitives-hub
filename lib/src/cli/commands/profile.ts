@@ -643,6 +643,109 @@ async function updateActivationLockfile(
 }
 
 /**
+ * profile publish - inject a profile into a hub and sync (F-08)
+ */
+export class ProfilePublishCommand extends BaseProfileCommand {
+  public static readonly paths = [['profile', 'publish']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'Publish a profile to a hub by injecting it into hub-config.yml and syncing.',
+    category: 'Configuration',
+    details: `
+      Usage: prompt-registry profile publish <profile-id> --hub <hub-id> [--file <path>]
+
+      Examples:
+        prompt-registry profile publish my-profile --hub default-local
+        prompt-registry profile publish my-profile --hub default-local --file ./my-profile.yml
+
+      Options:
+        --hub <id>      Hub ID to publish to (required)
+        --file <path>   Path to profile YAML file (defaults to <profile-id>.profile.yml)
+    `
+  });
+
+  public profileId = Option.String();
+  public hubId = Option.String('--hub');
+  public profileFile = Option.String('--file');
+
+  public async execute() {
+    const { ctx, http, tokens } = this.commandContext;
+    const fmt = (this.output ?? 'text') as OutputFormat;
+    const built = buildHubMgr(ctx, http, tokens);
+    const mgr = built.mgr;
+
+    if (!this.profileId) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'profile publish: <profile-id> is required',
+        hint: 'Run `prompt-registry profile publish <id> --hub <hub-id>`'
+      }));
+    }
+
+    if (!this.hubId) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'USAGE.MISSING_FLAG',
+        message: 'profile publish: --hub <id> is required',
+        hint: 'Run `prompt-registry hub list` to see available hubs.'
+      }));
+    }
+
+    // Load profile YAML
+    const profilePath = this.profileFile ?? path.join(ctx.cwd(), `${this.profileId}.profile.yml`);
+    if (!(await ctx.fs.exists(profilePath))) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'FS.NOT_FOUND',
+        message: `Profile file not found: ${profilePath}`,
+        hint: 'Export a profile first with `index export --shortlist <id> --profile-id <id>` or provide --file <path>.'
+      }));
+    }
+
+    const profileYaml = await ctx.fs.readFile(profilePath);
+    const load = await import('js-yaml');
+    const profile = load.load(profileYaml) as { id: string; name?: string; bundles?: string[] };
+    if (!profile || typeof profile !== 'object') {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'PROFILE.INVALID_YAML',
+        message: 'Profile YAML is invalid or empty'
+      }));
+    }
+
+    // Load hub config
+    const hubs = await mgr.listHubs();
+    const hub = hubs.find((h) => h.id === this.hubId);
+    if (!hub) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'HUB.NOT_FOUND',
+        message: `Hub "${this.hubId}" not found`,
+        hint: 'Run `prompt-registry hub list` to see available hubs.'
+      }));
+    }
+
+    // Resolve hub config path via hub store
+    const paths = resolveUserConfigPaths(ctx.env);
+    const hubStore = new HubStore(paths.hubs, ctx.fs);
+    const hubConfigPath = hubStore['configPath'](this.hubId);
+    const hubConfigYaml = await ctx.fs.readFile(hubConfigPath);
+    const hubConfig = load.load(hubConfigYaml) as { profiles?: Record<string, unknown> };
+    if (!hubConfig.profiles) {
+      hubConfig.profiles = {};
+    }
+    hubConfig.profiles[this.profileId] = profile;
+    await ctx.fs.writeFile(hubConfigPath, load.dump(hubConfig));
+
+    // Sync hub
+    await mgr.syncHub(this.hubId);
+
+    formatOutput({
+      ctx, command: 'profile.publish', output: fmt, status: 'ok',
+      data: { profileId: this.profileId, hubId: this.hubId },
+      textRenderer: (d) => `Published profile "${d.profileId}" to hub "${d.hubId}" and synced.\n`
+    });
+    return 0;
+  }
+}
+
+/**
  * Remove all files listed in the lockfile and wipe entries on deactivation.
  * @param ctx CLI context.
  * @param lockPath Path to the lockfile.

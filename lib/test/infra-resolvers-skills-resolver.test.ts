@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import nock from 'nock';
 import {
   afterEach,
   beforeEach,
@@ -8,7 +9,6 @@ import {
   expect,
   it,
 } from 'vitest';
-import nock from 'nock';
 import {
   LocalAwesomeCopilotBundleResolver,
   LocalSkillsBundleResolver,
@@ -35,13 +35,13 @@ const mockHttpClient = {
     const body = await response.arrayBuffer();
     return {
       statusCode: response.status,
-      body: new Uint8Array(body),
+      body: new Uint8Array(body)
     };
-  },
+  }
 };
 
 const mockTokenProvider = {
-  getToken: async () => null,
+  getToken: async () => null
 };
 
 describe('SkillsBundleResolver', () => {
@@ -49,7 +49,7 @@ describe('SkillsBundleResolver', () => {
     const resolver = new SkillsBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://api.github.com')
@@ -64,7 +64,7 @@ describe('SkillsBundleResolver', () => {
     const resolver = new SkillsBundleResolver({
       repoSlug: 'test/repo',
       http: mockHttpClient as any,
-      tokens: mockTokenProvider,
+      tokens: mockTokenProvider
     });
 
     nock('https://api.github.com')
@@ -80,7 +80,7 @@ describe('LocalSkillsBundleResolver', () => {
   it('returns null when skill directory does not exist', async () => {
     const resolver = new LocalSkillsBundleResolver({
       rootPath: tmp,
-      fs: realFs,
+      fs: realFs
     });
 
     const result = await resolver.resolve({ bundleId: 'test-skill', bundleVersion: 'latest' });
@@ -90,7 +90,7 @@ describe('LocalSkillsBundleResolver', () => {
   it('builds zip bundle from local files', async () => {
     const resolver = new LocalSkillsBundleResolver({
       rootPath: tmp,
-      fs: realFs,
+      fs: realFs
     });
 
     const skillDir = path.join(tmp, 'skills', 'test-skill');
@@ -109,7 +109,7 @@ describe('LocalSkillsBundleResolver', () => {
   it('handles subdirectories', async () => {
     const resolver = new LocalSkillsBundleResolver({
       rootPath: tmp,
-      fs: realFs,
+      fs: realFs
     });
 
     const skillDir = path.join(tmp, 'skills', 'test-skill');
@@ -126,7 +126,7 @@ describe('LocalSkillsBundleResolver', () => {
     const resolver = new LocalSkillsBundleResolver({
       rootPath: tmp,
       skillsPath: 'custom-skills',
-      fs: realFs,
+      fs: realFs
     });
 
     const skillDir = path.join(tmp, 'custom-skills', 'test-skill');
@@ -142,7 +142,7 @@ describe('LocalAwesomeCopilotBundleResolver', () => {
   it('returns null when collection file does not exist', async () => {
     const resolver = new LocalAwesomeCopilotBundleResolver({
       rootPath: tmp,
-      fs: realFs,
+      fs: realFs
     });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
@@ -152,7 +152,7 @@ describe('LocalAwesomeCopilotBundleResolver', () => {
   it('builds zip bundle from local collection', async () => {
     const resolver = new LocalAwesomeCopilotBundleResolver({
       rootPath: tmp,
-      fs: realFs,
+      fs: realFs
     });
 
     const collectionsDir = path.join(tmp, 'collections');
@@ -173,7 +173,7 @@ describe('LocalAwesomeCopilotBundleResolver', () => {
   it('skips missing items', async () => {
     const resolver = new LocalAwesomeCopilotBundleResolver({
       rootPath: tmp,
-      fs: realFs,
+      fs: realFs
     });
 
     const collectionsDir = path.join(tmp, 'collections');
@@ -190,7 +190,7 @@ describe('LocalAwesomeCopilotBundleResolver', () => {
     const resolver = new LocalAwesomeCopilotBundleResolver({
       rootPath: tmp,
       collectionsPath: 'custom-collections',
-      fs: realFs,
+      fs: realFs
     });
 
     const collectionsDir = path.join(tmp, 'custom-collections');

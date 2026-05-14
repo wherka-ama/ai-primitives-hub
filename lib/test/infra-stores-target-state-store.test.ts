@@ -9,12 +9,12 @@ import {
   it,
 } from 'vitest';
 import {
+  type TargetState,
+  TargetStateStore,
+} from '../src/infra/stores/target-state-store';
+import {
   createNodeFsAdapter,
 } from './cli/helpers/node-fs-adapter';
-import {
-  TargetStateStore,
-  type TargetState,
-} from '../src/infra/stores/target-state-store';
 
 let tmp: string;
 const realFs = createNodeFsAdapter();
@@ -34,9 +34,9 @@ describe('TargetStateStore', () => {
     const state: TargetState = {
       targetName: 'test-target',
       lastInstalledBundles: [
-        { bundleId: 'bundle1', version: '1.0.0', installedAt: '2024-01-01T00:00:00Z' },
+        { bundleId: 'bundle1', version: '1.0.0', installedAt: '2024-01-01T00:00:00Z' }
       ],
-      lastUsedAt: '2024-01-01T00:00:00Z',
+      lastUsedAt: '2024-01-01T00:00:00Z'
     };
     await store.save(state);
     const loaded = await store.load('test-target');
@@ -63,18 +63,18 @@ describe('TargetStateStore', () => {
     const state1: TargetState = {
       targetName: 'target1',
       lastInstalledBundles: [{ bundleId: 'bundle1', version: '1.0.0', installedAt: '2024-01-01T00:00:00Z' }],
-      lastUsedAt: '2024-01-01T00:00:00Z',
+      lastUsedAt: '2024-01-01T00:00:00Z'
     };
     const state2: TargetState = {
       targetName: 'target2',
       lastInstalledBundles: [{ bundleId: 'bundle2', version: '2.0.0', installedAt: '2024-01-02T00:00:00Z' }],
-      lastUsedAt: '2024-01-02T00:00:00Z',
+      lastUsedAt: '2024-01-02T00:00:00Z'
     };
     await store.save(state1);
     await store.save(state2);
     const loaded = await store.loadAll();
-    expect(loaded.targets['target1']).toEqual(state1);
-    expect(loaded.targets['target2']).toEqual(state2);
+    expect(loaded.targets.target1).toEqual(state1);
+    expect(loaded.targets.target2).toEqual(state2);
   });
 
   it('removes target state', async () => {
@@ -83,7 +83,7 @@ describe('TargetStateStore', () => {
     const state: TargetState = {
       targetName: 'test-target',
       lastInstalledBundles: [{ bundleId: 'bundle1', version: '1.0.0', installedAt: '2024-01-01T00:00:00Z' }],
-      lastUsedAt: '2024-01-01T00:00:00Z',
+      lastUsedAt: '2024-01-01T00:00:00Z'
     };
     await store.save(state);
     await store.remove('test-target');
@@ -104,12 +104,12 @@ describe('TargetStateStore', () => {
     const state1: TargetState = {
       targetName: 'target1',
       lastInstalledBundles: [{ bundleId: 'bundle1', version: '1.0.0', installedAt: '2024-01-01T00:00:00Z' }],
-      lastUsedAt: '2024-01-01T00:00:00Z',
+      lastUsedAt: '2024-01-01T00:00:00Z'
     };
     const state2: TargetState = {
       targetName: 'target2',
       lastInstalledBundles: [{ bundleId: 'bundle2', version: '2.0.0', installedAt: '2024-01-02T00:00:00Z' }],
-      lastUsedAt: '2024-01-02T00:00:00Z',
+      lastUsedAt: '2024-01-02T00:00:00Z'
     };
     await store.save(state1);
     await store.save(state2);
@@ -130,7 +130,7 @@ describe('TargetStateStore', () => {
     const state: TargetState = {
       targetName: 'test-target',
       lastInstalledBundles: [{ bundleId: 'bundle1', version: '1.0.0', installedAt: '2024-01-01T00:00:00Z' }],
-      lastUsedAt: '2024-01-01T00:00:00Z',
+      lastUsedAt: '2024-01-01T00:00:00Z'
     };
     await store.save(state);
     const loaded = await store.load('test-target');

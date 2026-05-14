@@ -1,5 +1,5 @@
-import * as fs from 'node:fs/promises';
 import * as syncFs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {

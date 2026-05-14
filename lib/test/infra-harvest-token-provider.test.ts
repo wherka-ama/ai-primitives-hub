@@ -36,7 +36,7 @@ describe('token-provider', () => {
     it('returns explicit token when provided', async () => {
       const mockResolver: TokenResolver = {
         readEnv: () => undefined,
-        readGhCli: async () => undefined,
+        readGhCli: async () => undefined
       };
       const result = await resolveGithubToken({ explicit: 'explicit-token' }, mockResolver);
       expect(result).toEqual({ token: 'explicit-token', source: 'explicit' });
@@ -45,7 +45,7 @@ describe('token-provider', () => {
     it('skips empty explicit token', async () => {
       const mockResolver: TokenResolver = {
         readEnv: () => 'env-token',
-        readGhCli: async () => undefined,
+        readGhCli: async () => undefined
       };
       const result = await resolveGithubToken({ explicit: '' }, mockResolver);
       expect(result).toEqual({ token: 'env-token', source: 'env:GITHUB_TOKEN' });
@@ -54,7 +54,7 @@ describe('token-provider', () => {
     it('returns GITHUB_TOKEN from env', async () => {
       const mockResolver: TokenResolver = {
         readEnv: (name) => name === 'GITHUB_TOKEN' ? 'gh-token' : undefined,
-        readGhCli: async () => undefined,
+        readGhCli: async () => undefined
       };
       const result = await resolveGithubToken({}, mockResolver);
       expect(result).toEqual({ token: 'gh-token', source: 'env:GITHUB_TOKEN' });
@@ -63,7 +63,7 @@ describe('token-provider', () => {
     it('returns GH_TOKEN from env', async () => {
       const mockResolver: TokenResolver = {
         readEnv: (name) => name === 'GH_TOKEN' ? 'gh-cli-token' : undefined,
-        readGhCli: async () => undefined,
+        readGhCli: async () => undefined
       };
       const result = await resolveGithubToken({}, mockResolver);
       expect(result).toEqual({ token: 'gh-cli-token', source: 'env:GH_TOKEN' });
@@ -72,11 +72,15 @@ describe('token-provider', () => {
     it('prefers GITHUB_TOKEN over GH_TOKEN', async () => {
       const mockResolver: TokenResolver = {
         readEnv: (name) => {
-          if (name === 'GITHUB_TOKEN') return 'gh-token';
-          if (name === 'GH_TOKEN') return 'gh-cli-token';
+          if (name === 'GITHUB_TOKEN') {
+            return 'gh-token';
+          }
+          if (name === 'GH_TOKEN') {
+            return 'gh-cli-token';
+          }
           return undefined;
         },
-        readGhCli: async () => undefined,
+        readGhCli: async () => undefined
       };
       const result = await resolveGithubToken({}, mockResolver);
       expect(result).toEqual({ token: 'gh-token', source: 'env:GITHUB_TOKEN' });
@@ -85,7 +89,7 @@ describe('token-provider', () => {
     it('returns gh-cli token when env vars not set', async () => {
       const mockResolver: TokenResolver = {
         readEnv: () => undefined,
-        readGhCli: async () => 'cli-token',
+        readGhCli: async () => 'cli-token'
       };
       const result = await resolveGithubToken({}, mockResolver);
       expect(result).toEqual({ token: 'cli-token', source: 'gh-cli' });
@@ -94,7 +98,7 @@ describe('token-provider', () => {
     it('returns none when no token available', async () => {
       const mockResolver: TokenResolver = {
         readEnv: () => undefined,
-        readGhCli: async () => undefined,
+        readGhCli: async () => undefined
       };
       const result = await resolveGithubToken({}, mockResolver);
       expect(result).toEqual({ token: undefined, source: 'none' });
