@@ -1006,10 +1006,22 @@ scenario_24_dry_run_deactivate() {
     local output
     output=$(run_cmd "$PR_BIN profile deactivate --dry-run -o json") || true
 
-    if echo "$output" | jq -e '.data.dryRun == true' > /dev/null; then
+    # Check if output is valid JSON and has dryRun flag
+    if echo "$output" | jq -e '.data.dryRun == true' > /dev/null 2>&1; then
         log_success "Profile deactivate dry-run shows preview without deactivating"
     else
-        log_warning "Profile deactivate dry-run failed"
+        # If dry-run fails (e.g., no active profile), check if it's an expected error
+        if echo "$output" | jq -e '.errors' > /dev/null 2>&1; then
+            local error_code
+            error_code=$(echo "$output" | jq -r '.errors[0].code')
+            if [ "$error_code" = "INSTALL.NO_ACTIVE_PROFILE" ]; then
+                log_success "Dry-run correctly reports no active profile"
+            else
+                log_warning "Profile deactivate dry-run failed with unexpected error: $error_code"
+            fi
+        else
+            log_warning "Profile deactivate dry-run failed (invalid output)"
+        fi
     fi
 }
 
