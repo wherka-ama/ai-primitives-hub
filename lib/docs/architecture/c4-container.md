@@ -69,10 +69,18 @@ flowchart TB
 
 ### CLI Interface
 The entry point for users. Provides a unified `prompt-registry` binary with subcommands:
-- `collection validate|list`
+- `init` - Interactive setup wizard (F-01)
+- `collection validate|list|affected`
 - `bundle build|manifest`
-- `index search|harvest|shortlist`
-- `install|target|doctor`
+- `hub add|use|sync|remove|list`
+- `profile activate|deactivate|publish|list`
+- `index search|harvest|shortlist|export|stats|eval|bench`
+- `install|uninstall`
+- `target add|remove|list|types`
+- `status` - Show current configuration (F-03)
+- `search` - Alias for index search (F-07)
+- `doctor` - Diagnostics
+- `config get|list`
 
 **Technology**: Node.js 18+, TypeScript, compiled to JavaScript
 

@@ -168,30 +168,38 @@ sequenceDiagram
     FS-->>Targets: Target config
     Targets-->>CLI: Target object
 
-    CLI->>Installer: install(bundlePath, target)
+    alt Dry-run mode
+        CLI->>Installer: install(bundlePath, target, dryRun=true)
+        Installer->>Validator: validateBundle(bundlePath)
+        Validator-->>Installer: Valid manifest
+        Installer-->>CLI: Preview of changes without installing
+        CLI-->>User: [dry-run] Would install to vscode
+    else Normal install
+        CLI->>Installer: install(bundlePath, target)
 
-    Installer->>Validator: validateBundle(bundlePath)
-    Validator->>FS: Read deployment-manifest.yml
-    FS-->>Validator: Manifest
-    Validator->>Validator: Check schema
-    Validator-->>Installer: Valid manifest
+        Installer->>Validator: validateBundle(bundlePath)
+        Validator->>FS: Read deployment-manifest.yml
+        FS-->>Validator: Manifest
+        Validator->>Validator: Check schema
+        Validator-->>Installer: Valid manifest
 
-    Installer->>Scope: install(manifest, files)
-    Scope->>FS: Write prompt files
-    Scope->>FS: Write instruction files
-    Scope->>FS: Write skill directories
-    FS-->>Scope: Confirm writes
-    Scope-->>Installer: Installed paths
+        Installer->>Scope: install(manifest, files)
+        Scope->>FS: Write prompt files
+        Scope->>FS: Write instruction files
+        Scope->>FS: Write skill directories
+        FS-->>Scope: Confirm writes
+        Scope-->>Installer: Installed paths
 
-    Installer->>Lockfile: addBundle(bundleId, manifest)
-    Lockfile->>FS: Read prompt-registry.lock.json
-    Lockfile->>Lockfile: Add entry
-    Lockfile->>FS: Write lockfile
-    FS-->>Lockfile: Confirm
-    Lockfile-->>Installer: Updated lockfile
+        Installer->>Lockfile: addBundle(bundleId, manifest)
+        Lockfile->>FS: Read prompt-registry.lock.json
+        Lockfile->>Lockfile: Add entry
+        Lockfile->>FS: Write lockfile
+        FS-->>Lockfile: Confirm
+        Lockfile-->>Installer: Updated lockfile
 
-    Installer-->>CLI: Success
-    CLI-->>User: ✓ Installed to vscode
+        Installer-->>CLI: Success
+        CLI-->>User: ✓ Installed to vscode
+    end
 ```
 
 ## 6. Publish Flow
@@ -265,7 +273,104 @@ sequenceDiagram
     Token-->>Client: Token or undefined
 ```
 
-## 8. Error Handling Flow
+## 8. Profile Activation Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as Profile Command
+    participant Activator as ProfileActivator
+    participant Hub as HubManager
+    participant Resolver as SourceDispatcher
+    participant Installer as BundleInstaller
+    participant Lockfile as LockfileManager
+    participant Scope as ScopeWriter
+    participant FS as File System
+
+    User->>CLI: prompt-registry profile activate backend --target vscode
+    CLI->>Hub: getActiveHub()
+    Hub->>FS: Read active-hub.json
+    FS-->>Hub: Hub ID
+    Hub-->>CLI: Hub config
+
+    CLI->>Hub: getProfile('backend')
+    Hub->>FS: Read hub-config.yml
+    FS-->>Hub: Profile definition
+    Hub-->>CLI: Profile with bundles
+
+    alt Dry-run mode
+        CLI->>Activator: activate(profile, dryRun=true)
+        Activator->>Activator: Resolve all bundles
+        Activator-->>CLI: Preview of bundles and targets
+        CLI-->>User: [dry-run] Would activate profile with N bundles
+    else Normal activation
+        CLI->>Activator: activate(profile, targets)
+
+        Activator->>Resolver: resolveAll(bundles)
+        loop For each bundle
+            Resolver->>Resolver: Get resolver for source type
+            Resolver-->>Resolver: Resolver instance
+            Resolver->>Resolver: resolve(bundle)
+            Resolver-->>Activator: Installable
+        end
+
+        Activator->>Installer: installAll(bundles)
+        loop For each bundle
+            Installer->>Scope: install(manifest, files)
+            Scope->>FS: Write files
+            FS-->>Scope: Confirm
+        end
+
+        Activator->>Lockfile: setActiveProfile(profileId)
+        Lockfile->>FS: Write lockfile
+        FS-->>Lockfile: Confirm
+
+        Activator-->>CLI: Success
+        CLI-->>User: ✓ Activated profile backend
+    end
+```
+
+## 9. Profile Deactivation Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as Profile Command
+    participant Lockfile as LockfileManager
+    participant Installer as BundleInstaller
+    participant Scope as ScopeWriter
+    participant FS as File System
+
+    User->>CLI: prompt-registry profile deactivate
+    CLI->>Lockfile: getActiveProfile()
+    Lockfile->>FS: Read prompt-registry.lock.json
+    FS-->>Lockfile: Lockfile data
+    Lockfile-->>CLI: Active profile
+
+    alt Dry-run mode
+        CLI->>Installer: uninstallAll(dryRun=true)
+        Installer-->>CLI: Preview of files to remove
+        CLI-->>User: [dry-run] Would deactivate profile and remove N files
+    else Normal deactivation
+        CLI->>Lockfile: getProfileBundles()
+        Lockfile-->>CLI: Bundle list
+
+        CLI->>Installer: uninstallAll(bundles)
+        loop For each bundle
+            Installer->>Scope: remove(bundle)
+            Scope->>FS: Delete files
+            FS-->>Scope: Confirm
+        end
+
+        CLI->>Lockfile: clearActiveProfile()
+        Lockfile->>FS: Write lockfile
+        FS-->>Lockfile: Confirm
+
+        CLI-->>User: ✓ Deactivated profile
+    end
+```
+
+## 10. Error Handling Flow
 
 ```mermaid
 sequenceDiagram
