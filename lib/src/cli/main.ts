@@ -77,6 +77,9 @@ import {
   IndexStatsCommand,
 } from './commands/index-stats';
 import {
+  InitCommand,
+} from './commands/init';
+import {
   InstallCommand,
 } from './commands/install';
 import {
@@ -102,6 +105,9 @@ import {
   SourceListCommand,
   SourceRemoveCommand,
 } from './commands/source';
+import {
+  StatusCommand,
+} from './commands/status';
 import {
   TargetAddCommand,
 } from './commands/target-add';
@@ -191,7 +197,9 @@ export const main = async (argv: string[]): Promise<number> => {
     ProfileCreateCommand,
     ProfileEditCommand,
     InstallCommand,
-    UninstallCommand
+    UninstallCommand,
+    InitCommand,
+    StatusCommand
   ];
 
   return runCli(argv, {

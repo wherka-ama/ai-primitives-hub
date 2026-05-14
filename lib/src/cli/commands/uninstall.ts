@@ -147,6 +147,14 @@ export class UninstallCommand extends BaseUninstallCommand {
       commitMode: this.commitMode as RepositoryCommitMode | undefined
     };
 
+    // F-13: auto-locate prompt-registry.lock.json when no mode flag supplied
+    if (!opts.bundle && !opts.lockfile && !opts.all) {
+      const defaultLock = path.join(ctx.cwd(), 'prompt-registry.lock.json');
+      if (await ctx.fs.exists(defaultLock)) {
+        opts.lockfile = defaultLock;
+      }
+    }
+
     const { noBundle, noLockfile, noAll } = validateUninstallInputs(opts);
     if (noBundle && noLockfile && noAll) {
       return failWith(ctx, fmt, new RegistryError({

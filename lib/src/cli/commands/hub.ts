@@ -177,10 +177,13 @@ export class HubAddCommand extends BaseHubCommand {
       ref: this.refRef
     }, this.hubId);
 
+    // F-05: sync immediately after import so profiles are usable right away
+    await mgr.syncHub(id);
+
     formatOutput({
       ctx, command: 'hub.add', output: fmt, status: 'ok',
-      data: { id, location, type: refType },
-      textRenderer: (d) => `Imported hub "${d.id}" from ${d.type}:${d.location}.\n`
+      data: { id, location, type: refType, synced: true },
+      textRenderer: (d) => `Imported and synced hub "${d.id}" from ${d.type}:${d.location}.\n`
     });
     return 0;
   }
