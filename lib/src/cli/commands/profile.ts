@@ -635,9 +635,12 @@ async function updateActivationLockfile(
       const writtenFiles = out.written[t] || [];
       const fileChecksums: Record<string, string> = {};
       const crypto = await import('node:crypto');
+      const relativeFiles: string[] = [];
       for (const f of writtenFiles) {
         const bytes = await ctx.fs.readFile(f);
         fileChecksums[f] = crypto.createHash('sha256').update(bytes).digest('hex');
+        // Store paths relative to ctx.cwd() for lockfile portability
+        relativeFiles.push(path.relative(ctx.cwd(), f));
       }
       // Use profile reference ID for lockfile to match display
       nextLock = upsertEntry(nextLock, {
@@ -646,7 +649,7 @@ async function updateActivationLockfile(
         bundleId: bundleRef.id,
         bundleVersion: bundleRef.version === 'latest' ? out.state.syncedBundleVersions[bundleRef.id] : bundleRef.version,
         installedAt: new Date().toISOString(),
-        files: writtenFiles,
+        files: relativeFiles,
         fileChecksums
       });
       nextLock = upsertSource(nextLock, sourceId, { type: src.type, url: src.url });
