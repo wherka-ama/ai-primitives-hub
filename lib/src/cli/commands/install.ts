@@ -35,11 +35,20 @@ import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
 import {
+  CompositeHubResolver,
+  GitHubHubResolver,
+  LocalHubResolver,
+  UrlHubResolver,
+} from '../../infra/resolvers/hub-resolver';
+import {
   GitHubBundleResolver,
 } from '../../infra/resolvers/github-resolver';
 import {
   readLocalBundle,
 } from '../../infra/resolvers/local-resolver';
+import {
+  ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
 import {
   type LockfileEntry,
   type LockfileSource,
@@ -48,6 +57,9 @@ import {
   upsertSource,
   writeLockfile,
 } from '../../infra/stores/json-lockfile-store';
+import {
+  HubStore,
+} from '../../infra/stores/yaml-hub-store';
 import {
   TargetStateStore,
 } from '../../infra/stores/target-state-store';
@@ -63,6 +75,11 @@ import {
   RepositoryScopeWriter,
   RepositoryScopeWriterAdapter,
 } from '../../infra/writers/repo-scope-writer';
+import {
+  HubManager,
+  ProfileActivator,
+  resolveUserConfigPaths,
+} from '../../app/registry';
 import {
   type HttpClient,
   type TokenProvider,
@@ -215,13 +232,14 @@ export class InstallCommand extends BaseInstallCommand {
     };
 
     const { noBundle, noLockfile } = validateInstallInputs(opts);
-    if (noBundle && noLockfile && !opts.from) {
+    if (noBundle && noLockfile && !opts.from && !opts.source) {
       return failWith(ctx, fmt, new RegistryError({
         code: 'USAGE.MISSING_FLAG',
-        message: 'install: provide either <bundle-id> (imperative), --lockfile <path> (declarative), or --from <path> (local directory)',
+        message: 'install: provide either <bundle-id> (imperative), --lockfile <path> (declarative), --from <path> (local directory), or --source <hub-id> (list bundles)',
         hint: 'Examples:\n'
           + '  prompt-registry install --from <path> --target my-vscode\n'
-          + '  prompt-registry install --lockfile prompt-registry.lock.json'
+          + '  prompt-registry install --lockfile prompt-registry.lock.json\n'
+          + '  prompt-registry install --source amadeus-hub --target my-vscode'
       }));
     }
 
@@ -229,6 +247,19 @@ export class InstallCommand extends BaseInstallCommand {
       const targetName = await resolveTargetName(opts, ctx);
       checkAllowTarget(targetName, opts);
       const target = await resolveTarget(targetName, ctx);
+
+      // F-13: auto-locate lockfile when no mode flag supplied
+      if (noBundle && noLockfile && !opts.from && !opts.source) {
+        const foundLock = await findLockfile(ctx.cwd(), ctx.fs);
+        if (foundLock !== null) {
+          opts.lockfile = foundLock;
+        }
+      }
+
+      // List bundles from source when --source is provided without bundle ID
+      if (opts.source !== undefined && opts.source.length > 0 && noBundle) {
+        return await listSourceBundles(opts, ctx, fmt);
+      }
 
       if (opts.from !== undefined && opts.from.length > 0) {
         return await performLocalInstall(opts, target, ctx, fmt);
@@ -284,6 +315,28 @@ const createWriterFactory = (
 };
 
 /**
+ * Find lockfile by searching current directory and parent directories.
+ * @param startDir Starting directory.
+ * @param fs Filesystem adapter.
+ * @returns Lockfile path if found, null otherwise.
+ */
+async function findLockfile(startDir: string, fs: Context['fs']): Promise<string | null> {
+  let currentDir = startDir;
+  while (true) {
+    const lockfile = path.join(currentDir, 'prompt-registry.lock.json');
+    if (await fs.exists(lockfile)) {
+      return lockfile;
+    }
+    const parent = path.dirname(currentDir);
+    if (parent === currentDir) {
+      break; // Reached root
+    }
+    currentDir = parent;
+  }
+  return null;
+}
+
+/**
  * Validate install inputs.
  * @param opts Install options.
  * @returns Validation result.
@@ -292,6 +345,72 @@ function validateInstallInputs(opts: InstallOptions): { noBundle: boolean; noLoc
   const noBundle = opts.bundle === undefined || opts.bundle.length === 0;
   const noLockfile = opts.lockfile === undefined || opts.lockfile.length === 0;
   return { noBundle, noLockfile };
+}
+
+/**
+ * List bundles from a hub source.
+ * @param opts Install options.
+ * @param ctx CLI context.
+ * @param fmt Output format.
+ * @returns Exit code.
+ */
+async function listSourceBundles(
+  opts: InstallOptions,
+  ctx: Context,
+  fmt: OutputFormat
+): Promise<number> {
+  const hubId = opts.source as string;
+
+  try {
+    const userPaths = resolveUserConfigPaths(ctx.env);
+    const httpClient = new NodeHttpClient();
+    const tokenProvider = defaultTokenProvider(ctx.env);
+    const resolver = new CompositeHubResolver(
+      new GitHubHubResolver(httpClient, tokenProvider),
+      new LocalHubResolver(ctx.fs),
+      new UrlHubResolver(httpClient, tokenProvider)
+    );
+    const mgr = new HubManager(
+      new HubStore(userPaths.hubs, ctx.fs),
+      new ActiveHubStore(userPaths.activeHub, ctx.fs),
+      resolver
+    );
+
+    await mgr.syncHub(hubId);
+    const active = await mgr.getActiveHub();
+    if (active?.id !== hubId) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'HUB.NOT_FOUND',
+        message: `install: hub "${hubId}" is not active or not found`,
+        hint: `Run \`prompt-registry hub use ${hubId}\` first.`
+      }));
+    }
+
+    const bundles = active.config.profiles.flatMap((p: { bundles: Array<{ id: string; version: string; source: string }> }) => p.bundles);
+    formatOutput({
+      ctx,
+      command: 'install',
+      output: fmt,
+      status: 'ok',
+      data: {
+        hubId,
+        bundles: bundles.map((b: { id: string; version: string; source: string }) => ({ id: b.id, version: b.version, source: b.source }))
+      },
+      textRenderer: (d) => `Available bundles in hub "${d.hubId}":\n`
+        + d.bundles.map((b: { id: string; version: string; source: string }) => `  ${b.id}@${b.version} (source: ${b.source})`).join('\n')
+        + '\n\nInstall with: prompt-registry install <bundle-id> --source <hub-id> --target <target>\n'
+    });
+    return 0;
+  } catch (err) {
+    if (err instanceof RegistryError) {
+      return failWith(ctx, fmt, err);
+    }
+    return failWith(ctx, fmt, new RegistryError({
+      code: 'HUB.LOAD_FAILED',
+      message: `Failed to load hub "${hubId}": ${err instanceof Error ? err.message : String(err)}`,
+      cause: err instanceof Error ? err : undefined
+    }));
+  }
 }
 
 /**
