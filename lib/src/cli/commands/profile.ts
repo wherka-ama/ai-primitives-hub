@@ -55,6 +55,12 @@ import {
   HubStore,
 } from '../../infra/stores/yaml-hub-store';
 import {
+  BuiltInOnlyLayoutConfigLoader,
+} from '../../infra/stores/layout-config-store';
+import {
+  resolveLayout,
+} from '../../infra/writers/file-tree-writer';
+import {
   type HttpClient,
   type TokenProvider,
 } from '../../ports/http';
@@ -821,31 +827,50 @@ async function cleanupDeactivatedLockfile(ctx: Context, lockPath: string): Promi
   }
 
   // Clean up empty kind route directories (created by eager mkdir in writer)
-  // Use recursive remove since after file removal these should only contain empty subdirectories
-  const kindDirs = ['instructions', 'prompts', 'skills', 'chatmodes', 'steering'];
-  for (const kind of kindDirs) {
-    try {
-      const kindDir = path.join(ctx.cwd(), '.github', kind);
-      if (await ctx.fs.exists(kindDir)) {
-        await ctx.fs.remove(kindDir, { recursive: true });
-      }
-    } catch {
-      // Best-effort cleanup
-    }
-  }
-
-  // Clean up the top-level .github directory if empty
+  // Use adaptive cleanup based on target layouts
   try {
-    const githubDir = path.join(ctx.cwd(), '.github');
-    if (await ctx.fs.exists(githubDir)) {
-      const entries = await ctx.fs.readDir(githubDir);
-      if (entries.length === 0) {
-        await ctx.fs.remove(githubDir);
+    const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
+    const layoutLoader = new BuiltInOnlyLayoutConfigLoader();
+    const env = process.env as Record<string, string | undefined>;
+
+    for (const entry of existing.entries) {
+      const target = targets.find((t) => t.name === entry.target);
+      if (!target) {
+        continue;
+      }
+      const layout = resolveLayout(target);
+
+      // Get the base directory
+      const baseDir = layout.baseDir.replace(/\$\{workspaceRoot\}/g, ctx.cwd()).replace(/\$\{HOME\}/g, env.HOME ?? '').replace(/^~/, env.HOME ?? '');
+
+      // Clean up each kind route directory recursively
+      for (const outPrefix of Object.values(layout.kindRoutes)) {
+        const kindDir = path.join(baseDir, outPrefix);
+        try {
+          if (await ctx.fs.exists(kindDir)) {
+            await ctx.fs.remove(kindDir, { recursive: true });
+          }
+        } catch {
+          // Best-effort cleanup
+        }
+      }
+
+      // Clean up the base directory if empty
+      try {
+        if (await ctx.fs.exists(baseDir)) {
+          const entries = await ctx.fs.readDir(baseDir);
+          if (entries.length === 0) {
+            await ctx.fs.remove(baseDir);
+          }
+        }
+      } catch {
+        // Best-effort cleanup
       }
     }
   } catch {
-    // Best-effort cleanup
+    // Best-effort: if layout resolution fails, skip adaptive cleanup
   }
+
   await writeLockfile(lockPath, { ...existing, entries: [], useProfile: undefined }, ctx.fs);
 }
 
