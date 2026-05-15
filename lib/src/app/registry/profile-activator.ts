@@ -264,8 +264,7 @@ export class ProfileActivator {
     }
     const versions: Record<string, string> = {};
     const bundleIdMap: Record<string, string> = {}; // profile bundle ref id -> manifest id
-    for (let i = 0; i < materialized.length; i++) {
-      const m = materialized[i];
+    for (const [i, m] of materialized.entries()) {
       const r = resolved[i];
       versions[m.bundleId] = m.bundleVersion;
       bundleIdMap[r.bundleRef.id] = m.bundleId;

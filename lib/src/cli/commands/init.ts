@@ -18,9 +18,9 @@ import {
   resolveUserConfigPaths,
 } from '../../app/registry';
 import {
+  type Target,
   TARGET_TYPES,
   type TargetType,
-  type Target,
 } from '../../domain/install';
 import {
   envTokenProvider,
@@ -338,11 +338,11 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
     }
 
     const data = {
-      target: { 
-        name: targetName, 
-        type: targetType, 
-        file: result.file, 
-        created: result.created ?? false 
+      target: {
+        name: targetName,
+        type: targetType,
+        file: result.file,
+        created: result.created ?? false
       },
       hub: hubId === null ? null : { id: hubId },
       steps
@@ -362,19 +362,13 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
 
         // Verbose output with file paths and verification commands
         if (opts.verbose) {
-          lines.push('\nConfiguration:\n');
-          lines.push(`  Config file: ${d.target.file}\n`);
-          lines.push(`  Target name: ${d.target.name}\n`);
-          lines.push(`  Target type: ${d.target.type}\n`);
+          lines.push('\nConfiguration:\n', `  Config file: ${d.target.file}\n`, `  Target name: ${d.target.name}\n`, `  Target type: ${d.target.type}\n`);
           if (d.hub !== null) {
             lines.push(`  Hub ID: ${d.hub.id}\n`);
           }
-          lines.push('\nVerification commands:\n');
-          lines.push('  prompt-registry status\n');
-          lines.push('  prompt-registry target list\n');
+          lines.push('\nVerification commands:\n', '  prompt-registry status\n', '  prompt-registry target list\n');
           if (d.hub !== null) {
-            lines.push('  prompt-registry hub list\n');
-            lines.push('  prompt-registry profile list\n');
+            lines.push('  prompt-registry hub list\n', '  prompt-registry profile list\n');
           }
         }
 
@@ -386,8 +380,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
           );
         } else {
           if (opts.verbose) {
-            lines.push('\nAvailable profiles:\n');
-            lines.push('  Run: prompt-registry profile list\n');
+            lines.push('\nAvailable profiles:\n', '  Run: prompt-registry profile list\n');
           }
           lines.push('\nNext step:\n', '  prompt-registry profile activate <profileId>\n');
         }
