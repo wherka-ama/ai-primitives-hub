@@ -90,9 +90,8 @@ export interface VsCodeTarget extends ScopedTargetBase, PathAndKindsTargetFields
 /**
  * copilot-cli entry.
  */
-export interface CopilotCliTarget extends TargetCommon, PathAndKindsTargetFields, RepositoryTargetFields {
+export interface CopilotCliTarget extends ScopedTargetBase, PathAndKindsTargetFields, RepositoryTargetFields {
   type: 'copilot-cli';
-  scope: 'user';
 }
 
 /**

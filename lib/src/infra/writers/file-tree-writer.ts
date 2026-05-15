@@ -156,18 +156,32 @@ const DEFAULT_LAYOUT_BY_TYPE: Record<Target['type'], (t: Target) => TargetLayout
     };
   },
 
-  // copilot-cli is user-scope only. Base: ~/.copilot (not ~/.config/github-copilot).
+  // copilot-cli supports both user and repository scope. When in repository scope,
+  // resources are placed under .github/ similar to vscode. Base: ~/.copilot (not ~/.config/github-copilot).
   // Skills go to skills/ (Agent Skills standard — SKILL.md + resources).
   // agents/: NOT routed — Copilot CLI agents are plugin-distributed, not user-level files.
   // eslint-disable-next-line @typescript-eslint/naming-convention -- target type identifier must use kebab-case to match TargetType discriminant
-  'copilot-cli': (t: Target): TargetLayout => ({
-    baseDir: t.path ?? '${HOME}/.copilot',
-    kindRoutes: {
-      'prompts/': 'prompts/',
-      'skills/': 'skills/'
-    },
-    skipPaths: ['deployment-manifest.yml', 'README.md']
-  }),
+  'copilot-cli': (t: Target): TargetLayout => {
+    if (t.scope === 'repository') {
+      const base = t.workspaceRoot ?? t.path ?? '.';
+      return {
+        baseDir: base,
+        kindRoutes: {
+          'prompts/': '.github/prompts/',
+          'skills/': '.github/skills/'
+        },
+        skipPaths: ['deployment-manifest.yml', 'README.md']
+      };
+    }
+    return {
+      baseDir: t.path ?? '${HOME}/.copilot',
+      kindRoutes: {
+        'prompts/': 'prompts/',
+        'skills/': 'skills/'
+      },
+      skipPaths: ['deployment-manifest.yml', 'README.md']
+    };
+  },
   // Kiro uses "steering files" for prompts/instructions; agents go to
   // .kiro/agents/ (JSON config format). No chatmodes concept.
   // skills/ → skills/ (Kiro supports Agent Skills standard at ~/.kiro/skills/).

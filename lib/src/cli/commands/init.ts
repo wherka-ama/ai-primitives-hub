@@ -223,8 +223,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
           { name: 'User scope (installed in home directory)', value: 'user' },
           { name: 'Project scope (installed in current project)', value: 'repository' }
         ],
-        default: 'user',
-        when: (a: { ide: string }) => a.ide !== 'copilot-cli'
+        default: 'user'
       },
       {
         type: 'confirm',
@@ -256,11 +255,6 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
     targetType = answers.ide as TargetType;
     targetName = DEFAULT_TARGET_NAME;
     targetScope = answers.scope ?? 'user';
-
-    // Force user scope for copilot-cli (it doesn't support repository scope)
-    if (targetType === 'copilot-cli') {
-      targetScope = 'user';
-    }
 
     // Check if target already exists
     const currentTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
@@ -297,11 +291,6 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
     }
   }
 
-  // Force user scope for copilot-cli (it doesn't support repository scope)
-  if (targetType === 'copilot-cli') {
-    targetScope = 'user';
-  }
-
   if (!TARGET_TYPES.includes(targetType)) {
     return failWith(ctx, fmt, new RegistryError({
       code: 'USAGE.MISSING_FLAG',
@@ -321,11 +310,10 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
       const { file } = await findProjectConfigPath({ cwd: ctx.cwd(), fs: ctx.fs });
       result = { file, created: false };
     } else {
-      // Create new target with appropriate scope
-      const scope = targetType === 'copilot-cli' ? 'user' : targetScope;
+      // Create new target with selected scope
       result = await addTarget(
         { cwd: ctx.cwd(), fs: ctx.fs },
-        { name: targetName, type: targetType as any, scope } as Target
+        { name: targetName, type: targetType as any, scope: targetScope } as Target
       );
     }
 
