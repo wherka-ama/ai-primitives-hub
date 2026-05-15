@@ -67,9 +67,11 @@ export class GitHubBundleResolver implements BundleResolver {
 
   /**
    * Create a GitHubBundleResolver.
-   * @param opts Resolver options including repo slug, HTTP client, and token provider.
+   * @param opts Options for the resolver.
    */
-  public constructor(private readonly opts: GitHubResolverOptions) {}
+  constructor(private opts: GitHubResolverOptions) {
+    // Intentionally empty
+  }
 
   /**
    * Find an Installable for the given spec.
@@ -81,6 +83,12 @@ export class GitHubBundleResolver implements BundleResolver {
     if (releases.length === 0) {
       return null;
     }
+    // Extract the bundle name (collection) from the bundle ID to match against release tags.
+    // This makes the mechanism resilient to repository renames by separating the collection name
+    // from the repository name.
+    // For example, "Amadeus-xDLC-genai.clean-code-in-the-cloud-skills-collection-amadeus-microservice-coding-guidebook"
+    // should match release tags starting with "amadeus-microservice-coding-guidebook-".
+    const { collection: bundleName } = decomposeBundleId(spec.bundleId, this.opts.repoSlug);
     // I-004: real-world hubs use a variety of tag conventions:
     //   "vX.Y.Z"          (canonical semver tag)
     //   "X.Y.Z"           (semver without v)
@@ -89,9 +97,51 @@ export class GitHubBundleResolver implements BundleResolver {
     // Match all four when the caller asks for a specific version,
     // and extract the bare semver from the tag for `bundleVersion`.
     const wantVersion = spec.bundleVersion;
-    const release = wantVersion === undefined || wantVersion === 'latest'
-      ? releases.find((r) => r.draft !== true && r.prerelease !== true)
-      : releases.find((r) => extractSemver(r.tag_name) === wantVersion);
+    let release: GitHubRelease | undefined;
+    if (wantVersion === undefined || wantVersion === 'latest') {
+      // For multi-collection repositories, we need to find the highest semantic version
+      // for the specific collection, not just the first matching release.
+      // Filter releases by bundle name prefix and extract versions
+      const matchingReleases = releases.filter((r) => 
+        r.draft !== true && r.prerelease !== true && (bundleName === null || r.tag_name.startsWith(bundleName))
+      );
+      if (matchingReleases.length === 0) {
+        // If no matching releases found, try without the bundle name filter
+        // This is a fallback for cases where the bundle name extraction might not work
+        const allReleases = releases.filter((r) => r.draft !== true && r.prerelease !== true);
+        if (allReleases.length === 0) {
+          return null;
+        }
+        // Use the first non-draft, non-prerelease release
+        release = allReleases[0];
+      } else {
+        // Extract versions and sort by semantic version
+        const withVersions = matchingReleases
+          .map((r) => ({ release: r, version: extractSemver(r.tag_name) }))
+          .filter((item) => item.version !== null) as { release: GitHubRelease; version: string }[];
+        if (withVersions.length === 0) {
+          // Fallback to first matching release if no versions found
+          release = matchingReleases[0];
+        } else {
+          // Sort by semantic version (descending)
+          withVersions.sort((a, b) => {
+            const partsA = a.version.split('.').map(Number);
+            const partsB = b.version.split('.').map(Number);
+            for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+              const partA = partsA[i] ?? 0;
+              const partB = partsB[i] ?? 0;
+              if (partA !== partB) {
+                return partB - partA; // Descending order
+              }
+            }
+            return 0;
+          });
+          release = withVersions[0].release;
+        }
+      }
+    } else {
+      release = releases.find((r) => (bundleName === null || r.tag_name.startsWith(bundleName)) && extractSemver(r.tag_name) === wantVersion);
+    }
     if (release === undefined) {
       return null;
     }
@@ -145,6 +195,8 @@ export class GitHubBundleResolver implements BundleResolver {
 
   /**
    * GET /repos/{owner}/{repo}/releases. Cached per resolver instance.
+   * Handles GitHub repository redirects (e.g., renames) by following
+   * the redirect and updating the repoSlug to the final resolved name.
    * @returns Releases array (newest first per GitHub default ordering).
    */
   private async listReleases(): Promise<GitHubRelease[]> {
@@ -164,6 +216,15 @@ export class GitHubBundleResolver implements BundleResolver {
       throw new Error(
         `GitHub API ${String(res.statusCode)} for ${url}; body: ${truncate(decode(res.body), 200)}`
       );
+    }
+    // If the request was redirected, update the repoSlug to match the final repository name
+    // This handles repository renames (e.g., "collect" -> "collection")
+    if (res.finalUrl && res.finalUrl !== url) {
+      const finalRepoSlug = res.finalUrl.match(/\/repos\/([^/]+\/[^/]+)\/releases/)?.[1];
+      if (finalRepoSlug && finalRepoSlug !== this.opts.repoSlug) {
+        // Update the repoSlug to the final resolved name
+        (this.opts as any).repoSlug = finalRepoSlug;
+      }
     }
     const text = decode(res.body);
     const parsed = JSON.parse(text) as GitHubRelease[];
@@ -207,4 +268,51 @@ const truncate = (s: string, n: number): string =>
 export const extractSemver = (tag: string): string | null => {
   const m = /(?:^|-)v?(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?)$/.exec(tag);
   return m === null ? null : m[1];
+};
+
+/**
+ * Decompose a bundle ID into its components: source (owner-repo), collection, and version.
+ * This makes the mechanism resilient to repository renames by separating the collection name
+ * from the repository name.
+ * @param bundleId Bundle ID to decompose.
+ * @param repoSlug Repository slug (e.g., "Amadeus-xDLC/genai.clean-code-in-the-cloud-skills-collection").
+ * @returns Object with source, collection, and version components.
+ */
+const decomposeBundleId = (bundleId: string, repoSlug: string): { source: string | null; collection: string | null; version: string | null } => {
+  // Amadeus convention: the bundle ID format is {owner}-{repo}-{collection}-{version}
+  // The repo may contain dots (e.g., "genai.clean-code-in-the-cloud-skills-collection")
+  // We need to extract the collection name by removing the repo prefix from the bundle ID
+  // Examples:
+  //   "Amadeus-xDLC-genai.clean-code-in-the-cloud-skills-collection-amadeus-microservice-coding-guidebook-v1.0.1" -> collection: "amadeus-microservice-coding-guidebook", version: "v1.0.1"
+  //   "Amadeus-xDLC-genai.clean-code-in-the-cloud-skills-collection-amadeus-microservice-coding-guidebook" -> collection: "amadeus-microservice-coding-guidebook", version: null
+  //   "Amadeus-xDLC-genai.clean-code-in-the-cloud-skills-collection-skubedocs" -> collection: "skubedocs", version: null
+  
+  // First, extract the version suffix if present
+  const versionPattern = /-v?\d{1,3}\.\d{1,3}\.\d{1,3}(?:-[a-zA-Z0-9._-]{1,50})?$/;
+  const versionMatch = bundleId.match(versionPattern);
+  const version = versionMatch ? versionMatch[0] : null;
+  const withoutVersion = bundleId.replace(versionPattern, '');
+  
+  // Convert repoSlug to bundle ID format (replace '/' with '-')
+  const repoPrefix = repoSlug.replace('/', '-');
+  
+  // The bundle ID format is {owner}-{repo}-{collection}
+  // Remove the repo prefix from the bundle ID to get the collection
+  if (withoutVersion.startsWith(repoPrefix + '-')) {
+    const collection = withoutVersion.slice(repoPrefix.length + 1);
+    const source = withoutVersion.slice(0, repoPrefix.length);
+    return { source, collection, version };
+  }
+  
+  // Fallback: if the bundle ID doesn't start with the repo prefix,
+  // try to extract the collection by finding the last segment after the last hyphen
+  const lastHyphenIndex = withoutVersion.lastIndexOf('-');
+  if (lastHyphenIndex !== -1) {
+    const collection = withoutVersion.slice(lastHyphenIndex + 1);
+    const source = withoutVersion.slice(0, lastHyphenIndex);
+    return { source, collection, version };
+  }
+  
+  // Last resort: return null
+  return { source: null, collection: null, version };
 };
