@@ -762,32 +762,6 @@ export class ProfilePublishCommand extends BaseProfileCommand {
 }
 
 /**
- * Recursively remove empty directories up to a root directory.
- * Stops when a non-empty directory or the root is reached.
- * @param ctx CLI context.
- * @param dirPath Directory to check/remove.
- * @param rootPath Root directory (stop here).
- */
-async function removeEmptyDirRecursive(ctx: Context, dirPath: string, rootPath: string): Promise<void> {
-  let current = dirPath;
-  while (current !== rootPath && current !== path.dirname(current)) {
-    try {
-      const entries = await ctx.fs.readDir(current);
-      if (entries.length === 0) {
-        await ctx.fs.remove(current);
-      } else {
-        // Directory not empty, stop climbing
-        break;
-      }
-    } catch {
-      // Best-effort: stop on error
-      break;
-    }
-    current = path.dirname(current);
-  }
-}
-
-/**
  * Collect all parent directories of given paths, sorted by depth (deepest first).
  * @param paths File paths.
  * @param root Root directory (stop here).
@@ -803,7 +777,7 @@ function collectParentDirs(paths: string[], root: string): string[] {
     }
   }
   // Sort by depth (deepest first) for bottom-up removal
-  return Array.from(dirs).sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
+  return Array.from(dirs).toSorted((a, b) => b.split(path.sep).length - a.split(path.sep).length);
 }
 
 /**
