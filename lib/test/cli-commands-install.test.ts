@@ -41,4 +41,16 @@ describe('install stub', () => {
     const parsed = JSON.parse(result.stdout) as { errors: { code: string }[] };
     expect(parsed.errors[0].code).toBe('USAGE.MISSING_FLAG');
   });
+
+  it('accepts --source flag without bundle ID for bundle listing', async () => {
+    const cmd = createInstallCommand({ output: 'json', source: 'test-hub' });
+    expect(cmd).toBeDefined();
+    expect(cmd.path).toEqual(['install']);
+  });
+
+  it('accepts --interactive flag for bundle selection', async () => {
+    const cmd = createInstallCommand({ output: 'json', source: 'test-hub', interactive: true });
+    expect(cmd).toBeDefined();
+    expect(cmd.path).toEqual(['install']);
+  });
 });

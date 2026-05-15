@@ -76,6 +76,28 @@ create-skill my-skill --description "A helpful skill"
 | `create-skill` | Create a new skill directory structure |
 | `hub-release-analyzer` | Analyze GitHub release download statistics for hub configs |
 | `primitive-index` | Build, search, shortlist and export agentic primitives across bundles |
+| `discover` | Discover relevant Copilot resources based on project context |
+
+## Context Detection
+
+The `discover` command analyzes your project structure to detect:
+- **Tech stack**: Languages, frameworks, package managers, build tools, test frameworks
+- **Domain**: Project category, business domain, technical domain
+- **Activity**: Recent files, git branch, working directory
+
+```bash
+# Discover resources for your current project
+prompt-registry discover
+
+# Limit number of recommendations
+prompt-registry discover --limit 20
+
+# Filter by primitive kind
+prompt-registry discover --kinds prompt,skill
+
+# Use custom index path
+prompt-registry discover --index /path/to/index.json
+```
 
 ## Primitive Index
 

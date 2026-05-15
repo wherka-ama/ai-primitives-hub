@@ -178,7 +178,7 @@ export class DiscoverCommand extends Command {
  * @param context Detected context.
  * @returns Search queries.
  */
-function buildSearchQueries(context: DetectedContext): string[] {
+export function buildSearchQueries(context: DetectedContext): string[] {
   const queries: string[] = [];
 
   // Tech stack queries
@@ -223,19 +223,18 @@ function buildSearchQueries(context: DetectedContext): string[] {
  * @param hits Search hits.
  * @returns Deduplicated hits.
  */
-function deduplicateHits(hits: SearchHit[]): SearchHit[] {
-  const seen = new Set<string>();
-  const unique: SearchHit[] = [];
+export function deduplicateHits(hits: SearchHit[]): SearchHit[] {
+  const unique = new Map<string, SearchHit>();
 
   for (const hit of hits) {
     const key = `${hit.primitive.id}:${hit.primitive.bundle.sourceId}:${hit.primitive.bundle.bundleId}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(hit);
+    const existing = unique.get(key);
+    if (!existing || hit.score > existing.score) {
+      unique.set(key, hit);
     }
   }
 
-  return unique;
+  return Array.from(unique.values());
 }
 
 /**
@@ -245,7 +244,7 @@ function deduplicateHits(hits: SearchHit[]): SearchHit[] {
  * @param results Search hits.
  * @returns Formatted text.
  */
-function renderDiscoveryText(
+export function renderDiscoveryText(
   context: DetectedContext,
   queries: string[],
   results: SearchHit[]
