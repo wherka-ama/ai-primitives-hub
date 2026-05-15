@@ -639,7 +639,7 @@ async function updateActivationLockfile(
         const bytes = await ctx.fs.readFile(f);
         fileChecksums[f] = crypto.createHash('sha256').update(bytes).digest('hex');
       }
-      // Profile configuration uses manifest IDs as bundle references, so use bundleRef.id directly
+      // Use profile reference ID for lockfile to match display
       nextLock = upsertEntry(nextLock, {
         target: t,
         sourceId,
