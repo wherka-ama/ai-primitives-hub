@@ -12,6 +12,10 @@
 import * as path from 'node:path';
 import inquirer from 'inquirer';
 import {
+  HubManager,
+  resolveUserConfigPaths,
+} from '../../app/registry';
+import {
   validateManifest,
 } from '../../domain';
 import type {
@@ -36,14 +40,14 @@ import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
 import {
+  GitHubBundleResolver,
+} from '../../infra/resolvers/github-resolver';
+import {
   CompositeHubResolver,
   GitHubHubResolver,
   LocalHubResolver,
   UrlHubResolver,
 } from '../../infra/resolvers/hub-resolver';
-import {
-  GitHubBundleResolver,
-} from '../../infra/resolvers/github-resolver';
 import {
   readLocalBundle,
 } from '../../infra/resolvers/local-resolver';
@@ -59,14 +63,14 @@ import {
   writeLockfile,
 } from '../../infra/stores/json-lockfile-store';
 import {
-  HubStore,
-} from '../../infra/stores/yaml-hub-store';
-import {
   TargetStateStore,
 } from '../../infra/stores/target-state-store';
 import {
   readTargets,
 } from '../../infra/stores/target-store';
+import {
+  HubStore,
+} from '../../infra/stores/yaml-hub-store';
 import {
   FileTreeTargetWriter,
   type TargetWriter,
@@ -76,11 +80,6 @@ import {
   RepositoryScopeWriter,
   RepositoryScopeWriterAdapter,
 } from '../../infra/writers/repo-scope-writer';
-import {
-  HubManager,
-  ProfileActivator,
-  resolveUserConfigPaths,
-} from '../../app/registry';
 import {
   type HttpClient,
   type TokenProvider,
@@ -398,7 +397,7 @@ async function listSourceBundles(
       }));
     }
 
-    const bundles = active.config.profiles.flatMap((p: { bundles: Array<{ id: string; version: string; source: string }> }) => p.bundles);
+    const bundles = active.config.profiles.flatMap((p: { bundles: { id: string; version: string; source: string }[] }) => p.bundles);
     formatOutput({
       ctx,
       command: 'install',
@@ -466,7 +465,7 @@ async function interactiveBundleSelection(
       }));
     }
 
-    const bundles = active.config.profiles.flatMap((p: { bundles: Array<{ id: string; version: string; source: string }> }) => p.bundles);
+    const bundles = active.config.profiles.flatMap((p: { bundles: { id: string; version: string; source: string }[] }) => p.bundles);
     const bundleChoices = bundles.map((b: { id: string; version: string; source: string }) => ({
       name: `${b.id}@${b.version} (source: ${b.source})`,
       value: b.id,

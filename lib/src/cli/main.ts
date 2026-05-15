@@ -37,6 +37,9 @@ import {
   ConfigGetCommand,
 } from './commands/config-get';
 import {
+  DiscoverCommand,
+} from './commands/discover';
+import {
   DoctorCommand,
 } from './commands/doctor';
 import {
@@ -81,9 +84,6 @@ import {
 import {
   IndexStatsCommand,
 } from './commands/index-stats';
-import {
-  DiscoverCommand,
-} from './commands/discover';
 import {
   InitCommand,
 } from './commands/init';

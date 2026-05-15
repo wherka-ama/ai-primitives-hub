@@ -11,9 +11,9 @@ export type {
   DetectedContext,
   Domain,
   TechStack,
-  Activity
+  Activity,
 } from './types';
 
 export {
-  ContextDetector
+  ContextDetector,
 } from './detector';

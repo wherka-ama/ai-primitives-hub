@@ -69,7 +69,7 @@ export class GitHubBundleResolver implements BundleResolver {
    * Create a GitHubBundleResolver.
    * @param opts Options for the resolver.
    */
-  constructor(private opts: GitHubResolverOptions) {
+  constructor(private readonly opts: GitHubResolverOptions) {
     // Intentionally empty
   }
 
@@ -102,7 +102,7 @@ export class GitHubBundleResolver implements BundleResolver {
       // For multi-collection repositories, we need to find the highest semantic version
       // for the specific collection, not just the first matching release.
       // Filter releases by bundle name prefix and extract versions
-      const matchingReleases = releases.filter((r) => 
+      const matchingReleases = releases.filter((r) =>
         r.draft !== true && r.prerelease !== true && (bundleName === null || r.tag_name.startsWith(bundleName))
       );
       if (matchingReleases.length === 0) {
@@ -286,16 +286,16 @@ const decomposeBundleId = (bundleId: string, repoSlug: string): { source: string
   //   "Amadeus-xDLC-genai.clean-code-in-the-cloud-skills-collection-amadeus-microservice-coding-guidebook-v1.0.1" -> collection: "amadeus-microservice-coding-guidebook", version: "v1.0.1"
   //   "Amadeus-xDLC-genai.clean-code-in-the-cloud-skills-collection-amadeus-microservice-coding-guidebook" -> collection: "amadeus-microservice-coding-guidebook", version: null
   //   "Amadeus-xDLC-genai.clean-code-in-the-cloud-skills-collection-skubedocs" -> collection: "skubedocs", version: null
-  
+
   // First, extract the version suffix if present
   const versionPattern = /-v?\d{1,3}\.\d{1,3}\.\d{1,3}(?:-[a-zA-Z0-9._-]{1,50})?$/;
   const versionMatch = bundleId.match(versionPattern);
   const version = versionMatch ? versionMatch[0] : null;
   const withoutVersion = bundleId.replace(versionPattern, '');
-  
+
   // Convert repoSlug to bundle ID format (replace '/' with '-')
   const repoPrefix = repoSlug.replace('/', '-');
-  
+
   // The bundle ID format is {owner}-{repo}-{collection}
   // Remove the repo prefix from the bundle ID to get the collection
   if (withoutVersion.startsWith(repoPrefix + '-')) {
@@ -303,7 +303,7 @@ const decomposeBundleId = (bundleId: string, repoSlug: string): { source: string
     const source = withoutVersion.slice(0, repoPrefix.length);
     return { source, collection, version };
   }
-  
+
   // Fallback: if the bundle ID doesn't start with the repo prefix,
   // try to extract the collection by finding the last segment after the last hyphen
   const lastHyphenIndex = withoutVersion.lastIndexOf('-');
@@ -312,7 +312,7 @@ const decomposeBundleId = (bundleId: string, repoSlug: string): { source: string
     const source = withoutVersion.slice(0, lastHyphenIndex);
     return { source, collection, version };
   }
-  
+
   // Last resort: return null
   return { source: null, collection: null, version };
 };

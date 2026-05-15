@@ -3,15 +3,17 @@
  * @module test/app-context-detection
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'vitest';
 import {
   ContextDetector,
 } from '../src/app/context-detection';
-import type {
-  ContextDetectionOptions,
-} from '../src/app/context-detection';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 
 describe('ContextDetector', () => {
   let tempDir: string;

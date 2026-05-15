@@ -39,9 +39,6 @@ import {
   ActiveHubStore,
 } from '../../infra/stores/active-hub-store';
 import {
-  BuiltInOnlyLayoutConfigLoader,
-} from '../../infra/stores/layout-config-store';
-import {
   readLockfile,
   upsertEntry,
   upsertSource,

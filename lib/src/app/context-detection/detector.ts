@@ -8,11 +8,11 @@
 
 import * as path from 'node:path';
 import type {
+  Activity,
   ContextDetectionOptions,
   DetectedContext,
   Domain,
   TechStack,
-  Activity
 } from './types';
 
 /**
@@ -26,23 +26,6 @@ export class ContextDetector {
       maxRecentFiles: 10,
       includeGitHistory: true,
       ...options
-    };
-  }
-
-  /**
-   * Detect context from the working directory.
-   * @returns Detected context information.
-   */
-  async detect(): Promise<DetectedContext> {
-    const techStack = await this.detectTechStack();
-    const domain = await this.detectDomain();
-    const activity = await this.detectActivity();
-
-    return {
-      techStack,
-      domain,
-      activity,
-      detectedAt: new Date().toISOString()
     };
   }
 
@@ -205,20 +188,14 @@ export class ContextDetector {
     const files = await this.listFiles(this.options.cwd);
     for (const file of files) {
       const lower = file.toLowerCase();
-      if (lower.includes('auth') || lower.includes('login') || lower.includes('user')) {
-        if (!businessDomain.includes('authentication')) {
-          businessDomain.push('authentication');
-        }
+      if ((lower.includes('auth') || lower.includes('login') || lower.includes('user')) && !businessDomain.includes('authentication')) {
+        businessDomain.push('authentication');
       }
-      if (lower.includes('payment') || lower.includes('billing') || lower.includes('invoice')) {
-        if (!businessDomain.includes('payments')) {
-          businessDomain.push('payments');
-        }
+      if ((lower.includes('payment') || lower.includes('billing') || lower.includes('invoice')) && !businessDomain.includes('payments')) {
+        businessDomain.push('payments');
       }
-      if (lower.includes('order') || lower.includes('cart') || lower.includes('checkout')) {
-        if (!businessDomain.includes('ecommerce')) {
-          businessDomain.push('ecommerce');
-        }
+      if ((lower.includes('order') || lower.includes('cart') || lower.includes('checkout')) && !businessDomain.includes('ecommerce')) {
+        businessDomain.push('ecommerce');
       }
     }
 
@@ -331,5 +308,22 @@ export class ContextDetector {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Detect context from working directory.
+   * @returns Detected context.
+   */
+  public async detect(): Promise<DetectedContext> {
+    const techStack = await this.detectTechStack();
+    const domain = await this.detectDomain();
+    const activity = await this.detectActivity();
+
+    return {
+      techStack,
+      domain,
+      activity,
+      detectedAt: new Date().toISOString()
+    };
   }
 }

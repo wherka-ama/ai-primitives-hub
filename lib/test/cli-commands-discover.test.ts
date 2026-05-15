@@ -3,10 +3,19 @@
  * @module test/cli/commands/discover
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  createDiscoverCommand,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import type {
+  DetectedContext,
+} from '../src/app/context-detection';
+import {
   buildSearchQueries,
+  createDiscoverCommand,
   deduplicateHits,
   renderDiscoveryText,
 } from '../src/cli/commands/discover';
@@ -17,9 +26,6 @@ import type {
   PrimitiveKind,
   SearchHit,
 } from '../src/infra/search/types';
-import type {
-  DetectedContext,
-} from '../src/app/context-detection';
 
 describe('DiscoverCommand', () => {
   const mockContext = {

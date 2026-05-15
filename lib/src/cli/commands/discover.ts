@@ -10,23 +10,19 @@
  * @module cli/commands/discover
  */
 import {
+  ContextDetector,
+  type DetectedContext,
+} from '../../app/context-detection';
+import {
   defaultIndexFile,
 } from '../../infra/harvest/default-paths';
 import type {
   PrimitiveKind,
   SearchHit,
-  SearchResult,
 } from '../../infra/search/types';
 import {
   loadIndex,
 } from '../../infra/stores/json-index-store';
-import {
-  ContextDetector,
-  type DetectedContext,
-} from '../../app/context-detection';
-import type {
-  ContextDetectionOptions,
-} from '../../app/context-detection';
 import {
   Command,
   Option,
@@ -97,9 +93,8 @@ export const createDiscoverCommand = (
 
         // Deduplicate and rank by score
         const uniqueHits = deduplicateHits(allHits);
-        const rankedHits = uniqueHits
-          .sort((a: SearchHit, b: SearchHit) => b.score - a.score)
-          .slice(0, opts.limit ?? 10);
+        const sortedHits = uniqueHits.toSorted((a, b) => b.score - a.score);
+        const rankedHits = sortedHits.slice(0, opts.limit ?? 10);
 
         formatOutput({
           ctx,
@@ -156,7 +151,7 @@ export class DiscoverCommand extends Command {
       throw new Error('CommandContext not available');
     }
 
-    const fmt = (this.output ?? 'text') as OutputFormat;
+    const fmt = (this.output ?? 'text');
     const indexPath = this.index ?? defaultIndexFile(ctx.env);
     const limit = this.limit ? Number.parseInt(this.limit, 10) : undefined;
 
@@ -249,35 +244,23 @@ export function renderDiscoveryText(
   queries: string[],
   results: SearchHit[]
 ): string {
-  const lines: string[] = [];
-
-  // Context summary
-  lines.push('Detected Context:');
-  lines.push(`  Languages: ${context.techStack.languages.join(', ') || 'none'}`);
-  lines.push(`  Frameworks: ${context.techStack.frameworks.join(', ') || 'none'}`);
-  lines.push(`  Domain: ${context.domain.category || context.domain.businessDomain || 'unknown'}`);
-  lines.push('');
-
-  // Search queries
-  lines.push('Search Queries:');
-  for (const q of queries) {
-    lines.push(`  - ${q}`);
-  }
-  lines.push('');
-
-  // Results
-  lines.push(`Recommendations (${results.length}):`);
-  for (const hit of results) {
-    const p = hit.primitive;
-    lines.push(
-      `  [${hit.score.toFixed(3)}] [${p.kind}] ${p.title}`
-      + `  (${p.bundle.sourceId}/${p.bundle.bundleId})`
-    );
-    if (p.description.length > 0) {
-      lines.push(`      ${p.description}`);
-    }
-  }
-  lines.push('');
+  const lines = [
+    'Detected Context:',
+    `  Languages: ${context.techStack.languages.join(', ') || 'none'}`,
+    `  Frameworks: ${context.techStack.frameworks.join(', ') || 'none'}`,
+    `  Domain: ${context.domain.category || context.domain.businessDomain || 'unknown'}`,
+    '',
+    'Search Queries:',
+    ...queries.map((q) => `  - ${q}`),
+    '',
+    `Recommendations (${results.length}):`,
+    ...results.flatMap((hit) => {
+      const p = hit.primitive;
+      const line = `  [${hit.score.toFixed(3)}] [${p.kind}] ${p.title} (${p.bundle.sourceId}/${p.bundle.bundleId})`;
+      return p.description.length > 0 ? [line, `      ${p.description}`] : [line];
+    }),
+    ''
+  ];
 
   return lines.join('\n');
 }
@@ -301,9 +284,18 @@ const classifyError = (cause: unknown, indexPath: string): RegistryError => {
       cause: cause instanceof Error ? cause : undefined
     });
   }
+  if (/EACCES|permission/i.test(msg)) {
+    return new RegistryError({
+      code: 'INDEX.PERMISSION',
+      message: `permission denied accessing index: ${indexPath}`,
+      hint: 'Check file permissions.',
+      cause: cause instanceof Error ? cause : undefined
+    });
+  }
   return new RegistryError({
-    code: 'INDEX.LOAD_FAILED',
-    message: `failed to load index ${indexPath}: ${msg}`,
+    code: 'INDEX.ERROR',
+    message: `failed to load index: ${msg}`,
+    context: { indexFile: indexPath },
     cause: cause instanceof Error ? cause : undefined
   });
 };
@@ -316,12 +308,12 @@ const classifyError = (cause: unknown, indexPath: string): RegistryError => {
  * @returns Exit code.
  */
 // eslint-disable-next-line @typescript-eslint/require-await -- synchronous body, Promise return type required by callers
-const failWith = async (ctx: Context, output: OutputFormat, err: RegistryError): Promise<number> => {
-  if (output === 'json' || output === 'yaml' || output === 'ndjson') {
+const failWith = async (ctx: Context, fmt: OutputFormat, err: RegistryError): Promise<number> => {
+  if (fmt === 'json' || fmt === 'yaml' || fmt === 'ndjson') {
     formatOutput({
       ctx,
       command: 'discover',
-      output,
+      output: fmt,
       status: 'error',
       data: null,
       errors: [err.toJSON()]
