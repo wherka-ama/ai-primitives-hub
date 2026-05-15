@@ -846,16 +846,14 @@ async function cleanupDeactivatedLockfile(ctx: Context, lockPath: string): Promi
     }
   }
 
-  // Also clean up empty kind route directories (created by eager mkdir in writer)
+  // Clean up empty kind route directories (created by eager mkdir in writer)
+  // Use recursive remove since after file removal these should only contain empty subdirectories
   const kindDirs = ['instructions', 'prompts', 'skills', 'chatmodes', 'steering'];
   for (const kind of kindDirs) {
     try {
       const kindDir = path.join(ctx.cwd(), '.github', kind);
       if (await ctx.fs.exists(kindDir)) {
-        const entries = await ctx.fs.readDir(kindDir);
-        if (entries.length === 0) {
-          await ctx.fs.remove(kindDir);
-        }
+        await ctx.fs.remove(kindDir, { recursive: true });
       }
     } catch {
       // Best-effort cleanup
