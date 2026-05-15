@@ -322,6 +322,8 @@ prompt-registry install <bundle-path> [options]
 |-------|------|-------------|
 | `-t` | `--target <id>` | Target to install to |
 | `-s` | `--scope <scope>` | Installation scope: user, workspace, repository |
+| | `--source <hub-id>` | List bundles from a hub source (instead of bundle ID) |
+| | `--interactive` | Enable interactive bundle selection from source |
 | | `--dry-run` | Show what would be installed |
 
 **Examples:**
@@ -332,9 +334,57 @@ prompt-registry install ./my-bundle.zip
 # Install to specific target (repository scope)
 prompt-registry install ./my-bundle.zip -t vscode -s repository
 
+# List bundles from a hub
+prompt-registry install --source amadeus-hub
+
+# Interactive bundle selection from hub
+prompt-registry install --source amadeus-hub --interactive -t vscode
+
 # Dry run
 prompt-registry install ./my-bundle.zip --dry-run
 ```
+
+**Note:** When using `--source <hub-id>`, the command will list available bundles from the specified hub. Use `--interactive` to select multiple bundles for installation.
+
+### discover
+
+Discover relevant Copilot resources based on project context.
+
+```bash
+prompt-registry discover [options]
+```
+
+**Options:**
+| Short | Long | Description |
+|-------|------|-------------|
+| `-l` | `--limit <number>` | Maximum number of recommendations (default: 10) |
+| `-k` | `--kinds <kinds>` | Filter by primitive kinds (comma-separated) |
+| | `--index <path>` | Path to primitive index file |
+| | `--cwd <path>` | Working directory for context detection |
+
+**Examples:**
+```bash
+# Discover resources for current project
+prompt-registry discover
+
+# Limit to 20 recommendations
+prompt-registry discover --limit 20
+
+# Filter to prompts and skills only
+prompt-registry discover --kinds prompt,skill
+
+# Use custom index
+prompt-registry discover --index /path/to/index.json
+
+# Analyze specific directory
+prompt-registry discover --cwd /path/to/project
+```
+
+**Context Detection:**
+The `discover` command analyzes your project structure to detect:
+- **Tech stack**: Languages (TypeScript, Python, Go, etc.), frameworks (React, Express, etc.), package managers (npm, yarn, pnpm, etc.)
+- **Domain**: Project category (web-application, api-server, cli-tool), business domain (authentication, payments, ecommerce, etc.)
+- **Activity**: Recent files, git branch, working directory
 
 ### target
 
