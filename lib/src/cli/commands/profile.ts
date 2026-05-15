@@ -762,7 +762,34 @@ export class ProfilePublishCommand extends BaseProfileCommand {
 }
 
 /**
+ * Recursively remove empty directories up to a root directory.
+ * Stops when a non-empty directory or the root is reached.
+ * @param ctx CLI context.
+ * @param dirPath Directory to check/remove.
+ * @param rootPath Root directory (stop here).
+ */
+async function removeEmptyDirRecursive(ctx: Context, dirPath: string, rootPath: string): Promise<void> {
+  let current = dirPath;
+  while (current !== rootPath && current !== path.dirname(current)) {
+    try {
+      const entries = await ctx.fs.readDir(current);
+      if (entries.length === 0) {
+        await ctx.fs.remove(current);
+      } else {
+        // Directory not empty, stop climbing
+        break;
+      }
+    } catch {
+      // Best-effort: stop on error
+      break;
+    }
+    current = path.dirname(current);
+  }
+}
+
+/**
  * Remove all files listed in the lockfile and wipe entries on deactivation.
+ * Best-effort: errors are ignored.
  * @param ctx CLI context.
  * @param lockPath Path to the lockfile.
  */
@@ -780,14 +807,12 @@ async function cleanupDeactivatedLockfile(ctx: Context, lockPath: string): Promi
         // Best-effort removal
       }
     }
+    // Recursively remove empty directories up the tree
     const dirs = new Set(entry.files.map((f) => path.dirname(f)));
     for (const d of dirs) {
       try {
         const dirPath = path.join(ctx.cwd(), d);
-        const entries = await ctx.fs.readDir(dirPath);
-        if (entries.length === 0) {
-          await ctx.fs.remove(dirPath);
-        }
+        await removeEmptyDirRecursive(ctx, dirPath, ctx.cwd());
       } catch {
         // Best-effort cleanup
       }
