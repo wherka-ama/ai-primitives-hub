@@ -598,7 +598,100 @@ The GitHub CLI extension is an **additional distribution channel**, not a replac
 - npm/npx for Node.js environments
 - GitHub CLI extension for standalone usage without Node.js
 
-## Considerations
+## SLSA Integration Plan (Security & Trust)
+
+### Overview
+
+SLSA (Supply-chain Levels for Software Artifacts) provides a framework for ensuring the integrity of software artifacts. For the GitHub CLI extension sidecar repository, we should implement SLSA to provide:
+
+- **SBOM (Software Bill of Materials)**: List of all dependencies and components
+- **Attestation**: Cryptographically signed provenance information
+- **Verification**: Client-side verification capabilities
+- **Immutable releases**: Tamper-evident distribution
+
+### SLSA Levels
+
+- **Build Level 2** (Default with GitHub Actions): Links artifact to build instructions via workflow
+- **Build Level 3** (Target): Uses reusable workflows for isolation and vetted build instructions
+
+### Implementation Plan
+
+#### Phase 1: Enable Artifact Attestations (High Priority)
+
+Use GitHub Actions `actions/attest-build-provenance` action:
+
+```yaml
+- name: Attest build provenance
+  uses: actions/attest-build-provenance@v1
+  with:
+    subject-path: ${{ matrix.platform }}*
+```
+
+This provides:
+- SLSA v1.0 Build Level 2 provenance
+- Link to workflow, repository, commit SHA
+- OIDC token-based identity verification
+- Immutable transparency log (public repositories)
+
+#### Phase 2: Generate SBOM (High Priority)
+
+Use GitHub Actions built-in SBOM generation or `syft`/`grype`:
+
+```yaml
+- name: Generate SBOM
+  uses: actions/attest-build-provenance@v1
+  with:
+    subject-path: ${{ matrix.platform }}*
+    predicate-type: https://slsa.dev/provenance/v0.2
+```
+
+This provides:
+- Complete dependency list
+- Vulnerability scanning
+- Compliance with data protection standards
+
+#### Phase 3: Client-Side Verification (Medium Priority)
+
+Users can verify the extension before installation:
+
+```bash
+# Verify provenance
+gh attestation verify linux-amd64 \
+  --repo AmadeusITGroup/gh-prompt-registry \
+  --certificate-identity https://github.com/AmadeusITGroup/gh-prompt-registry/.github/workflows/release.yml
+
+# Verify SBOM
+gh attestation verify linux-amd64 \
+  --repo AmadeusITGroup/gh-prompt-registry \
+  --predicate-type https://slsa.dev/provenance/v0.2
+```
+
+#### Phase 4: Immutable Releases (Low Priority)
+
+- Use GitHub Actions artifact attestations with immutable transparency log
+- Sign releases with Sigstore (public good instance for public repos)
+- Consider GitHub Packages for immutable artifact storage
+
+### GitHub CLI Extension Verification
+
+GitHub CLI extension installation supports verification:
+
+```bash
+# Install with verification
+gh extension install AmadeusITGroup/gh-prompt-registry --verify
+
+# Verify installed extension
+gh extension verify gh-prompt-registry
+```
+
+**Note**: GitHub CLI extension verification capabilities should be tested to confirm support for SLSA attestations. If not supported natively, verification can be done manually before installation.
+
+### References
+
+- [GitHub Artifact Attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations)
+- [SLSA Security Levels](https://slsa.dev/spec/v1.0/levels)
+- [actions/attest-build-provenance](https://github.com/actions/attest-build-provenance)
+- [Sigstore Public Good Instance](https://openssf.org/blog/2023/10/03/running-sigstore-as-a-managed-service-a-tour-of-sigstores-public-good-instance/)
 
 ### Dependencies
 - Keep npm package dependencies minimal and well-maintained
