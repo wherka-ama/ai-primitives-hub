@@ -1,7 +1,7 @@
 {
   "name": "@prompt-registry/collection-scripts",
   "version": "1.0.4",
-  "description": "Shared scripts for building, validating, and publishing Copilot prompt collections",
+  "description": "Prompt Registry library for managing Copilot prompt collections - CLI tools, search engine, and installation system",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -48,7 +48,9 @@
     "lint:report": "eslint src test --format json --output-file eslint-report.json || true",
     "prepublishOnly": "npm run build",
     "build:sea": "node esbuild.config.mjs",
-    "package:sea": "./scripts/generate-sea.sh ./dist/prompt-registry"
+    "package:sea": "./scripts/generate-sea.sh ./dist/prompt-registry",
+    "pack": "npm pack",
+    "pack:inspect": "npm run pack && tar -tzf *.tgz | head -50"
   },
   "repository": {
     "type": "git",
@@ -72,8 +74,12 @@
     "node": ">=20.0.0"
   },
   "files": [
-    "dist",
-    "bin"
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.json",
+    "bin",
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
