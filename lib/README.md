@@ -21,6 +21,20 @@ npm install @prompt-registry/collection-scripts
 npm install -g @prompt-registry/collection-scripts
 ```
 
+### Option 4: GitHub CLI Extension (No Node.js Required)
+Install as a GitHub CLI extension for standalone usage:
+
+```bash
+gh extension install AmadeusITGroup/gh-prompt-registry
+```
+
+Then use the extension:
+
+```bash
+gh prompt-registry --help
+gh prompt-registry collection validate
+```
+
 ## Usage
 
 ### npx (No Installation Required)
@@ -263,6 +277,24 @@ npm install
 npm run build
 npm test
 ```
+
+### Inspecting npm Package Contents
+
+To verify what files will be published to npm:
+
+```bash
+# Build tarball
+npm run pack
+
+# Inspect tarball contents (shows first 50 files)
+npm run pack:inspect
+
+# Extract and inspect fully
+tar -xzf @prompt-registry-collection-scripts-*.tgz
+ls -la package/
+```
+
+This helps ensure only necessary files are included (no source maps, no SEA binaries).
 
 ### Releasing
 

@@ -208,3 +208,30 @@ export * as ports from './ports';
 - Legacy `bin/*.js` scripts are deprecated in favor of unified `prompt-registry` CLI
 - See Phase 4/5 documentation for migration paths
 - Maintain backward compatibility during deprecation period
+
+---
+
+## Distribution
+
+The library is distributed through two channels:
+
+### npm Package
+- **Package**: `@prompt-registry/collection-scripts`
+- **Usage**: Node.js environments, npx, programmatic consumption
+- **Contents**: JavaScript/TypeScript only (no source maps, no SEA binaries)
+- **Size**: ~837.6 kB (optimized with proper files field)
+- **Verification**: Use `npm run pack:inspect` to check tarball contents
+
+### GitHub CLI Extension
+- **Repository**: `AmadeusITGroup/gh-prompt-registry` (sidecar repository)
+- **Usage**: Standalone CLI without Node.js requirement
+- **Binary naming**: `gh-prompt-registry-OS-ARCH[.exe]` (e.g., `gh-prompt-registry-linux-amd64`)
+- **Build**: SEA (Single Executable Application) with checksums
+- **CI/CD**: GitHub Actions matrix builds on platform-specific runners
+
+### Package Configuration
+- **files field**: Excludes source maps and SEA binaries from npm package
+- **description**: Reflects broader scope (CLI tools, search engine, installation system)
+- **scripts**: Includes `pack` and `pack:inspect` for tarball verification
+
+See `docs/architecture/package-split-design.md` for complete distribution strategy.
