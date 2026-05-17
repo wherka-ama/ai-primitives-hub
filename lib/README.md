@@ -2,6 +2,38 @@
 
 Shared scripts for building, validating, and publishing Copilot prompt collections.
 
+## Workspace Packages
+
+This library is now organized as an npm workspace with the following packages:
+
+- **@prompt-registry/collection-scripts** (legacy package) - Full-featured package with all exports
+- **@prompt-registry/sdk** - Minimal SDK with domain types, ports, and public API
+- **@prompt-registry/cli** - CLI tools, application layer, and infrastructure
+
+### Migration Path
+
+The legacy package `@prompt-registry/collection-scripts` remains fully supported. The new workspace packages provide focused alternatives:
+
+**For extension developers (programmatic usage):**
+```bash
+# Legacy package (continue using)
+import { PrimitiveIndex } from '@prompt-registry/collection-scripts';
+
+# New SDK workspace (recommended for minimal dependencies)
+import { PrimitiveIndex } from '@prompt-registry/sdk';
+```
+
+**For CLI usage:**
+```bash
+# Legacy package (continue using)
+npx @prompt-registry/collection-scripts validate-collections
+
+# New CLI workspace (same functionality)
+npx @prompt-registry/cli validate-collections
+```
+
+No breaking changes - the legacy package will continue to work as before.
+
 ## Installation
 
 ### Option 1: Use with npx (Recommended)
