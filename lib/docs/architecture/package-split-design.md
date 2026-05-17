@@ -183,7 +183,14 @@ GitHub CLI will automatically:
 
 #### Workflow: `.github/workflows/release.yml`
 
-Located in the sidecar repository (`gh-prompt-registry`), this workflow will:
+Located in the sidecar repository (`gh-prompt-registry`), this workflow:
+
+- **Trigger**: Release events (prereleased) or manual workflow_dispatch
+- **Matrix Strategy**: Uses platform-specific runners for true cross-platform builds
+  - `ubuntu-latest` for linux-amd64 and linux-arm64
+  - `macos-latest` for darwin-amd64 and darwin-arm64
+  - `windows-latest` for windows-amd64 and windows-arm64
+- **Key Point**: Each matrix entry runs on its native platform, not just renaming binaries
 
 ```yaml
 name: Release
@@ -191,34 +198,74 @@ name: Release
 on:
   release:
     types: [prereleased]
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Repository to clone (default: AmadeusITGroup/prompt-registry)'
+        required: false
+        default: 'AmadeusITGroup/prompt-registry'
+      branch:
+        description: 'Branch or tag to checkout (default: latest tag)'
+        required: false
+        default: ''
+      test_mode:
+        description: 'Test mode - skip release upload'
+        required: false
+        default: 'false'
+        type: boolean
 
 permissions:
   contents: write
 
 jobs:
   build-binaries:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        platform:
-          - linux-amd64
-          - linux-arm64
-          - darwin-amd64
-          - darwin-arm64
-          - windows-amd64
-          - windows-arm64
+        include:
+          - os: ubuntu-latest
+            platform: linux-amd64
+            node_arch: x64
+          - os: ubuntu-latest
+            platform: linux-arm64
+            node_arch: arm64
+          - os: macos-latest
+            platform: darwin-amd64
+            node_arch: x64
+          - os: macos-latest
+            platform: darwin-arm64
+            node_arch: arm64
+          - os: windows-latest
+            platform: windows-amd64
+            node_arch: x64
+          - os: windows-latest
+            platform: windows-arm64
+            node_arch: arm64
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
       
       - name: Clone official repository
         run: |
-          git clone https://github.com/AmadeusITGroup/prompt-registry.git ../prompt-registry
+          REPO="${{ github.event.inputs.repo || 'AmadeusITGroup/prompt-registry' }}"
+          git clone https://github.com/${REPO}.git ../prompt-registry
           cd ../prompt-registry
-          git checkout ${{ github.event.release.tag_name }}
+          
+          if [ -n "${{ github.event.inputs.branch }}" ]; then
+            git checkout "${{ github.event.inputs.branch }}"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            git checkout ${{ github.event.release.tag_name }}
+          else
+            git fetch --tags
+            LATEST_TAG=$(git describe --tags --abbrev=0)
+            git checkout "$LATEST_TAG"
+          fi
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ../prompt-registry/lib/package-lock.json
       
       - name: Install dependencies
         working-directory: ../prompt-registry/lib
@@ -228,35 +275,37 @@ jobs:
         working-directory: ../prompt-registry/lib
         run: npm run build
       
-      - name: Build SEA binary for ${{ matrix.platform }}
+      - name: Build SEA binary
         working-directory: ../prompt-registry/lib
-        run: npm run build:sea:${{ matrix.platform }}
+        run: npm run build:sea
       
       - name: Rename binary to gh extension naming
+        shell: bash
         run: |
-          # Rename to OS-ARCH[.exe]
+          cd ../prompt-registry/lib/dist
           if [[ "${{ matrix.platform }}" == windows-* ]]; then
-            mv ../prompt-registry/lib/dist/prompt-registry.exe \
-               ${{ matrix.platform }}.exe
+            mv prompt-registry.exe "${{ matrix.platform }}.exe"
+            mv prompt-registry.exe.sha256 "${{ matrix.platform }}.exe.sha256"
           else
-            mv ../prompt-registry/lib/dist/prompt-registry \
-               ${{ matrix.platform }}
+            mv prompt-registry "${{ matrix.platform }}"
+            mv prompt-registry.sha256 "${{ matrix.platform }}.sha256"
           fi
       
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}
-          path: ${{ matrix.platform }}*
+          path: ../prompt-registry/lib/dist/${{ matrix.platform }}*
 
   release:
     needs: build-binaries
+    if: ${{ github.event.inputs.test_mode != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist/
-      - name: Generate checksums
+      - name: Generate combined checksums
         run: |
           cd dist
           sha256sum * > SHA256SUMS.txt
@@ -264,10 +313,33 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="test-${{ github.run_number }}"
+          fi
           gh release upload "$VERSION" dist/* --clobber
-          gh release edit "$VERSION" --prerelease=false --latest
+          if [ "${{ github.event_name }}" = "release" ]; then
+            gh release edit "$VERSION" --prerelease=false --latest
+          fi
 ```
+
+#### Manual Testing with workflow_dispatch
+
+For development testing without creating a release:
+
+```bash
+# Trigger workflow manually via GitHub CLI
+gh workflow run release.yml \
+  -f repo=wherka-ama/prompt-registry \
+  -f branch=feature/library-centric-flows-with-cli \
+  -f test_mode=true
+
+# Monitor workflow run
+gh run watch
+```
+
+This allows testing the build process with custom repositories and branches before triggering an actual release.
 
 ### Local Testing Flow (Sidecar Repository)
 
@@ -306,15 +378,18 @@ cd /home/wherka/workspace/opensource/prompt-registry/lib
 # Build tarball and inspect contents
 npm run pack:inspect
 
-# Install locally from tarball
+# Install globally from tarball (for testing CLI commands globally)
 npm install -g ./@prompt-registry-collection-scripts-1.0.4.tgz
 
-# Test CLI
+# Test CLI (now available globally)
 prompt-registry --help
+validate-collections --help
 
-# Uninstall
+# Uninstall when done
 npm uninstall -g @prompt-registry/collection-scripts
 ```
+
+**Note**: `-g` flag installs globally, making CLI commands available system-wide for testing. This is intentional for verification purposes.
 
 ## Implementation Plan
 
@@ -338,33 +413,60 @@ npm uninstall -g @prompt-registry/collection-scripts
 
 ### Workspace Structure
 
+**Important**: The current repository structure has the VS Code extension at the root level. For npm workspaces, we should treat `lib/` as the workspace root, keeping the VS Code extension outside the workspace structure.
+
 ```
-prompt-registry/
-├── lib/                             # Legacy package (remains as-is)
-│   ├── package.json                 # @prompt-registry/collection-scripts
-│   ├── src/
-│   ├── dist/
-│   └── bin/
-├── packages/
-│   ├── sdk/                         # New workspace: @prompt-registry/sdk
-│   │   ├── package.json
-│   │   └── src/ (symlinks to lib/src/domain, lib/src/ports, lib/src/public)
-│   └── cli/                         # New workspace: @prompt-registry/cli
-│       ├── package.json
-│       └── src/ (symlinks to lib/src/cli, lib/src/app, lib/src/infra)
-├── package.json                     # Root package.json with workspaces config
-└── pnpm-workspace.yaml              # Workspace configuration (if using pnpm)
+prompt-registry/                           # Root - VS Code extension
+├── src/                                  # VS Code extension source
+├── package.json                          # VS Code extension package.json
+├── lib/                                  # Workspace root for npm packages
+│   ├── package.json                      # Root workspace package.json
+│   ├── pnpm-workspace.yaml               # Workspace configuration
+│   ├── src/                             # Legacy package source (remains as-is)
+│   ├── dist/                            # Legacy package build output
+│   ├── bin/                             # Legacy package binaries
+│   └── packages/
+│       ├── sdk/                         # New workspace: @prompt-registry/sdk
+│       │   ├── package.json
+│       │   └── src/ (symlinks or re-exports to lib/src/domain, lib/src/ports, lib/src/public)
+│       └── cli/                         # New workspace: @prompt-registry/cli
+│           ├── package.json
+│           └── src/ (symlinks or re-exports to lib/src/cli, lib/src/app, lib/src/infra)
 ```
+
+**Key Points**:
+- VS Code extension remains at root level, outside npm workspaces
+- `lib/` becomes the workspace root for npm packages
+- Legacy package `@prompt-registry/collection-scripts` remains in `lib/` as-is
+- New workspaces (`sdk`, `cli`) are created under `lib/packages/`
+- VS Code extension can depend on the SDK workspace when ready
+- This separation allows independent development cycles
 
 ### Revised Implementation Plan
 
 #### Phase 1: Configure npm Workspaces (High Priority)
-1. Add `workspaces` field to root package.json
-2. Create `packages/sdk/` directory structure
-3. Create `packages/cli/` directory structure
-4. Configure workspace package.json files
-5. Set up symlinks or re-exports for source sharing
-6. Test workspace installation and linking
+1. Add `workspaces` field to `lib/package.json`
+2. Create `pnpm-workspace.yaml` in `lib/` directory
+3. Create `packages/sdk/` directory structure
+4. Create `packages/cli/` directory structure
+5. Configure workspace package.json files
+6. Set up re-exports for source sharing (avoid symlinks for portability)
+7. Test workspace installation and linking
+
+#### Phase 1.5: Design pnpm-workspace.yaml (High Priority)
+```yaml
+# lib/pnpm-workspace.yaml
+packages:
+  - '.'                    # Legacy package @prompt-registry/collection-scripts
+  - 'packages/sdk'         # New SDK workspace
+  - 'packages/cli'         # New CLI workspace
+```
+
+**Rationale**:
+- Includes legacy package at root (`.`) to maintain backward compatibility
+- Explicitly lists workspaces for clarity and control
+- pnpm provides better workspace support and deduplication than npm
+- pnpm's strict peer dependency handling reduces conflicts
 
 #### Phase 2: Define SDK Workspace Scope (High Priority)
 1. Create SDK package.json with domain, ports, public exports
@@ -438,7 +540,8 @@ import { PrimitiveIndex } from '@prompt-registry/sdk';
 ```bash
 # Continues to work as before
 npx @prompt-registry/collection-scripts prompt-registry --help
-npx @prompt-registry/collection-scripts collection validate --help
+npx @prompt-registry/collection-scripts validate-collections --help
+npx @prompt-registry/collection-scripts create-skill --help
 ```
 
 ### For CLI Users (GitHub CLI Extension - New Option)
@@ -458,6 +561,29 @@ gh prompt-registry collection validate --help
 # Continues to work as before
 npx @prompt-registry/collection-scripts validate-collections
 npx @prompt-registry/collection-scripts build-collection-bundle
+```
+
+#### Using npx with Locally Built Tarball
+
+To test a locally built tarball without publishing to npm:
+
+```bash
+cd /home/wherka/workspace/opensource/prompt-registry/lib
+
+# Build tarball
+npm run pack
+
+# Use npx with local tarball
+npx @prompt-registry/collection-scripts@file:./@prompt-registry-collection-scripts-1.0.4.tgz validate-collections
+npx @prompt-registry/collection-scripts@file:./@prompt-registry-collection-scripts-1.0.4.tgz create-skill
+
+# Or install from tarball (global for testing)
+npm install -g ./@prompt-registry-collection-scripts-1.0.4.tgz
+validate-collections
+create-skill
+
+# Uninstall when done
+npm uninstall -g @prompt-registry/collection-scripts
 ```
 
 ## Backward Compatibility
