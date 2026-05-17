@@ -103,10 +103,7 @@ async function tryLoadFile(
     const raw = parseYaml(text);
     return validateTargetLayoutsConfig(raw);
   } catch (err) {
-    // Invalid or unreadable file — skip with a console warning so the
-    // user knows about their misconfiguration without crashing.
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[prompt-registry] Skipping invalid layout config at ${filePath}: ${msg}`);
+    // Invalid or unreadable file — skip silently
     return null;
   }
 }

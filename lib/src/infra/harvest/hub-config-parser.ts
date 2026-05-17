@@ -23,6 +23,63 @@ import type {
 // type lives in `domain/hub/types.ts`.
 
 /**
+ * Check if the entry type is supported.
+ * @param type - Entry type string.
+ * @returns True if type is supported.
+ */
+function isSupportedType(type: string | undefined): boolean {
+  return type === 'github' || type === 'awesome-copilot' || type === 'awesome-copilot-plugin';
+}
+
+/**
+ * Extract the URL from an entry.
+ * @param entry - Raw config entry object.
+ * @returns URL string or undefined.
+ */
+function extractUrl(entry: Record<string, unknown>): string | undefined {
+  return typeof entry.url === 'string' ? entry.url : undefined;
+}
+
+/**
+ * Generate the ID string for an entry.
+ * @param entry - Raw config entry object.
+ * @param ownerRepo - Normalized owner/repo.
+ * @returns ID string.
+ */
+function generateId(entry: Record<string, unknown>, ownerRepo: { owner: string; repo: string }): string {
+  return typeof entry.id === 'string' ? entry.id : `${ownerRepo.owner}-${ownerRepo.repo}`;
+}
+
+/**
+ * Generate the name string for an entry.
+ * @param entry - Raw config entry object.
+ * @param ownerRepo - Normalized owner/repo.
+ * @returns Name string.
+ */
+function generateName(entry: Record<string, unknown>, ownerRepo: { owner: string; repo: string }): string {
+  if (typeof entry.name === 'string') {
+    return entry.name;
+  }
+  if (typeof entry.id === 'string') {
+    return entry.id;
+  }
+  return ownerRepo.repo;
+}
+
+/**
+ * Extract the plugins path from config for awesome-copilot-plugin type.
+ * @param config - Config object.
+ * @param type - Entry type.
+ * @returns Plugins path or undefined.
+ */
+function extractPluginsPath(config: Record<string, unknown>, type: string | undefined): string | undefined {
+  if (type === 'awesome-copilot-plugin') {
+    return typeof config.pluginsPath === 'string' ? config.pluginsPath : 'plugins';
+  }
+  return undefined;
+}
+
+/**
  * Parse a single hub-config entry into a HubSourceSpec.
  * Returns undefined if the entry should be filtered out.
  * @param entry - Raw config entry object.
@@ -32,10 +89,10 @@ function parseHubConfigEntry(entry: Record<string, unknown>): HubSourceSpec | un
     return undefined;
   }
   const type = entry.type as string | undefined;
-  if (type !== 'github' && type !== 'awesome-copilot' && type !== 'awesome-copilot-plugin') {
+  if (!isSupportedType(type)) {
     return undefined;
   }
-  const url = typeof entry.url === 'string' ? entry.url : undefined;
+  const url = extractUrl(entry);
   if (!url) {
     return undefined;
   }
@@ -44,25 +101,13 @@ function parseHubConfigEntry(entry: Record<string, unknown>): HubSourceSpec | un
     return undefined;
   }
   const config = (entry.config ?? {}) as Record<string, unknown>;
-  const idStr = typeof entry.id === 'string' ? entry.id : `${ownerRepo.owner}-${ownerRepo.repo}`;
-  let nameStr: string;
-  if (typeof entry.name === 'string') {
-    nameStr = entry.name;
-  } else if (typeof entry.id === 'string') {
-    nameStr = entry.id;
-  } else {
-    nameStr = ownerRepo.repo;
-  }
-  // Type-specific defaults. awesome-copilot-plugin defaults pluginsPath
-  // to "plugins" (PR #245 convention); other types leave it undefined.
-  let pluginsPath: string | undefined;
-  if (type === 'awesome-copilot-plugin') {
-    pluginsPath = typeof config.pluginsPath === 'string' ? config.pluginsPath : 'plugins';
-  }
+  const idStr = generateId(entry, ownerRepo);
+  const nameStr = generateName(entry, ownerRepo);
+  const pluginsPath = extractPluginsPath(config, type);
   return {
     id: idStr,
     name: nameStr,
-    type,
+    type: type as 'github' | 'awesome-copilot' | 'awesome-copilot-plugin',
     url,
     owner: ownerRepo.owner,
     repo: ownerRepo.repo,

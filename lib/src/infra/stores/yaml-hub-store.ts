@@ -41,6 +41,14 @@ export interface SavedHub {
  * Stateless except for the injected `fs`.
  */
 export class HubStore {
+  private metaPath(safeId: string): string {
+    return path.join(this.hubsDir, `${safeId}.meta.json`);
+  }
+
+  public configPath(safeId: string): string {
+    return path.join(this.hubsDir, `${safeId}.yml`);
+  }
+
   /**
    * Construct an instance bound to `hubsDir`.
    * @param hubsDir Resolved path of the hubs directory.
@@ -50,14 +58,6 @@ export class HubStore {
     private readonly hubsDir: string,
     private readonly fs: FileSystem
   ) {}
-
-  private metaPath(safeId: string): string {
-    return path.join(this.hubsDir, `${safeId}.meta.json`);
-  }
-
-  public configPath(safeId: string): string {
-    return path.join(this.hubsDir, `${safeId}.yml`);
-  }
 
   /**
    * Persist a hub config + its reference. Replaces any existing

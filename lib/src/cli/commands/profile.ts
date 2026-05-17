@@ -746,9 +746,7 @@ export class ProfilePublishCommand extends BaseProfileCommand {
     const hubConfigPath = hubStore.configPath(this.hubId);
     const hubConfigYaml = await ctx.fs.readFile(hubConfigPath);
     const hubConfig = load.load(hubConfigYaml) as { profiles?: Record<string, unknown> };
-    if (!hubConfig.profiles) {
-      hubConfig.profiles = {};
-    }
+    hubConfig.profiles ??= {};
     hubConfig.profiles[this.profileId] = profile;
     await ctx.fs.writeFile(hubConfigPath, load.dump(hubConfig));
 
@@ -784,22 +782,11 @@ function collectParentDirs(paths: string[], root: string): string[] {
 }
 
 /**
- * Remove all files listed in the lockfile and wipe entries on deactivation.
- * Best-effort: errors are ignored.
+ * Remove all files from the filesystem.
  * @param ctx CLI context.
- * @param lockPath Path to the lockfile.
+ * @param allFiles List of file paths to remove.
  */
-async function cleanupDeactivatedLockfile(ctx: Context, lockPath: string): Promise<void> {
-  if (!await ctx.fs.exists(lockPath)) {
-    return;
-  }
-  const existing = await readLockfile(lockPath, ctx.fs);
-  const allFiles: string[] = [];
-  for (const entry of existing.entries) {
-    allFiles.push(...entry.files);
-  }
-
-  // Remove all files
+async function removeAllFiles(ctx: Context, allFiles: string[]): Promise<void> {
   for (const f of allFiles) {
     const filePath = path.join(ctx.cwd(), f);
     try {
@@ -808,9 +795,14 @@ async function cleanupDeactivatedLockfile(ctx: Context, lockPath: string): Promi
       // Best-effort removal
     }
   }
+}
 
-  // Collect all parent directories and remove them bottom-up (deepest first)
-  const parentDirs = collectParentDirs(allFiles, ctx.cwd());
+/**
+ * Remove empty parent directories bottom-up (deepest first).
+ * @param ctx CLI context.
+ * @param parentDirs List of parent directories to check and remove if empty.
+ */
+async function removeEmptyParentDirs(ctx: Context, parentDirs: string[]): Promise<void> {
   for (const d of parentDirs) {
     try {
       const dirPath = path.join(ctx.cwd(), d);
@@ -822,52 +814,90 @@ async function cleanupDeactivatedLockfile(ctx: Context, lockPath: string): Promi
       // Best-effort cleanup
     }
   }
+}
 
-  // Clean up empty kind route directories (created by eager mkdir in writer)
-  // Use adaptive cleanup based on target layouts
+/**
+ * Clean up kind route directories for a specific target.
+ * @param ctx CLI context.
+ * @param target Target configuration.
+ * @param layout Target layout.
+ * @param layout.baseDir Base directory path.
+ * @param layout.kindRoutes Kind route directory mapping.
+ * @returns Promise that resolves when cleanup is complete.
+ */
+async function cleanupKindRouteDirectories(ctx: Context, target: any, layout: { baseDir: string; kindRoutes: Record<string, string> }): Promise<void> {
+  const baseDir: string = layout.baseDir
+    .replaceAll(/\$\{workspaceRoot\}/g, ctx.cwd())
+    .replaceAll(/\$\{HOME\}/g, ctx.env.HOME ?? '')
+    .replaceAll(/^~/, ctx.env.HOME ?? '');
+
+  for (const outPrefix of Object.values(layout.kindRoutes)) {
+    const kindDir = path.join(baseDir, outPrefix);
+    try {
+      if (await ctx.fs.exists(kindDir)) {
+        await ctx.fs.remove(kindDir, { recursive: true });
+      }
+    } catch {
+      // Best-effort cleanup
+    }
+  }
+
+  try {
+    if (await ctx.fs.exists(baseDir)) {
+      const entries = await ctx.fs.readDir(baseDir);
+      if (entries.length === 0) {
+        await ctx.fs.remove(baseDir);
+      }
+    }
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
+/**
+ * Perform adaptive cleanup based on target layouts.
+ * @param ctx CLI context.
+ * @param existing Existing lockfile entries.
+ * @param existing.entries Array of lockfile entries.
+ * @returns Promise that resolves when cleanup is complete.
+ */
+async function adaptiveCleanup(ctx: Context, existing: { entries: { target: string }[] }): Promise<void> {
   try {
     const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
-
     for (const entry of existing.entries) {
       const target = targets.find((t) => t.name === entry.target);
       if (!target) {
         continue;
       }
       const layout = resolveLayout(target);
-
-      // Get the base directory
-      const baseDir = layout.baseDir
-        .replace(/\$\{workspaceRoot\}/g, ctx.cwd())
-        .replace(/\$\{HOME\}/g, ctx.env.HOME ?? '')
-        .replace(/^~/, ctx.env.HOME ?? '');
-
-      // Clean up each kind route directory recursively
-      for (const outPrefix of Object.values(layout.kindRoutes)) {
-        const kindDir = path.join(baseDir, outPrefix);
-        try {
-          if (await ctx.fs.exists(kindDir)) {
-            await ctx.fs.remove(kindDir, { recursive: true });
-          }
-        } catch {
-          // Best-effort cleanup
-        }
-      }
-
-      // Clean up the base directory if empty
-      try {
-        if (await ctx.fs.exists(baseDir)) {
-          const entries = await ctx.fs.readDir(baseDir);
-          if (entries.length === 0) {
-            await ctx.fs.remove(baseDir);
-          }
-        }
-      } catch {
-        // Best-effort cleanup
-      }
+      await cleanupKindRouteDirectories(ctx, target, layout);
     }
   } catch {
     // Best-effort: if layout resolution fails, skip adaptive cleanup
   }
+}
+
+/**
+ * Remove all files listed in the lockfile and wipe entries on deactivation.
+ * Best-effort: errors are ignored.
+ * @param ctx CLI context.
+ * @param lockPath Path to the lockfile.
+ * @returns Promise that resolves when cleanup is complete.
+ */
+async function cleanupDeactivatedLockfile(ctx: Context, lockPath: string): Promise<void> {
+  if (!await ctx.fs.exists(lockPath)) {
+    return;
+  }
+  const existing = await readLockfile(lockPath, ctx.fs);
+  const allFiles: string[] = [];
+  for (const entry of existing.entries) {
+    allFiles.push(...entry.files);
+  }
+
+  await removeAllFiles(ctx, allFiles);
+  const parentDirs = collectParentDirs(allFiles, ctx.cwd());
+  await removeEmptyParentDirs(ctx, parentDirs);
+  await adaptiveCleanup(ctx, existing);
 
   await writeLockfile(lockPath, { ...existing, entries: [], useProfile: undefined }, ctx.fs);
 }

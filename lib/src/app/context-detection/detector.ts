@@ -30,6 +30,97 @@ export class ContextDetector {
   }
 
   /**
+   * Detect languages from package dependencies.
+   * @param deps Package dependencies.
+   * @returns Detected languages.
+   */
+  private detectLanguages(deps: Record<string, unknown>): string[] {
+    const languages: string[] = [];
+    if (deps.typescript || deps['@types/node']) {
+      languages.push('TypeScript');
+    }
+    if (deps.react || deps['@types/react']) {
+      languages.push('JavaScript');
+    }
+    if (deps.vue) {
+      languages.push('JavaScript');
+    }
+    if (deps.angular || deps['@angular/core']) {
+      languages.push('TypeScript');
+    }
+    return languages;
+  }
+
+  /**
+   * Detect frameworks from package dependencies.
+   * @param deps Package dependencies.
+   * @returns Detected frameworks.
+   */
+  private detectFrameworks(deps: Record<string, unknown>): string[] {
+    const frameworks: string[] = [];
+    if (deps.react || deps['@types/react']) {
+      frameworks.push('React');
+    }
+    if (deps.vue) {
+      frameworks.push('Vue');
+    }
+    if (deps.angular || deps['@angular/core']) {
+      frameworks.push('Angular');
+    }
+    if (deps.express || deps['@types/express']) {
+      frameworks.push('Express');
+    }
+    if (deps.next || deps['next.js']) {
+      frameworks.push('Next.js');
+    }
+    if (deps.nuxt || deps['@nuxt/core']) {
+      frameworks.push('Nuxt');
+    }
+    return frameworks;
+  }
+
+  /**
+   * Detect build tools from package dependencies.
+   * @param deps Package dependencies.
+   * @returns Detected build tools.
+   */
+  private detectBuildTools(deps: Record<string, unknown>): string[] {
+    const buildTools: string[] = [];
+    if (deps.webpack || deps['webpack-cli']) {
+      buildTools.push('webpack');
+    }
+    if (deps.vite) {
+      buildTools.push('vite');
+    }
+    if (deps.esbuild) {
+      buildTools.push('esbuild');
+    }
+    if (deps.rollup) {
+      buildTools.push('rollup');
+    }
+    return buildTools;
+  }
+
+  /**
+   * Detect test frameworks from package dependencies.
+   * @param deps Package dependencies.
+   * @returns Detected test frameworks.
+   */
+  private detectTestFrameworks(deps: Record<string, unknown>): string[] {
+    const testFrameworks: string[] = [];
+    if (deps.jest || deps['@types/jest']) {
+      testFrameworks.push('Jest');
+    }
+    if (deps.vitest || deps['@vitest']) {
+      testFrameworks.push('Vitest');
+    }
+    if (deps.mocha || deps['@types/mocha']) {
+      testFrameworks.push('Mocha');
+    }
+    return testFrameworks;
+  }
+
+  /**
    * Detect tech stack from project files.
    * @returns Tech stack information.
    */
@@ -47,57 +138,12 @@ export class ContextDetector {
         const content = await this.readFile(packageJsonPath);
         const pkg = JSON.parse(content) as Record<string, unknown>;
 
-        // Detect languages from dependencies
+        // Detect from dependencies
         const deps = { ...(pkg.dependencies as Record<string, unknown>), ...(pkg.devDependencies as Record<string, unknown>) };
-        if (deps.typescript || deps['@types/node']) {
-          languages.push('TypeScript');
-        }
-        if (deps.react || deps['@types/react']) {
-          languages.push('JavaScript');
-          frameworks.push('React');
-        }
-        if (deps.vue) {
-          languages.push('JavaScript');
-          frameworks.push('Vue');
-        }
-        if (deps.angular || deps['@angular/core']) {
-          languages.push('TypeScript');
-          frameworks.push('Angular');
-        }
-        if (deps.express || deps['@types/express']) {
-          frameworks.push('Express');
-        }
-        if (deps.next || deps['next.js']) {
-          frameworks.push('Next.js');
-        }
-        if (deps.nuxt || deps['@nuxt/core']) {
-          frameworks.push('Nuxt');
-        }
-
-        // Detect build tools
-        if (deps.webpack || deps['webpack-cli']) {
-          buildTools.push('webpack');
-        }
-        if (deps.vite) {
-          buildTools.push('vite');
-        }
-        if (deps.esbuild) {
-          buildTools.push('esbuild');
-        }
-        if (deps.rollup) {
-          buildTools.push('rollup');
-        }
-
-        // Detect test frameworks
-        if (deps.jest || deps['@types/jest']) {
-          testFrameworks.push('Jest');
-        }
-        if (deps.vitest || deps['@vitest']) {
-          testFrameworks.push('Vitest');
-        }
-        if (deps.mocha || deps['@types/mocha']) {
-          testFrameworks.push('Mocha');
-        }
+        languages.push(...this.detectLanguages(deps));
+        frameworks.push(...this.detectFrameworks(deps));
+        buildTools.push(...this.detectBuildTools(deps));
+        testFrameworks.push(...this.detectTestFrameworks(deps));
       } catch {
         // Ignore parse errors
       }
@@ -146,63 +192,80 @@ export class ContextDetector {
   }
 
   /**
+   * Detect technical domain from directory structure.
+   * @param dirs Directory names.
+   * @returns Technical domain.
+   */
+  private detectTechnicalDomain(dirs: string[]): string {
+    if (dirs.includes('src') && dirs.includes('test')) {
+      return 'fullstack';
+    }
+    if (dirs.includes('src') || dirs.includes('lib')) {
+      if (dirs.includes('public') || dirs.includes('static') || dirs.includes('assets')) {
+        return 'frontend';
+      }
+      if (dirs.includes('server') || dirs.includes('api') || dirs.includes('routes')) {
+        return 'backend';
+      }
+      return 'backend';
+    }
+    return '';
+  }
+
+  /**
+   * Detect category from directory structure.
+   * @param dirs Directory names.
+   * @returns Category.
+   */
+  private detectCategory(dirs: string[]): string {
+    if (dirs.includes('components') || dirs.includes('pages') || dirs.includes('views')) {
+      return 'web-application';
+    }
+    if (dirs.includes('controllers') || dirs.includes('models') || dirs.includes('services')) {
+      return 'api-server';
+    }
+    if (dirs.includes('tests') || dirs.includes('spec') || dirs.includes('__tests__')) {
+      return 'library';
+    }
+    if (dirs.includes('bin') || dirs.includes('cli')) {
+      return 'cli-tool';
+    }
+    return '';
+  }
+
+  /**
+   * Detect business domain from file names.
+   * @param files File names.
+   * @returns Business domain.
+   */
+  private detectBusinessDomain(files: string[]): string {
+    for (const file of files) {
+      const lower = file.toLowerCase();
+      if (lower.includes('auth') || lower.includes('login') || lower.includes('user')) {
+        return 'authentication';
+      }
+      if (lower.includes('payment') || lower.includes('billing') || lower.includes('invoice')) {
+        return 'payments';
+      }
+      if (lower.includes('order') || lower.includes('cart') || lower.includes('checkout')) {
+        return 'ecommerce';
+      }
+    }
+    return '';
+  }
+
+  /**
    * Detect domain from project structure.
    * @returns Domain information.
    */
   private async detectDomain(): Promise<Domain> {
-    const category: string[] = [];
-    const businessDomain: string[] = [];
-    const technicalDomain: string[] = [];
-
-    // Detect from directory structure
     const dirs = await this.listDirectories(this.options.cwd);
-
-    // Technical domain detection
-    if (dirs.includes('src') && dirs.includes('test')) {
-      technicalDomain.push('fullstack');
-    } else if (dirs.includes('src') || dirs.includes('lib')) {
-      if (dirs.includes('public') || dirs.includes('static') || dirs.includes('assets')) {
-        technicalDomain.push('frontend');
-      } else if (dirs.includes('server') || dirs.includes('api') || dirs.includes('routes')) {
-        technicalDomain.push('backend');
-      } else {
-        technicalDomain.push('backend');
-      }
-    }
-
-    // Category detection from common patterns
-    if (dirs.includes('components') || dirs.includes('pages') || dirs.includes('views')) {
-      category.push('web-application');
-    }
-    if (dirs.includes('controllers') || dirs.includes('models') || dirs.includes('services')) {
-      category.push('api-server');
-    }
-    if (dirs.includes('tests') || dirs.includes('spec') || dirs.includes('__tests__')) {
-      category.push('library');
-    }
-    if (dirs.includes('bin') || dirs.includes('cli')) {
-      category.push('cli-tool');
-    }
-
-    // Business domain inference from naming patterns
     const files = await this.listFiles(this.options.cwd);
-    for (const file of files) {
-      const lower = file.toLowerCase();
-      if ((lower.includes('auth') || lower.includes('login') || lower.includes('user')) && !businessDomain.includes('authentication')) {
-        businessDomain.push('authentication');
-      }
-      if ((lower.includes('payment') || lower.includes('billing') || lower.includes('invoice')) && !businessDomain.includes('payments')) {
-        businessDomain.push('payments');
-      }
-      if ((lower.includes('order') || lower.includes('cart') || lower.includes('checkout')) && !businessDomain.includes('ecommerce')) {
-        businessDomain.push('ecommerce');
-      }
-    }
 
     return {
-      category: category[0],
-      businessDomain: businessDomain[0],
-      technicalDomain: technicalDomain[0]
+      category: this.detectCategory(dirs),
+      businessDomain: this.detectBusinessDomain(files),
+      technicalDomain: this.detectTechnicalDomain(dirs)
     };
   }
 
@@ -230,6 +293,7 @@ export class ContextDetector {
   private async getRecentFiles(): Promise<string[]> {
     // For now, return empty array. In a full implementation, this would
     // use filesystem timestamps to find recently modified files.
+    await Promise.resolve();
     return [];
   }
 
@@ -240,6 +304,7 @@ export class ContextDetector {
   private async getGitBranch(): Promise<string | undefined> {
     // For now, return undefined. In a full implementation, this would
     // run `git branch --show-current` to get the current branch.
+    await Promise.resolve();
     return undefined;
   }
 
@@ -250,6 +315,7 @@ export class ContextDetector {
   private async getLastCommitMessage(): Promise<string | undefined> {
     // For now, return undefined. In a full implementation, this would
     // run `git log -1 --pretty=%B` to get the last commit message.
+    await Promise.resolve();
     return undefined;
   }
 

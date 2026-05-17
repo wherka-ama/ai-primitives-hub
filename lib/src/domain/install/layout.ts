@@ -109,27 +109,27 @@ export function validateTargetLayoutsConfig(raw: unknown): TargetLayoutsConfig {
 
 function validateScopedLayoutDef(raw: unknown, path: string): void {
   if (raw === null || typeof raw !== 'object') {
-    throw new Error(`layout config: "${path}" must be an object`);
+    throw new TypeError(`layout config: "${path}" must be an object`);
   }
   const obj = raw as Record<string, unknown>;
   if (typeof obj.baseDir !== 'string') {
-    throw new Error(`layout config: "${path}.baseDir" must be a string`);
+    throw new TypeError(`layout config: "${path}.baseDir" must be a string`);
   }
   if (obj.kindRoutes === null || typeof obj.kindRoutes !== 'object') {
-    throw new Error(`layout config: "${path}.kindRoutes" must be an object`);
+    throw new TypeError(`layout config: "${path}.kindRoutes" must be an object`);
   }
   for (const [k, v] of Object.entries(obj.kindRoutes as Record<string, unknown>)) {
     if (typeof v !== 'string') {
-      throw new Error(`layout config: "${path}.kindRoutes.${k}" must be a string`);
+      throw new TypeError(`layout config: "${path}.kindRoutes.${k}" must be a string`);
     }
   }
   if (obj.skipPaths !== undefined) {
     if (!Array.isArray(obj.skipPaths)) {
-      throw new Error(`layout config: "${path}.skipPaths" must be an array`);
+      throw new TypeError(`layout config: "${path}.skipPaths" must be an array`);
     }
     for (const p of obj.skipPaths as unknown[]) {
       if (typeof p !== 'string') {
-        throw new Error(`layout config: "${path}.skipPaths" entries must be strings`);
+        throw new TypeError(`layout config: "${path}.skipPaths" entries must be strings`);
       }
     }
   }

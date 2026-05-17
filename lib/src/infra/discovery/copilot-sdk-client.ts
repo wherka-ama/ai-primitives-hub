@@ -18,6 +18,7 @@ import type {
 class MockCopilotSession implements CopilotSession {
   public async sendAndWait(_prompt: string): Promise<string> {
     // Mock implementation - returns empty string
+    await Promise.resolve();
     return '';
   }
 
@@ -26,6 +27,7 @@ class MockCopilotSession implements CopilotSession {
     _onChunk: (chunk: string) => void
   ): Promise<string> {
     // Mock implementation - returns empty string
+    await Promise.resolve();
     return '';
   }
 
@@ -48,6 +50,7 @@ export class CopilotSdkClient implements CopilotSdk {
 
   public async createSession(_options: SessionOptions): Promise<CopilotSession> {
     // Mock implementation - returns mock session
+    await Promise.resolve();
     return new MockCopilotSession();
   }
 }

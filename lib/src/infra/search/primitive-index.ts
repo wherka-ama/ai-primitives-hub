@@ -186,7 +186,7 @@ export class PrimitiveIndex {
   }
 
   /**
-   * Create a PrimitiveIndex from a list of primitives.
+   * Build a new index from primitives.
    * @param primitives List of primitives to index.
    * @param opts Build options.
    * @returns Built PrimitiveIndex.
@@ -196,8 +196,8 @@ export class PrimitiveIndex {
     opts: BuildOptions = {}
   ): PrimitiveIndex {
     const idx = new PrimitiveIndex();
-    // Ignore embeddings here (reset is async only because of providers).
-    void idx.reset(primitives, opts);
+    // Use synchronous reset path when building from primitives directly
+    idx.resetSync(primitives, opts);
     return idx;
   }
 
@@ -207,6 +207,29 @@ export class PrimitiveIndex {
    * @param opts Build options.
    */
   private async reset(primitives: Primitive[], opts: BuildOptions): Promise<void> {
+    this.resetSync(primitives, opts);
+    if (opts.embeddings) {
+      const texts = this.records.map((r) =>
+        `${r.primitive.title}\n${r.primitive.description}\n${r.primitive.tags.join(' ')}\n${r.primitive.bodyPreview}`
+      );
+      const vectors = await opts.embeddings.embed(texts);
+      vectors.forEach((v, i) => {
+        this.records[i].embedding = v;
+      });
+      this.meta.embeddingsMeta = {
+        provider: (opts.embeddings as unknown as { name?: string }).name ?? 'custom',
+        dim: opts.embeddings.dim
+      };
+    }
+  }
+
+  /**
+   * Synchronous reset without embeddings support.
+   * Used by fromPrimitives which doesn't need async embedding loading.
+   * @param primitives List of primitives to index.
+   * @param opts Build options.
+   */
+  private resetSync(primitives: Primitive[], opts: BuildOptions): void {
     // Deduplicate by primitiveId; later wins.
     const byId = new Map<string, Primitive>();
     for (const p of primitives) {
@@ -225,19 +248,6 @@ export class PrimitiveIndex {
       builtAt: new Date().toISOString(),
       hubId: opts.hubId ?? this.meta.hubId
     };
-    if (opts.embeddings) {
-      const texts = this.records.map((r) =>
-        `${r.primitive.title}\n${r.primitive.description}\n${r.primitive.tags.join(' ')}\n${r.primitive.bodyPreview}`
-      );
-      const vectors = await opts.embeddings.embed(texts);
-      vectors.forEach((v, i) => {
-        this.records[i].embedding = v;
-      });
-      this.meta.embeddingsMeta = {
-        provider: (opts.embeddings as unknown as { name?: string }).name ?? 'custom',
-        dim: opts.embeddings.dim
-      };
-    }
   }
 
   /**

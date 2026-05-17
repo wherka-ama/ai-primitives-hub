@@ -178,6 +178,205 @@ export class InitCommand extends Command {
 }
 
 /**
+ * Run interactive wizard to collect init options.
+ * @param ctx CLI context.
+ * @param _opts Init options.
+ * @returns Wizard answers.
+ */
+async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
+  targetType: TargetType;
+  targetName: string;
+  targetScope: 'user' | 'repository';
+  hubRef?: string;
+}> {
+  interface WizardAnswers {
+    ide: string;
+    scope?: 'user' | 'repository';
+    connectHub: boolean;
+    hubChoice?: string;
+    hubPath?: string;
+    useExistingTarget?: boolean;
+    newTargetName?: string;
+  }
+
+  const answers = await inquirer.prompt<WizardAnswers>([
+    {
+      type: 'list',
+      name: 'ide',
+      message: 'What IDE are you using?',
+      choices: TARGET_TYPES.map((type) => ({
+        name: getTargetTypeDisplayName(type),
+        value: type
+      })),
+      default: 'copilot-cli'
+    },
+    {
+      type: 'list',
+      name: 'scope',
+      message: 'Installation scope:',
+      choices: [
+        { name: 'User scope (installed in home directory)', value: 'user' },
+        { name: 'Project scope (installed in current project)', value: 'repository' }
+      ],
+      default: 'user'
+    },
+    {
+      type: 'confirm',
+      name: 'connectHub',
+      message: 'Connect to a hub? (recommended)',
+      default: true
+    },
+    {
+      type: 'list',
+      name: 'hubChoice',
+      message: 'Select hub:',
+      choices: [
+        { name: 'Amadeus Hub (default)', value: 'amadeus' },
+        { name: 'Local directory', value: 'local' },
+        { name: 'Skip for now', value: 'skip' }
+      ],
+      default: 'amadeus',
+      when: (a: { connectHub: boolean }) => a.connectHub
+    },
+    {
+      type: 'input',
+      name: 'hubPath',
+      message: 'Enter local hub path:',
+      default: './hub-config.yml',
+      when: (a: { hubChoice: string }) => a.hubChoice === 'local'
+    }
+  ]);
+
+  const targetType = answers.ide as TargetType;
+  let targetName = DEFAULT_TARGET_NAME;
+  const targetScope = answers.scope ?? 'user';
+
+  const currentTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
+  const targetExists = currentTargets.some((t) => t.name === targetName);
+
+  if (targetExists) {
+    const targetAnswers = await inquirer.prompt<WizardAnswers>([
+      {
+        type: 'confirm',
+        name: 'useExistingTarget',
+        message: `Target "${targetName}" already exists. Use it anyway?`,
+        default: true
+      },
+      {
+        type: 'input',
+        name: 'newTargetName',
+        message: 'Enter a different target name:',
+        default: 'copilot-2',
+        when: (a: { useExistingTarget: boolean }) => !a.useExistingTarget
+      }
+    ]);
+
+    if (!targetAnswers.useExistingTarget) {
+      targetName = targetAnswers.newTargetName || targetName;
+    }
+  }
+
+  let hubRef: string | undefined;
+  if (answers.hubChoice === 'amadeus') {
+    hubRef = KNOWN_HUBS.amadeus;
+  } else if (answers.hubChoice === 'local' && answers.hubPath) {
+    hubRef = `file:${answers.hubPath}`;
+  } else {
+    hubRef = undefined;
+  }
+
+  return { targetType, targetName, targetScope, hubRef };
+}
+
+/**
+ * Create or reuse target.
+ * @param ctx CLI context.
+ * @param targetName Target name.
+ * @param targetType Target type.
+ * @param targetScope Target scope.
+ * @returns Target file path and creation status.
+ */
+async function createOrReuseTarget(
+  ctx: Context,
+  targetName: string,
+  targetType: TargetType,
+  targetScope: 'user' | 'repository'
+): Promise<{ file: string; created?: boolean }> {
+  const currentTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
+  const targetExists = currentTargets.some((t) => t.name === targetName);
+
+  if (targetExists) {
+    const { file } = await findProjectConfigPath({ cwd: ctx.cwd(), fs: ctx.fs });
+    return { file, created: false };
+  }
+
+  return await addTarget(
+    { cwd: ctx.cwd(), fs: ctx.fs },
+    { name: targetName, type: targetType as any, scope: targetScope } as Target
+  );
+}
+
+/**
+ * Import and sync hub.
+ * @param ctx CLI context.
+ * @param hubRef Hub reference.
+ * @param opts Init options.
+ * @returns Hub ID or null.
+ */
+async function importAndSyncHub(ctx: Context, hubRef: string, opts: InitOptions): Promise<string | null> {
+  const mgr = buildHubManager(ctx, opts.http, opts.tokens);
+  const refType = opts.hubType ?? inferHubType(hubRef);
+  const location = refType === 'local' && !path.isAbsolute(hubRef)
+    ? path.resolve(ctx.cwd(), hubRef)
+    : hubRef;
+
+  const hubId = await mgr.importHub({ type: refType, location });
+  await mgr.syncHub(hubId);
+  return hubId;
+}
+
+/**
+ * Build text renderer output for init command.
+ * @param data Init result data.
+ * @param data.steps Initialization steps.
+ * @param data.target Target configuration.
+ * @param data.hub Hub configuration.
+ * @param verbose Verbose flag.
+ * @returns Formatted text output.
+ */
+function buildInitOutput(data: { steps: string[]; target: { file: string; name: string; type: string }; hub: { id: string } | null }, verbose: boolean): string {
+  const lines = ['Initialized prompt-registry project:\n'];
+  for (const step of data.steps) {
+    lines.push(`  ✓ ${step}\n`);
+  }
+
+  if (verbose) {
+    lines.push('\nConfiguration:\n', `  Config file: ${data.target.file}\n`, `  Target name: ${data.target.name}\n`, `  Target type: ${data.target.type}\n`);
+    if (data.hub !== null) {
+      lines.push(`  Hub ID: ${data.hub.id}\n`);
+    }
+    lines.push('\nVerification commands:\n', '  prompt-registry status\n', '  prompt-registry target list\n');
+    if (data.hub !== null) {
+      lines.push('  prompt-registry hub list\n', '  prompt-registry profile list\n');
+    }
+  }
+
+  if (data.hub === null) {
+    lines.push(
+      '\nNext steps:\n',
+      '  1. prompt-registry hub add <owner/repo> --yes\n',
+      '  2. prompt-registry profile activate <profileId>\n'
+    );
+  } else {
+    if (verbose) {
+      lines.push('\nAvailable profiles:\n', '  Run: prompt-registry profile list\n');
+    }
+    lines.push('\nNext step:\n', '  prompt-registry profile activate <profileId>\n');
+  }
+  return lines.join('');
+}
+
+/**
  * Core init logic shared by both command variants.
  * @param ctx CLI context.
  * @param opts Init options.
@@ -192,103 +391,12 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
   let targetScope = (opts.scope as 'user' | 'repository') ?? 'user';
   let hubRef = opts.hub;
 
-  // Interactive wizard mode
   if (isInteractive) {
-    interface WizardAnswers {
-      ide: string;
-      scope?: 'user' | 'repository';
-      connectHub: boolean;
-      hubChoice?: string;
-      hubPath?: string;
-      useExistingTarget?: boolean;
-      newTargetName?: string;
-    }
-
-    const answers = await inquirer.prompt<WizardAnswers>([
-      {
-        type: 'list',
-        name: 'ide',
-        message: 'What IDE are you using?',
-        choices: TARGET_TYPES.map((type) => ({
-          name: getTargetTypeDisplayName(type),
-          value: type
-        })),
-        default: 'copilot-cli'
-      },
-      {
-        type: 'list',
-        name: 'scope',
-        message: 'Installation scope:',
-        choices: [
-          { name: 'User scope (installed in home directory)', value: 'user' },
-          { name: 'Project scope (installed in current project)', value: 'repository' }
-        ],
-        default: 'user'
-      },
-      {
-        type: 'confirm',
-        name: 'connectHub',
-        message: 'Connect to a hub? (recommended)',
-        default: true
-      },
-      {
-        type: 'list',
-        name: 'hubChoice',
-        message: 'Select hub:',
-        choices: [
-          { name: 'Amadeus Hub (default)', value: 'amadeus' },
-          { name: 'Local directory', value: 'local' },
-          { name: 'Skip for now', value: 'skip' }
-        ],
-        default: 'amadeus',
-        when: (a: { connectHub: boolean }) => a.connectHub
-      },
-      {
-        type: 'input',
-        name: 'hubPath',
-        message: 'Enter local hub path:',
-        default: './hub-config.yml',
-        when: (a: { hubChoice: string }) => a.hubChoice === 'local'
-      }
-    ]);
-
-    targetType = answers.ide as TargetType;
-    targetName = DEFAULT_TARGET_NAME;
-    targetScope = answers.scope ?? 'user';
-
-    // Check if target already exists
-    const currentTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
-    const targetExists = currentTargets.some((t) => t.name === targetName);
-
-    if (targetExists) {
-      const targetAnswers = await inquirer.prompt<WizardAnswers>([
-        {
-          type: 'confirm',
-          name: 'useExistingTarget',
-          message: `Target "${targetName}" already exists. Use it anyway?`,
-          default: true
-        },
-        {
-          type: 'input',
-          name: 'newTargetName',
-          message: 'Enter a different target name:',
-          default: 'copilot-2',
-          when: (a: { useExistingTarget: boolean }) => !a.useExistingTarget
-        }
-      ]);
-
-      if (!targetAnswers.useExistingTarget) {
-        targetName = targetAnswers.newTargetName || targetName;
-      }
-    }
-
-    if (answers.hubChoice === 'amadeus') {
-      hubRef = KNOWN_HUBS.amadeus;
-    } else if (answers.hubChoice === 'local' && answers.hubPath) {
-      hubRef = `file:${answers.hubPath}`;
-    } else {
-      hubRef = undefined;
-    }
+    const wizardResult = await runInteractiveWizard(ctx, opts);
+    targetType = wizardResult.targetType;
+    targetName = wizardResult.targetName;
+    targetScope = wizardResult.targetScope;
+    hubRef = wizardResult.hubRef;
   }
 
   if (!TARGET_TYPES.includes(targetType)) {
@@ -300,40 +408,14 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
   }
 
   try {
-    // Step 1: check if target already exists
-    const currentTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
-    const targetExists = currentTargets.some((t) => t.name === targetName);
-
-    let result;
-    if (targetExists) {
-      // Target already exists - skip creation but note it
-      const { file } = await findProjectConfigPath({ cwd: ctx.cwd(), fs: ctx.fs });
-      result = { file, created: false };
-    } else {
-      // Create new target with selected scope
-      result = await addTarget(
-        { cwd: ctx.cwd(), fs: ctx.fs },
-        { name: targetName, type: targetType as any, scope: targetScope } as Target
-      );
-    }
-
+    const result = await createOrReuseTarget(ctx, targetName, targetType, targetScope);
     const steps: string[] = [
-      targetExists
-        ? `target "${targetName}" already exists`
-        : `target "${targetName}" (${targetType}) → ${result.file}`
+      result.created ? `target "${targetName}" (${targetType}) → ${result.file}` : `target "${targetName}" already exists`
     ];
 
-    // Step 2: optionally import + sync hub
     let hubId: string | null = null;
     if (hubRef !== undefined && hubRef.length > 0) {
-      const mgr = buildHubManager(ctx, opts.http, opts.tokens);
-      const refType = opts.hubType ?? inferHubType(hubRef);
-      const location = refType === 'local' && !path.isAbsolute(hubRef)
-        ? path.resolve(ctx.cwd(), hubRef)
-        : hubRef;
-
-      hubId = await mgr.importHub({ type: refType, location });
-      await mgr.syncHub(hubId);
+      hubId = await importAndSyncHub(ctx, hubRef, opts);
       steps.push(`hub "${hubId}" imported and synced`);
     }
 
@@ -354,38 +436,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
       output: fmt,
       status: 'ok',
       data,
-      textRenderer: (d) => {
-        const lines = ['Initialized prompt-registry project:\n'];
-        for (const step of d.steps) {
-          lines.push(`  ✓ ${step}\n`);
-        }
-
-        // Verbose output with file paths and verification commands
-        if (opts.verbose) {
-          lines.push('\nConfiguration:\n', `  Config file: ${d.target.file}\n`, `  Target name: ${d.target.name}\n`, `  Target type: ${d.target.type}\n`);
-          if (d.hub !== null) {
-            lines.push(`  Hub ID: ${d.hub.id}\n`);
-          }
-          lines.push('\nVerification commands:\n', '  prompt-registry status\n', '  prompt-registry target list\n');
-          if (d.hub !== null) {
-            lines.push('  prompt-registry hub list\n', '  prompt-registry profile list\n');
-          }
-        }
-
-        if (d.hub === null) {
-          lines.push(
-            '\nNext steps:\n',
-            '  1. prompt-registry hub add <owner/repo> --yes\n',
-            '  2. prompt-registry profile activate <profileId>\n'
-          );
-        } else {
-          if (opts.verbose) {
-            lines.push('\nAvailable profiles:\n', '  Run: prompt-registry profile list\n');
-          }
-          lines.push('\nNext step:\n', '  prompt-registry profile activate <profileId>\n');
-        }
-        return lines.join('');
-      }
+      textRenderer: (d) => buildInitOutput(d, opts.verbose ?? false)
     });
     return 0;
   } catch (cause) {
@@ -393,8 +444,8 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
       return failWith(ctx, fmt, cause);
     }
     return failWith(ctx, fmt, new RegistryError({
-      code: 'INTERNAL.UNEXPECTED',
-      message: cause instanceof Error ? cause.message : String(cause),
+      code: 'INIT.ERROR',
+      message: `Failed to initialize project: ${cause instanceof Error ? cause.message : String(cause)}`,
       cause: cause instanceof Error ? cause : undefined
     }));
   }

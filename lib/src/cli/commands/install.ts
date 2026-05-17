@@ -256,37 +256,86 @@ export class InstallCommand extends BaseInstallCommand {
       checkAllowTarget(targetName, opts);
       const target = await resolveTarget(targetName, ctx);
 
-      // F-13: auto-locate lockfile when no mode flag supplied
-      if (noBundle && noLockfile && !opts.from && !opts.source) {
-        const foundLock = await findLockfile(ctx.cwd(), ctx.fs);
-        if (foundLock !== null) {
-          opts.lockfile = foundLock;
-        }
+      await autoLocateLockfile(opts, ctx);
+
+      const mode = determineInstallMode(opts);
+      if (mode === undefined) {
+        return await performRemoteInstall(opts, target, ctx, fmt);
       }
 
-      // List bundles from source when --source is provided without bundle ID
-      if (opts.source !== undefined && opts.source.length > 0 && noBundle) {
-        if (opts.interactive) {
-          return await interactiveBundleSelection(opts, target, ctx, fmt);
-        }
-        return await listSourceBundles(opts, ctx, fmt);
-      }
-
-      if (opts.from !== undefined && opts.from.length > 0) {
-        return await performLocalInstall(opts, target, ctx, fmt);
-      }
-
-      if (opts.lockfile !== undefined && opts.lockfile.length > 0) {
-        return await performLockfileInstall(opts, target, ctx, fmt);
-      }
-
-      return await performRemoteInstall(opts, target, ctx, fmt);
+      return await executeInstallMode(mode, opts, target, ctx, fmt);
     } catch (err) {
       if (err instanceof RegistryError) {
         return failWith(ctx, fmt, err);
       }
       throw err;
     }
+  }
+}
+
+/**
+ * Determine the installation mode based on options.
+ * @param opts Install options.
+ * @returns Installation mode.
+ */
+function determineInstallMode(opts: InstallOptions): 'local' | 'lockfile' | 'remote' | 'interactive' | 'list' | undefined {
+  const { noBundle } = validateInstallInputs(opts);
+  
+  if (opts.source !== undefined && opts.source.length > 0 && noBundle) {
+    return opts.interactive ? 'interactive' : 'list';
+  }
+  if (opts.from !== undefined && opts.from.length > 0) {
+    return 'local';
+  }
+  if (opts.lockfile !== undefined && opts.lockfile.length > 0) {
+    return 'lockfile';
+  }
+  return 'remote';
+}
+
+/**
+ * Auto-locate lockfile when no mode flag supplied.
+ * @param opts Install options.
+ * @param ctx CLI context.
+ */
+async function autoLocateLockfile(opts: InstallOptions, ctx: Context): Promise<void> {
+  const { noBundle, noLockfile } = validateInstallInputs(opts);
+  if (noBundle && noLockfile && !opts.from && !opts.source) {
+    const foundLock = await findLockfile(ctx.cwd(), ctx.fs);
+    if (foundLock !== null) {
+      opts.lockfile = foundLock;
+    }
+  }
+}
+
+/**
+ * Execute installation based on determined mode.
+ * @param mode Installation mode.
+ * @param opts Install options.
+ * @param target Target configuration.
+ * @param ctx CLI context.
+ * @param fmt Output format.
+ * @returns Exit code.
+ */
+async function executeInstallMode(
+  mode: string,
+  opts: InstallOptions,
+  target: Target,
+  ctx: Context,
+  fmt: OutputFormat
+): Promise<number> {
+  switch (mode) {
+    case 'interactive':
+      return await interactiveBundleSelection(opts, target, ctx, fmt);
+    case 'list':
+      return await listSourceBundles(opts, ctx, fmt);
+    case 'local':
+      return await performLocalInstall(opts, target, ctx, fmt);
+    case 'lockfile':
+      return await performLockfileInstall(opts, target, ctx, fmt);
+    case 'remote':
+    default:
+      return await performRemoteInstall(opts, target, ctx, fmt);
   }
 }
 
@@ -425,7 +474,7 @@ async function listSourceBundles(
 }
 
 /**
- * Interactive bundle selection from a hub source.
+ * Interactive bundle selection and installation.
  * @param opts Install options.
  * @param target Target configuration.
  * @param ctx CLI context.
@@ -485,7 +534,6 @@ async function interactiveBundleSelection(
     const selectedBundleIds = answers.selectedBundles as string[];
     const selectedBundles = bundles.filter((b: { id: string }) => selectedBundleIds.includes(b.id));
 
-    // Show preview
     ctx.stdout.write(`\nPreview: Installing ${selectedBundles.length} bundle${selectedBundles.length === 1 ? '' : 's'} to target "${target.name}"\n`);
     for (const b of selectedBundles) {
       ctx.stdout.write(`  - ${b.id}@${b.version} (source: ${b.source})\n`);
@@ -505,7 +553,6 @@ async function interactiveBundleSelection(
       return 0;
     }
 
-    // Install each selected bundle
     let installedCount = 0;
     for (const bundle of selectedBundles) {
       const bundleOpts = { ...opts, bundle: bundle.id };
@@ -524,23 +571,19 @@ async function interactiveBundleSelection(
       command: 'install',
       output: fmt,
       status: 'ok',
-      data: {
-        hubId,
-        selected: selectedBundles.length,
-        installed: installedCount,
-        target: target.name
-      },
-      textRenderer: (d) => `Installed ${d.installed}/${d.selected} bundles to target "${d.target}".\n`
+      data: { installed: installedCount, total: selectedBundles.length },
+      textRenderer: (d) => `Installed ${d.installed}/${d.total} bundles\n`
     });
     return 0;
   } catch (err) {
-    if (err instanceof RegistryError) {
-      return failWith(ctx, fmt, err);
-    }
-    return failWith(ctx, fmt, new RegistryError({
-      code: 'HUB.LOAD_FAILED',
-      message: `Failed to load hub "${hubId}": ${err instanceof Error ? err.message : String(err)}`,
-      cause: err instanceof Error ? err : undefined
+    return failWith(ctx, fmt, err instanceof Error ? new RegistryError({
+      code: 'INSTALL.ERROR',
+      message: err.message,
+      hint: 'Check the hub configuration and try again.'
+    }) : new RegistryError({
+      code: 'INSTALL.ERROR',
+      message: String(err),
+      hint: 'Check the hub configuration and try again.'
     }));
   }
 }

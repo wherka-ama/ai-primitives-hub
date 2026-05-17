@@ -78,10 +78,122 @@ const failWith = (ctx: Context, fmt: OutputFormat, err: RegistryError): number =
 };
 
 /**
- * Build the `apply` command.
- * @param opts Command options.
- * @returns CommandDefinition.
+ * Build hub manager with dependencies.
+ * @param ctx CLI context.
+ * @param _opts Apply options.
+ * @returns HubManager instance.
  */
+function buildHubManager(ctx: Context, _opts: ApplyOptions): HubManager {
+  const userPaths = resolveUserConfigPaths(ctx.env);
+  const httpClient = new NodeHttpClient();
+  const tokenProvider = envTokenProvider(ctx.env);
+  const resolver = new CompositeHubResolver(
+    new GitHubHubResolver(httpClient, tokenProvider),
+    new LocalHubResolver(ctx.fs),
+    new UrlHubResolver(httpClient, tokenProvider)
+  );
+  return new HubManager(
+    new HubStore(userPaths.hubs, ctx.fs),
+    new ActiveHubStore(userPaths.activeHub, ctx.fs),
+    resolver
+  );
+}
+
+/**
+ * Sync hub with error handling.
+ * @param mgr HubManager instance.
+ * @param hubId Hub ID.
+ * @param ctx CLI context.
+ * @param noSync Skip sync flag.
+ */
+async function syncHubSafe(mgr: HubManager, hubId: string, ctx: Context, noSync?: boolean): Promise<void> {
+  if (!noSync) {
+    try {
+      await mgr.syncHub(hubId);
+    } catch {
+      ctx.stderr.write(`warn: hub sync failed for "${hubId}", continuing with cached config\n`);
+    }
+  }
+}
+
+/**
+ * Validate hub and profile configuration.
+ * @param mgr HubManager instance.
+ * @param hubId Hub ID.
+ * @param profileId Profile ID.
+ * @param _ctx CLI context.
+ * @param _fmt Output format.
+ * @returns Profile object.
+ */
+async function validateHubAndProfile(
+  mgr: HubManager,
+  hubId: string,
+  profileId: string,
+  _ctx: Context,
+  _fmt: OutputFormat
+): Promise<any> {
+  const active = await mgr.getActiveHub();
+  if (active?.id !== hubId) {
+    throw new RegistryError({
+      code: 'HUB.NOT_FOUND',
+      message: `apply: hub "${hubId}" is not active`,
+      hint: `Run \`prompt-registry hub use ${hubId}\` first.`
+    });
+  }
+
+  const profile = active.config.profiles.find((p) => p.id === profileId);
+  if (profile === undefined) {
+    throw new RegistryError({
+      code: 'BUNDLE.NOT_FOUND',
+      message: `apply: profile "${profileId}" not found in hub "${hubId}"`,
+      hint: 'Run `prompt-registry profile list` to see available profiles.'
+    });
+  }
+  return profile;
+}
+
+/**
+ * Update lockfile with bundle checksums.
+ * @param lock Current lockfile.
+ * @param out Activation output.
+ * @param profile Profile object.
+ * @param sources Sources map.
+ * @param ctx CLI context.
+ * @returns Updated lockfile.
+ */
+async function updateLockfileWithChecksums(lock: any, out: any, profile: any, sources: Record<string, any>, ctx: Context): Promise<any> {
+  let nextLock = lock;
+  for (const t of out.state.syncedTargets) {
+    for (const bundleRef of profile.bundles) {
+      const src = sources[bundleRef.source];
+      if (!src) {
+        continue;
+      }
+      const sourceId = generateSourceId(src.type, src.url);
+      const writtenFiles = out.written[t] ?? [];
+      const checksums: Record<string, string> = {};
+      const crypto = await import('node:crypto');
+      for (const f of writtenFiles) {
+        const bytes = await ctx.fs.readFile(f);
+        checksums[f] = crypto.createHash('sha256').update(bytes).digest('hex');
+      }
+      nextLock = upsertEntry(nextLock, {
+        target: t,
+        sourceId,
+        bundleId: bundleRef.id,
+        bundleVersion: bundleRef.version === 'latest'
+          ? out.state.syncedBundleVersions[bundleRef.id]
+          : bundleRef.version,
+        installedAt: new Date().toISOString(),
+        files: writtenFiles,
+        fileChecksums: checksums
+      });
+      nextLock = upsertSource(nextLock, sourceId, { type: src.type, url: src.url });
+    }
+  }
+  return nextLock;
+}
+
 export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =>
   defineCommand({
     path: ['apply'],
@@ -102,46 +214,19 @@ export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =
       }
 
       const { hubId, profileId } = lock.useProfile;
+      const mgr = buildHubManager(ctx, opts);
+      await syncHubSafe(mgr, hubId, ctx, opts.noSync);
 
-      const userPaths = resolveUserConfigPaths(ctx.env);
-      const httpClient = new NodeHttpClient();
-      const tokenProvider = envTokenProvider(ctx.env);
-      const resolver = new CompositeHubResolver(
-        new GitHubHubResolver(httpClient, tokenProvider),
-        new LocalHubResolver(ctx.fs),
-        new UrlHubResolver(httpClient, tokenProvider)
-      );
-      const mgr = new HubManager(
-        new HubStore(userPaths.hubs, ctx.fs),
-        new ActiveHubStore(userPaths.activeHub, ctx.fs),
-        resolver
-      );
-
+      // Type is validated by validateHubAndProfile
+      let profile: any;
       try {
-        if (!opts.noSync) {
-          await mgr.syncHub(hubId);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        profile = await validateHubAndProfile(mgr, hubId, profileId, ctx, fmt);
+      } catch (err) {
+        if (err instanceof RegistryError) {
+          return failWith(ctx, fmt, err);
         }
-      } catch {
-        // Non-fatal — continue with cached config
-        ctx.stderr.write(`warn: hub sync failed for "${hubId}", continuing with cached config\n`);
-      }
-
-      const active = await mgr.getActiveHub();
-      if (active?.id !== hubId) {
-        return failWith(ctx, fmt, new RegistryError({
-          code: 'HUB.NOT_FOUND',
-          message: `apply: hub "${hubId}" is not active`,
-          hint: `Run \`prompt-registry hub use ${hubId}\` first.`
-        }));
-      }
-
-      const profile = active.config.profiles.find((p) => p.id === profileId);
-      if (profile === undefined) {
-        return failWith(ctx, fmt, new RegistryError({
-          code: 'BUNDLE.NOT_FOUND',
-          message: `apply: profile "${profileId}" not found in hub "${hubId}"`,
-          hint: 'Run `prompt-registry profile list` to see available profiles.'
-        }));
+        throw err;
       }
 
       const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
@@ -153,6 +238,9 @@ export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =
         }));
       }
 
+      const userPaths = resolveUserConfigPaths(ctx.env);
+      const httpClient = new NodeHttpClient();
+      const tokenProvider = envTokenProvider(ctx.env);
       const activations = new ProfileActivationStore(userPaths.profileActivations, ctx.fs);
       const prev = await activations.getActive();
       if (prev !== null) {
@@ -161,40 +249,12 @@ export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =
 
       const activator = new ProfileActivator({ fs: ctx.fs, env: ctx.env, http: httpClient, tokens: tokenProvider });
       const sources = Object.fromEntries((await mgr.listSources(hubId)).map((s) => [s.id, s]));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const out = await activator.activate({ hubId, profile, sources, targets });
       await activations.save(out.state);
 
-      // Update lockfile
-      let nextLock = lock;
-      for (const t of out.state.syncedTargets) {
-        for (const bundleRef of profile.bundles) {
-          const src = sources[bundleRef.source];
-          if (!src) {
-            continue;
-          }
-          const sourceId = generateSourceId(src.type, src.url);
-          const writtenFiles = out.written[t] ?? [];
-          const checksums: Record<string, string> = {};
-          const crypto = await import('node:crypto');
-          for (const f of writtenFiles) {
-            const bytes = await ctx.fs.readFile(f);
-            checksums[f] = crypto.createHash('sha256').update(bytes).digest('hex');
-          }
-          // Use profile reference ID for lockfile to match display
-          nextLock = upsertEntry(nextLock, {
-            target: t,
-            sourceId,
-            bundleId: bundleRef.id,
-            bundleVersion: bundleRef.version === 'latest'
-              ? out.state.syncedBundleVersions[bundleRef.id]
-              : bundleRef.version,
-            installedAt: new Date().toISOString(),
-            files: writtenFiles,
-            fileChecksums: checksums
-          });
-          nextLock = upsertSource(nextLock, sourceId, { type: src.type, url: src.url });
-        }
-      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const nextLock = await updateLockfileWithChecksums(lock, out, profile, sources, ctx);
       await writeLockfile(lockPath, nextLock, ctx.fs);
 
       formatOutput({

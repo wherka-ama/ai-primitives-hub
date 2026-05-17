@@ -74,6 +74,72 @@ export class GitHubBundleResolver implements BundleResolver {
   }
 
   /**
+   * Find the latest release for a specific bundle.
+   * @param releases All releases.
+   * @param bundleName Bundle name to match.
+   * @returns Latest release or undefined.
+   */
+  private findLatestRelease(releases: GitHubRelease[], bundleName: string | null): GitHubRelease | undefined {
+    const matchingReleases = releases.filter((r) =>
+      r.draft !== true && r.prerelease !== true && (bundleName === null || r.tag_name.startsWith(bundleName))
+    );
+    if (matchingReleases.length === 0) {
+      const allReleases = releases.filter((r) => r.draft !== true && r.prerelease !== true);
+      if (allReleases.length === 0) {
+        return undefined;
+      }
+      return allReleases[0];
+    }
+    const withVersions = matchingReleases
+      .map((r) => ({ release: r, version: extractSemver(r.tag_name) }))
+      .filter((item) => item.version !== null) as { release: GitHubRelease; version: string }[];
+    if (withVersions.length === 0) {
+      return matchingReleases[0];
+    }
+    withVersions.sort((a, b) => {
+      const partsA = a.version.split('.').map(Number);
+      const partsB = b.version.split('.').map(Number);
+      for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+        const partA = partsA[i] ?? 0;
+        const partB = partsB[i] ?? 0;
+        if (partA !== partB) {
+          return partB - partA;
+        }
+      }
+      return 0;
+    });
+    return withVersions[0].release;
+  }
+
+  /**
+   * Find a release with a specific version.
+   * @param releases All releases.
+   * @param bundleName Bundle name to match.
+   * @param wantVersion Version to find.
+   * @returns Release or undefined.
+   */
+  private findSpecificRelease(releases: GitHubRelease[], bundleName: string | null, wantVersion: string): GitHubRelease | undefined {
+    return releases.find((r) => (bundleName === null || r.tag_name.startsWith(bundleName)) && extractSemver(r.tag_name) === wantVersion);
+  }
+
+  /**
+   * Find the matching asset from a release.
+   * @param release Release to search.
+   * @param bundleId Bundle ID for asset naming.
+   * @returns Asset or undefined.
+   */
+  private findAsset(release: GitHubRelease, bundleId: string): { name: string; browser_download_url: string; url?: string } | undefined {
+    const candidates = this.assetCandidates(bundleId);
+    for (const candidate of candidates) {
+      const asset = candidate === '*.bundle.zip' ? release.assets.find((a) => a.name.endsWith('.bundle.zip')) : release.assets.find((a) => a.name === candidate);
+      if (asset !== undefined) {
+        return asset;
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Find an Installable for the given spec.
    * @param spec Parsed BundleSpec.
    * @returns Installable, or `null` when the bundle is not present.
@@ -83,83 +149,18 @@ export class GitHubBundleResolver implements BundleResolver {
     if (releases.length === 0) {
       return null;
     }
-    // Extract the bundle name (collection) from the bundle ID to match against release tags.
-    // This makes the mechanism resilient to repository renames by separating the collection name
-    // from the repository name.
-    // For example, "Amadeus-xDLC-genai.clean-code-in-the-cloud-skills-collection-amadeus-microservice-coding-guidebook"
-    // should match release tags starting with "amadeus-microservice-coding-guidebook-".
     const { collection: bundleName } = decomposeBundleId(spec.bundleId, this.opts.repoSlug);
-    // I-004: real-world hubs use a variety of tag conventions:
-    //   "vX.Y.Z"          (canonical semver tag)
-    //   "X.Y.Z"           (semver without v)
-    //   "<prefix>-vX.Y.Z" (Amadeus convention: bundle id + v + semver)
-    //   "<prefix>-X.Y.Z"  (same without v)
-    // Match all four when the caller asks for a specific version,
-    // and extract the bare semver from the tag for `bundleVersion`.
     const wantVersion = spec.bundleVersion;
     let release: GitHubRelease | undefined;
     if (wantVersion === undefined || wantVersion === 'latest') {
-      // For multi-collection repositories, we need to find the highest semantic version
-      // for the specific collection, not just the first matching release.
-      // Filter releases by bundle name prefix and extract versions
-      const matchingReleases = releases.filter((r) =>
-        r.draft !== true && r.prerelease !== true && (bundleName === null || r.tag_name.startsWith(bundleName))
-      );
-      if (matchingReleases.length === 0) {
-        // If no matching releases found, try without the bundle name filter
-        // This is a fallback for cases where the bundle name extraction might not work
-        const allReleases = releases.filter((r) => r.draft !== true && r.prerelease !== true);
-        if (allReleases.length === 0) {
-          return null;
-        }
-        // Use the first non-draft, non-prerelease release
-        release = allReleases[0];
-      } else {
-        // Extract versions and sort by semantic version
-        const withVersions = matchingReleases
-          .map((r) => ({ release: r, version: extractSemver(r.tag_name) }))
-          .filter((item) => item.version !== null) as { release: GitHubRelease; version: string }[];
-        if (withVersions.length === 0) {
-          // Fallback to first matching release if no versions found
-          release = matchingReleases[0];
-        } else {
-          // Sort by semantic version (descending)
-          withVersions.sort((a, b) => {
-            const partsA = a.version.split('.').map(Number);
-            const partsB = b.version.split('.').map(Number);
-            for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-              const partA = partsA[i] ?? 0;
-              const partB = partsB[i] ?? 0;
-              if (partA !== partB) {
-                return partB - partA; // Descending order
-              }
-            }
-            return 0;
-          });
-          release = withVersions[0].release;
-        }
-      }
+      release = this.findLatestRelease(releases, bundleName);
     } else {
-      release = releases.find((r) => (bundleName === null || r.tag_name.startsWith(bundleName)) && extractSemver(r.tag_name) === wantVersion);
+      release = this.findSpecificRelease(releases, bundleName, wantVersion);
     }
     if (release === undefined) {
       return null;
     }
-    // I-003: asset names also follow multiple conventions:
-    //   "bundle.zip"             (extension default)
-    //   "<bundle-id>.bundle.zip" (Amadeus convention)
-    //   "*.bundle.zip"           (any *.bundle.zip — final fallback)
-    // The caller may override via opts.assetName; otherwise we
-    // attempt the conventions in order.
-    const candidates = this.assetCandidates(spec.bundleId);
-    // eslint-disable-next-line @typescript-eslint/naming-convention -- browser_download_url is from GitHub API
-    let asset: { name: string; browser_download_url: string; url?: string } | undefined;
-    for (const candidate of candidates) {
-      asset = candidate === '*.bundle.zip' ? release.assets.find((a) => a.name.endsWith('.bundle.zip')) : release.assets.find((a) => a.name === candidate);
-      if (asset !== undefined) {
-        break;
-      }
-    }
+    const asset = this.findAsset(release, spec.bundleId);
     if (asset === undefined) {
       return null;
     }
@@ -173,11 +174,6 @@ export class GitHubBundleResolver implements BundleResolver {
         bundleVersion: tag,
         installed: false
       },
-      // Prefer the API URL when available — it accepts Bearer
-      // tokens for private repos (the browser_download_url at
-      // github.com 404s on private assets even with a token).
-      // Falls back to browser_download_url for public assets and
-      // for tests using mock fixtures without `url`.
       downloadUrl: asset.url ?? asset.browser_download_url
     };
   }
@@ -220,7 +216,8 @@ export class GitHubBundleResolver implements BundleResolver {
     // If the request was redirected, update the repoSlug to match the final repository name
     // This handles repository renames (e.g., "collect" -> "collection")
     if (res.finalUrl && res.finalUrl !== url) {
-      const finalRepoSlug = res.finalUrl.match(/\/repos\/([^/]+\/[^/]+)\/releases/)?.[1];
+      const match = /\/repos\/([^/]+\/[^/]+)\/releases/.exec(res.finalUrl);
+      const finalRepoSlug = match?.[1];
       if (finalRepoSlug && finalRepoSlug !== this.opts.repoSlug) {
         // Update the repoSlug to the final resolved name
         (this.opts as any).repoSlug = finalRepoSlug;
@@ -289,7 +286,7 @@ const decomposeBundleId = (bundleId: string, repoSlug: string): { source: string
 
   // First, extract the version suffix if present
   const versionPattern = /-v?\d{1,3}\.\d{1,3}\.\d{1,3}(?:-[a-zA-Z0-9._-]{1,50})?$/;
-  const versionMatch = bundleId.match(versionPattern);
+  const versionMatch = versionPattern.exec(bundleId);
   const version = versionMatch ? versionMatch[0] : null;
   const withoutVersion = bundleId.replace(versionPattern, '');
 
