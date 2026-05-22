@@ -95,7 +95,7 @@ export class ProfileActivationStore {
     }
     if (files.length > 1) {
       throw new Error(
-        `Violation: ${String(files.length)} active profiles on disk, expected at most 1: ${files.join(', ')}`
+        `D21 violation: ${String(files.length)} active profiles on disk, expected at most 1: ${files.join(', ')}`
       );
     }
     const state = await this.fs.readJson<ProfileActivationState>(path.join(this.dir, files[0]));

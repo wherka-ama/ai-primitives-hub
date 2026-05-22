@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 /**
  * Install lockfile.
  *
@@ -245,6 +247,37 @@ export const upsertUseProfile = (
     return next;
   }
   return { ...lock, schemaVersion: 1, useProfile };
+};
+
+/**
+ * Find the lockfile by walking up from `startDir`, then optionally
+ * falling back to a user-level path.
+ *
+ * Callers that support user-scope config should pass `userLockfile`
+ * (from `resolveUserConfigPaths(env).userLockfile`) as a fallback.
+ * @param startDir Directory to start the upward walk from.
+ * @param fs Filesystem adapter.
+ * @param userLockfile Optional user-level lockfile path to try when no
+ *   project-level lockfile is found.
+ * @returns Absolute path to the first lockfile found, or `null`.
+ */
+export const findLockfile = async (
+  startDir: string,
+  fs: Pick<LockfileFs, 'exists'>,
+  userLockfile?: string
+): Promise<string | null> => {
+  let dir = startDir;
+  while (true) {
+    const candidate = path.join(dir, 'prompt-registry.lock.json');
+    if (await fs.exists(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  if (userLockfile !== undefined && await fs.exists(userLockfile)) {
+    return userLockfile;
+  }
+  return null;
 };
 
 /**

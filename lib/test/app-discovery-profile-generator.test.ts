@@ -9,13 +9,13 @@ import {
   expect,
   it,
 } from 'vitest';
-import type {
-  ResourceSelection,
-  ProfileDraft,
-} from '../src/domain/discovery/types';
 import {
   ProfileGenerator,
 } from '../src/app/discovery/profile-generator';
+import type {
+  ProfileDraft,
+  ResourceSelection,
+} from '../src/domain/discovery/types';
 
 describe('ProfileGenerator', () => {
   let generator: ProfileGenerator;
@@ -29,13 +29,13 @@ describe('ProfileGenerator', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
+        selectedAt: new Date().toISOString()
       },
       {
         id: 'resource-2',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -57,8 +57,8 @@ describe('ProfileGenerator', () => {
     const selections: ResourceSelection[] = [
       {
         id: 'resource-1',
-        selected: true,
-      },
+        selected: true
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -74,16 +74,16 @@ describe('ProfileGenerator', () => {
     const selections: ResourceSelection[] = [
       {
         id: 'resource-1',
-        selected: true,
+        selected: true
       },
       {
         id: 'resource-2',
-        selected: false,
+        selected: false
       },
       {
         id: 'resource-3',
-        selected: true,
-      },
+        selected: true
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -105,10 +105,10 @@ describe('ProfileGenerator', () => {
         {
           id: 'resource-1',
           selected: true,
-          selectedAt: new Date().toISOString(),
-        },
+          selectedAt: new Date().toISOString()
+        }
       ],
-      createdAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
     };
 
     const yaml = generator.generateYaml(draft);
@@ -125,7 +125,7 @@ describe('ProfileGenerator', () => {
       name: 'Valid Profile',
       description: 'Valid description',
       selections: [],
-      createdAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
     };
 
     const yaml = generator.generateYaml(draft);
@@ -152,8 +152,8 @@ describe('ProfileGenerator', () => {
     const selections: ResourceSelection[] = [
       {
         id: 'resource-1',
-        selected: true,
-      },
+        selected: true
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -170,8 +170,8 @@ describe('ProfileGenerator', () => {
     const selections: ResourceSelection[] = [
       {
         id: 'resource-1',
-        selected: true,
-      },
+        selected: true
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -189,8 +189,8 @@ describe('ProfileGenerator', () => {
     const selections: ResourceSelection[] = [
       {
         id: 'resource-1',
-        selected: true,
-      },
+        selected: true
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -212,15 +212,15 @@ describe('ProfileGenerator', () => {
         {
           id: 'resource-1',
           selected: true,
-          selectedAt: new Date().toISOString(),
+          selectedAt: new Date().toISOString()
         },
         {
           id: 'resource-2',
           selected: true,
-          selectedAt: new Date().toISOString(),
-        },
+          selectedAt: new Date().toISOString()
+        }
       ],
-      createdAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
     };
 
     const yaml = generator.generateYaml(draft);
@@ -237,8 +237,8 @@ describe('ProfileGenerator', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: now,
-      },
+        selectedAt: now
+      }
     ];
 
     const draft = generator.generateDraft(

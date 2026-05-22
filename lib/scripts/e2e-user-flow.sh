@@ -1919,6 +1919,145 @@ scenario_29_discover_limit() {
     fi
 }
 
+scenario_50_status_verbose() {
+    log_section "Scenario 50: status --verbose shows per-bundle details"
+
+    local proj_dir="$PR_TEST_ROOT/project-status-verbose"
+    mkdir -p "$proj_dir"
+    cd "$proj_dir"
+
+    cat > "$proj_dir/prompt-registry.lock.json" <<EOF
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "target": "copilot",
+      "sourceId": "local-verbose-bundle",
+      "bundleId": "verbose-bundle",
+      "bundleVersion": "2.0.0",
+      "installedAt": "2026-01-01T00:00:00Z",
+      "files": []
+    }
+  ]
+}
+EOF
+
+    log_info "Running status --verbose -o json"
+    local output
+    output=$(run_cmd "$PR_BIN status --verbose -o json") || true
+
+    if ! assert_json_status "$output"; then
+        log_error "status --verbose failed"
+        echo "$output"
+        return 1
+    fi
+
+    local bundles_len
+    bundles_len=$(echo "$output" | jq -r '.data.lockfile.bundles | length' 2>/dev/null || echo "0")
+    if [ "$bundles_len" -ge 1 ]; then
+        local bundle_id
+        bundle_id=$(echo "$output" | jq -r '.data.lockfile.bundles[0].bundleId' 2>/dev/null || echo "")
+        log_success "status --verbose: bundles[] present ($bundles_len entry, id=$bundle_id)"
+    else
+        log_error "status --verbose: expected bundles[] in lockfile, got none"
+        echo "$output"
+        return 1
+    fi
+
+    log_info "Checking text output also contains bundle detail"
+    local text_output
+    text_output=$(run_cmd "$PR_BIN status --verbose") || true
+    if echo "$text_output" | grep -q "verbose-bundle@2.0.0"; then
+        log_success "status --verbose text: bundle detail line present"
+    else
+        log_error "status --verbose text: expected 'verbose-bundle@2.0.0' in output"
+        echo "$text_output"
+        return 1
+    fi
+
+    cd "$PR_TEST_ROOT/project"
+}
+
+scenario_51_init_user_scope() {
+    log_section "Scenario 51: init --scope user creates files in user config dir"
+
+    local proj_dir="$PR_TEST_ROOT/project-user-scope"
+    mkdir -p "$proj_dir"
+    cd "$proj_dir"
+
+    local user_targets="$XDG_CONFIG_HOME/prompt-registry/targets.yml"
+    local user_lockfile="$XDG_CONFIG_HOME/prompt-registry/prompt-registry.lock.json"
+
+    # Remove any leftovers from previous runs
+    rm -f "$user_targets" "$user_lockfile"
+
+    log_info "Running init --scope user --yes"
+    local output
+    output=$(run_cmd "$PR_BIN init --scope user --yes -o json") || true
+
+    if ! assert_json_status "$output"; then
+        log_error "init --scope user failed"
+        echo "$output"
+        return 1
+    fi
+
+    if [ -f "$user_targets" ]; then
+        log_success "init --scope user: targets.yml created at user level ($user_targets)"
+    else
+        log_error "init --scope user: expected targets.yml at $user_targets"
+        return 1
+    fi
+
+    if [ -f "$user_lockfile" ]; then
+        log_success "init --scope user: lockfile created at user level ($user_lockfile)"
+    else
+        log_error "init --scope user: expected lockfile at $user_lockfile"
+        return 1
+    fi
+
+    if [ -f "$proj_dir/prompt-registry.yml" ]; then
+        log_error "init --scope user: prompt-registry.yml must NOT be in cwd"
+        return 1
+    fi
+    log_success "init --scope user: no project-level prompt-registry.yml created"
+
+    cd "$PR_TEST_ROOT/project"
+}
+
+scenario_52_init_repo_scope() {
+    log_section "Scenario 52: init --scope repository creates files in cwd"
+
+    local proj_dir="$PR_TEST_ROOT/project-repo-scope"
+    mkdir -p "$proj_dir"
+    cd "$proj_dir"
+
+    log_info "Running init --scope repository --yes"
+    local output
+    output=$(run_cmd "$PR_BIN init --scope repository --yes -o json") || true
+
+    if ! assert_json_status "$output"; then
+        log_error "init --scope repository failed"
+        echo "$output"
+        return 1
+    fi
+
+    if [ -f "$proj_dir/prompt-registry.yml" ]; then
+        log_success "init --scope repository: prompt-registry.yml created in cwd"
+    else
+        log_error "init --scope repository: expected prompt-registry.yml in $proj_dir"
+        return 1
+    fi
+
+    if [ -f "$proj_dir/prompt-registry.lock.json" ]; then
+        log_success "init --scope repository: lockfile created in cwd"
+    else
+        log_error "init --scope repository: expected lockfile in $proj_dir"
+        return 1
+    fi
+
+    cd "$PR_TEST_ROOT/project"
+}
+
 # ============================================================================
 # Main
 # ============================================================================
@@ -2054,6 +2193,11 @@ main() {
     scenario_47_explain || true  # Non-critical
     scenario_48_plugins_list || true  # Non-critical (no plugins installed is normal)
     scenario_49_config_get || true  # Non-critical (key may not be set)
+
+    # Hierarchical context autodiscovery
+    scenario_50_status_verbose || failures=$((failures + 1))
+    scenario_51_init_user_scope || failures=$((failures + 1))
+    scenario_52_init_repo_scope || failures=$((failures + 1))
 
     # Optional (real hub)
     scenario_32_interactive_hub_install || true  # Non-critical (requires --use-real-hub)

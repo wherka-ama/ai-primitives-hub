@@ -23,7 +23,10 @@ import {
   type TargetType,
 } from '../../domain/install';
 import {
-  envTokenProvider,
+  getEnabledDefaultHubs,
+} from '../../infra/default-hubs';
+import {
+  defaultTokenProvider,
   type TokenProvider,
 } from '../../infra/github/token';
 import {
@@ -39,9 +42,14 @@ import {
   ActiveHubStore,
 } from '../../infra/stores/active-hub-store';
 import {
+  writeLockfile,
+} from '../../infra/stores/json-lockfile-store';
+import {
   addTarget,
+  addTargetToPath,
   findProjectConfigPath,
   readTargets,
+  writeTargets,
 } from '../../infra/stores/target-store';
 import {
   HubStore,
@@ -63,13 +71,6 @@ import {
 
 const DEFAULT_TARGET_NAME = 'copilot';
 const DEFAULT_TARGET_TYPE: TargetType = 'copilot-cli';
-
-/**
- * Known hub shorthands and their actual repository locations.
- */
-const KNOWN_HUBS: Record<string, string> = {
-  amadeus: 'Amadeus-xDLC/genai.prompt-registry-config'
-};
 
 /**
  * Get human-readable display name for a target type.
@@ -178,6 +179,42 @@ export class InitCommand extends Command {
 }
 
 /**
+ * Build hub choices for the wizard.
+ * Amadeus hub is always placed first.
+ * @param _ctx CLI context.
+ * @param _opts Init options.
+ * @returns Array of hub choices.
+ */
+async function buildHubChoices(
+  _ctx: Context,
+  _opts: InitOptions
+): Promise<{ name: string; value: string }[]> {
+  const defaultHubs = getEnabledDefaultHubs();
+  const hubChoices: { name: string; value: string }[] = [];
+
+  // Separate Amadeus from other hubs
+  const amadeusHub = defaultHubs.find((h) => h.name === 'Amadeus');
+  const otherHubs = defaultHubs.filter((h) => h.name !== 'Amadeus');
+
+  // Build choices with Amadeus first
+  if (amadeusHub) {
+    hubChoices.push({
+      name: `${amadeusHub.icon} ${amadeusHub.name}${amadeusHub.recommended ? ' ⭐' : ''}`,
+      value: amadeusHub.name
+    });
+  }
+
+  for (const hub of otherHubs) {
+    hubChoices.push({
+      name: `${hub.icon} ${hub.name}${hub.recommended ? ' ⭐' : ''}`,
+      value: hub.name
+    });
+  }
+
+  return hubChoices;
+}
+
+/**
  * Run interactive wizard to collect init options.
  * @param ctx CLI context.
  * @param _opts Init options.
@@ -188,6 +225,8 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
   targetName: string;
   targetScope: 'user' | 'repository';
   hubRef?: string;
+  hubType?: 'github' | 'local' | 'url';
+  hubRefParam?: string;
 }> {
   interface WizardAnswers {
     ide: string;
@@ -198,6 +237,19 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
     useExistingTarget?: boolean;
     newTargetName?: string;
   }
+
+  const defaultHubs = getEnabledDefaultHubs();
+  const hubChoices = await buildHubChoices(ctx, _opts);
+
+  const baseChoices = hubChoices.length > 0
+    ? hubChoices
+    : [{ name: 'Local directory', value: 'local' }];
+
+  const allHubChoices = [
+    ...baseChoices,
+    { name: 'Local directory', value: 'local' },
+    { name: 'Skip for now', value: 'skip' }
+  ];
 
   const answers = await inquirer.prompt<WizardAnswers>([
     {
@@ -230,12 +282,8 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
       type: 'list',
       name: 'hubChoice',
       message: 'Select hub:',
-      choices: [
-        { name: 'Amadeus Hub (default)', value: 'amadeus' },
-        { name: 'Local directory', value: 'local' },
-        { name: 'Skip for now', value: 'skip' }
-      ],
-      default: 'amadeus',
+      choices: allHubChoices,
+      default: hubChoices.length > 0 ? hubChoices[0].value : 'skip',
       when: (a: { connectHub: boolean }) => a.connectHub
     },
     {
@@ -277,15 +325,22 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
   }
 
   let hubRef: string | undefined;
-  if (answers.hubChoice === 'amadeus') {
-    hubRef = KNOWN_HUBS.amadeus;
-  } else if (answers.hubChoice === 'local' && answers.hubPath) {
+  let hubType: 'github' | 'local' | 'url' | undefined;
+  let hubRefParam: string | undefined;
+
+  if (answers.hubChoice === 'local' && answers.hubPath) {
     hubRef = `file:${answers.hubPath}`;
-  } else {
-    hubRef = undefined;
+    hubType = 'local';
+  } else if (answers.hubChoice && answers.hubChoice !== 'skip') {
+    const hub = defaultHubs.find((h) => h.name === answers.hubChoice);
+    if (hub) {
+      hubRef = hub.reference.location;
+      hubType = hub.reference.type;
+      hubRefParam = hub.reference.ref;
+    }
   }
 
-  return { targetType, targetName, targetScope, hubRef };
+  return { targetType, targetName, targetScope, hubRef, hubType, hubRefParam };
 }
 
 /**
@@ -294,43 +349,72 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
  * @param targetName Target name.
  * @param targetType Target type.
  * @param targetScope Target scope.
+ * @param explicitPath Absolute path to the targets file; bypasses the upward walk when set.
  * @returns Target file path and creation status.
  */
 async function createOrReuseTarget(
   ctx: Context,
   targetName: string,
   targetType: TargetType,
-  targetScope: 'user' | 'repository'
-): Promise<{ file: string; created?: boolean }> {
-  const currentTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
-  const targetExists = currentTargets.some((t) => t.name === targetName);
+  targetScope: 'user' | 'repository',
+  explicitPath?: string
+): Promise<{ file: string; created?: boolean; updated?: boolean }> {
+  const storeOpts = { cwd: ctx.cwd(), fs: ctx.fs };
 
-  if (targetExists) {
-    const { file } = await findProjectConfigPath({ cwd: ctx.cwd(), fs: ctx.fs });
+  if (explicitPath !== undefined) {
+    const result = await addTargetToPath(
+      explicitPath,
+      { name: targetName, type: targetType as unknown as Target['type'], scope: targetScope },
+      ctx.fs
+    );
+    return result;
+  }
+
+  const currentTargets = await readTargets(storeOpts);
+  const existing = currentTargets.find((t) => t.name === targetName);
+
+  if (existing !== undefined) {
+    if ((existing.type as string) !== (targetType as string) || existing.scope !== targetScope) {
+      const next = currentTargets.map((t) =>
+        t.name === targetName ? { ...t, type: targetType as unknown as Target['type'], scope: targetScope } : t
+      );
+      const writeResult = await writeTargets(storeOpts, next);
+      return { ...writeResult, updated: true };
+    }
+    const { file } = await findProjectConfigPath(storeOpts);
     return { file, created: false };
   }
 
   return await addTarget(
-    { cwd: ctx.cwd(), fs: ctx.fs },
-    { name: targetName, type: targetType as any, scope: targetScope } as Target
+    storeOpts,
+    { name: targetName, type: targetType as unknown as Target['type'], scope: targetScope }
   );
 }
 
 /**
  * Import and sync hub.
  * @param ctx CLI context.
- * @param hubRef Hub reference.
+ * @param hubRef Hub reference location.
+ * @param hubType Hub reference type.
+ * @param hubRefParam Hub reference ref (branch/tag).
  * @param opts Init options.
  * @returns Hub ID or null.
  */
-async function importAndSyncHub(ctx: Context, hubRef: string, opts: InitOptions): Promise<string | null> {
+async function importAndSyncHub(
+  ctx: Context,
+  hubRef: string,
+  hubType: 'github' | 'local' | 'url' | undefined,
+  hubRefParam: string | undefined,
+  opts: InitOptions
+): Promise<string | null> {
   const mgr = buildHubManager(ctx, opts.http, opts.tokens);
-  const refType = opts.hubType ?? inferHubType(hubRef);
+  const refType = hubType ?? opts.hubType ?? inferHubType(hubRef);
   const location = refType === 'local' && !path.isAbsolute(hubRef)
     ? path.resolve(ctx.cwd(), hubRef)
     : hubRef;
+  const ref = hubRefParam ?? opts.hubType ? undefined : undefined;
 
-  const hubId = await mgr.importHub({ type: refType, location });
+  const hubId = await mgr.importHub({ type: refType, location, ref });
   await mgr.syncHub(hubId);
   return hubId;
 }
@@ -340,6 +424,9 @@ async function importAndSyncHub(ctx: Context, hubRef: string, opts: InitOptions)
  * @param data Init result data.
  * @param data.steps Initialization steps.
  * @param data.target Target configuration.
+ * @param data.target.file
+ * @param data.target.name
+ * @param data.target.type
  * @param data.hub Hub configuration.
  * @param verbose Verbose flag.
  * @returns Formatted text output.
@@ -386,10 +473,13 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
   const fmt = (opts.output ?? 'text') as OutputFormat;
   const isInteractive = !opts.yes && process.stdout.isTTY;
 
+  const userPaths = resolveUserConfigPaths(ctx.env);
   let targetName = opts.targetName ?? DEFAULT_TARGET_NAME;
   let targetType = (opts.targetType ?? DEFAULT_TARGET_TYPE) as TargetType;
   let targetScope = (opts.scope as 'user' | 'repository') ?? 'user';
   let hubRef = opts.hub;
+  let hubType: 'github' | 'local' | 'url' | undefined = opts.hubType;
+  let hubRefParam: string | undefined;
 
   if (isInteractive) {
     const wizardResult = await runInteractiveWizard(ctx, opts);
@@ -397,6 +487,8 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
     targetName = wizardResult.targetName;
     targetScope = wizardResult.targetScope;
     hubRef = wizardResult.hubRef;
+    hubType = wizardResult.hubType;
+    hubRefParam = wizardResult.hubRefParam;
   }
 
   if (!TARGET_TYPES.includes(targetType)) {
@@ -408,14 +500,28 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
   }
 
   try {
-    const result = await createOrReuseTarget(ctx, targetName, targetType, targetScope);
+    const configPath = targetScope === 'user' ? userPaths.userTargets : undefined;
+    const result = await createOrReuseTarget(ctx, targetName, targetType, targetScope, configPath);
+    const updated = result.updated === true;
     const steps: string[] = [
-      result.created ? `target "${targetName}" (${targetType}) → ${result.file}` : `target "${targetName}" already exists`
+      result.created
+        ? `target "${targetName}" (${targetType}) → ${result.file}`
+        : (updated
+          ? `target "${targetName}" updated to type "${targetType}"`
+          : `target "${targetName}" already exists`)
     ];
+
+    const lockfilePath = targetScope === 'user'
+      ? userPaths.userLockfile
+      : path.join(ctx.cwd(), 'prompt-registry.lock.json');
+    if (!(await ctx.fs.exists(lockfilePath))) {
+      await writeLockfile(lockfilePath, { schemaVersion: 1, entries: [] }, ctx.fs);
+      steps.push(`lockfile initialized: ${path.basename(lockfilePath)}`);
+    }
 
     let hubId: string | null = null;
     if (hubRef !== undefined && hubRef.length > 0) {
-      hubId = await importAndSyncHub(ctx, hubRef, opts);
+      hubId = await importAndSyncHub(ctx, hubRef, hubType, hubRefParam, opts);
       steps.push(`hub "${hubId}" imported and synced`);
     }
 
@@ -443,9 +549,24 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
     if (cause instanceof RegistryError) {
       return failWith(ctx, fmt, cause);
     }
+    const causeMsg = cause instanceof Error ? cause.message : String(cause);
+    const isAuthError = causeMsg.toLowerCase().includes('401')
+      || causeMsg.toLowerCase().includes('403')
+      || causeMsg.toLowerCase().includes('unauthorized')
+      || causeMsg.toLowerCase().includes('forbidden');
+
+    if (isAuthError) {
+      return failWith(ctx, fmt, new RegistryError({
+        code: 'AUTH.ERROR',
+        message: `Failed to connect to hub: ${causeMsg}`,
+        hint: 'Check your GitHub authentication with `gh auth status` or `gh auth login`',
+        cause: cause instanceof Error ? cause : undefined
+      }));
+    }
     return failWith(ctx, fmt, new RegistryError({
-      code: 'INIT.ERROR',
-      message: `Failed to initialize project: ${cause instanceof Error ? cause.message : String(cause)}`,
+      code: 'INTERNAL.UNEXPECTED',
+      message: `Failed to initialize project: ${causeMsg}`,
+      hint: 'Run `prompt-registry doctor` for diagnostics',
       cause: cause instanceof Error ? cause : undefined
     }));
   }
@@ -479,7 +600,7 @@ function inferHubType(location: string): 'github' | 'local' | 'url' {
 function buildHubManager(ctx: Context, http?: HttpClient, tokens?: TokenProvider): HubManager {
   const paths = resolveUserConfigPaths(ctx.env);
   const httpClient = http ?? new NodeHttpClient();
-  const tokenProvider = tokens ?? envTokenProvider(ctx.env);
+  const tokenProvider = tokens ?? defaultTokenProvider(ctx.env);
   const resolver = new CompositeHubResolver(
     new GitHubHubResolver(httpClient, tokenProvider),
     new LocalHubResolver(ctx.fs),

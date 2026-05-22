@@ -13,8 +13,10 @@ import type {
 } from '../src/domain/install';
 import {
   addTarget,
+  addTargetToPath,
   findProjectConfigPath,
   readTargets,
+  readTargetsHierarchical,
   removeTargetByName,
   writeTargets,
 } from '../src/infra/stores/target-store';
@@ -99,5 +101,60 @@ describe('target-store', () => {
     const { file, exists } = await findProjectConfigPath({ cwd: sub, fs: realFs });
     expect(exists).toBe(true);
     expect(file).toBe(path.join(tmp, 'prompt-registry.yml'));
+  });
+
+  describe('readTargetsHierarchical', () => {
+    it('returns project targets when project config has targets', async () => {
+      await fs.writeFile(
+        path.join(tmp, 'prompt-registry.yml'),
+        'targets:\n  - name: project-target\n    type: vscode\n    scope: repository\n'
+      );
+      const userTargets = path.join(tmp, 'user-targets.yml');
+      const targets = await readTargetsHierarchical({ cwd: tmp, fs: realFs }, userTargets);
+      expect(targets).toHaveLength(1);
+      expect(targets[0].name).toBe('project-target');
+    });
+
+    it('falls back to user-level targets when no project config', async () => {
+      const userTargets = path.join(tmp, 'user-targets.yml');
+      await fs.writeFile(
+        userTargets,
+        'targets:\n  - name: user-target\n    type: copilot-cli\n    scope: user\n'
+      );
+      const targets = await readTargetsHierarchical({ cwd: tmp, fs: realFs }, userTargets);
+      expect(targets).toHaveLength(1);
+      expect(targets[0].name).toBe('user-target');
+    });
+
+    it('returns [] when neither project nor user config exists', async () => {
+      const targets = await readTargetsHierarchical(
+        { cwd: tmp, fs: realFs },
+        path.join(tmp, 'nonexistent.yml')
+      );
+      expect(targets).toEqual([]);
+    });
+  });
+
+  describe('addTargetToPath', () => {
+    it('creates file with target when absent', async () => {
+      const filePath = path.join(tmp, 'user-targets.yml');
+      const result = await addTargetToPath(filePath, SAMPLE, realFs);
+      expect(result.created).toBe(true);
+      expect(result.file).toBe(filePath);
+      const raw = await fs.readFile(filePath, 'utf8');
+      expect(raw).toContain('sample');
+    });
+
+    it('upserts target by name if already present', async () => {
+      const filePath = path.join(tmp, 'user-targets.yml');
+      await addTargetToPath(filePath, SAMPLE, realFs);
+      const updated = { ...SAMPLE, type: 'copilot-cli' as const };
+      const result = await addTargetToPath(filePath, updated, realFs);
+      expect(result.created).toBe(false);
+      const raw = await fs.readFile(filePath, 'utf8');
+      expect(raw).toContain('copilot-cli');
+      const lines = raw.split('\n').filter((l) => l.includes('name: sample'));
+      expect(lines.length).toBe(1);
+    });
   });
 });

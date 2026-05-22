@@ -39,7 +39,7 @@ describe('cli `init`', () => {
     const { exitCode, stdout, stderr } = await runCommand(
       ['init'],
       {
-        commands: [createInitCommand({ output: 'json', yes: true })],
+        commands: [createInitCommand({ output: 'json', yes: true, scope: 'repository' })],
         context: {
           cwd: tmpRoot,
           fs: createNodeFsAdapter(),
@@ -256,5 +256,92 @@ describe('cli `init`', () => {
       data: { target: { created: boolean } };
     };
     expect(parsed.data.target.created).toBe(false);
+  });
+
+  it('updates target type when re-running init with a different IDE selection', async () => {
+    const fsAdapter = createNodeFsAdapter();
+    const ctx = { cwd: tmpRoot, fs: fsAdapter, env: { XDG_CONFIG_HOME: xdgConfig, HOME: tmpRoot } };
+
+    await runCommand(['init'], {
+      commands: [createInitCommand({ output: 'json', yes: true, scope: 'repository', targetName: 'copilot', targetType: 'vscode' })],
+      context: ctx
+    });
+
+    const { exitCode, stdout } = await runCommand(['init'], {
+      commands: [createInitCommand({ output: 'json', yes: true, scope: 'repository', targetName: 'copilot', targetType: 'copilot-cli' })],
+      context: ctx
+    });
+
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as { status: string; data: { target: { type: string; created: boolean } }; steps?: string[] };
+    expect(parsed.status).toBe('ok');
+    expect(parsed.data.target.type).toBe('copilot-cli');
+    expect(parsed.data.target.created).toBe(false);
+
+    const raw = await fs.readFile(path.join(tmpRoot, 'prompt-registry.yml'), 'utf8');
+    expect(raw).toContain('copilot-cli');
+    expect(raw).not.toContain('type: vscode');
+  });
+
+  it('user scope: writes target to user config dir, not cwd', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['init'],
+      {
+        commands: [createInitCommand({ output: 'json', yes: true, scope: 'user' })],
+        context: {
+          cwd: tmpRoot,
+          fs: createNodeFsAdapter(),
+          env: { XDG_CONFIG_HOME: xdgConfig, HOME: tmpRoot }
+        }
+      }
+    );
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as { status: string };
+    expect(parsed.status).toBe('ok');
+
+    const projectConfig = await fs
+      .access(path.join(tmpRoot, 'prompt-registry.yml'))
+      .then(() => true)
+      .catch(() => false);
+    expect(projectConfig).toBe(false);
+
+    const userTargets = await fs
+      .access(path.join(xdgConfig, 'prompt-registry', 'targets.yml'))
+      .then(() => true)
+      .catch(() => false);
+    expect(userTargets).toBe(true);
+
+    const userLockfile = await fs
+      .access(path.join(xdgConfig, 'prompt-registry', 'prompt-registry.lock.json'))
+      .then(() => true)
+      .catch(() => false);
+    expect(userLockfile).toBe(true);
+  });
+
+  it('repository scope: writes target and lockfile to cwd', async () => {
+    const { exitCode } = await runCommand(
+      ['init'],
+      {
+        commands: [createInitCommand({ output: 'json', yes: true, scope: 'repository' })],
+        context: {
+          cwd: tmpRoot,
+          fs: createNodeFsAdapter(),
+          env: { XDG_CONFIG_HOME: xdgConfig, HOME: tmpRoot }
+        }
+      }
+    );
+    expect(exitCode).toBe(0);
+
+    const projectConfig = await fs
+      .access(path.join(tmpRoot, 'prompt-registry.yml'))
+      .then(() => true)
+      .catch(() => false);
+    expect(projectConfig).toBe(true);
+
+    const projectLockfile = await fs
+      .access(path.join(tmpRoot, 'prompt-registry.lock.json'))
+      .then(() => true)
+      .catch(() => false);
+    expect(projectLockfile).toBe(true);
   });
 });

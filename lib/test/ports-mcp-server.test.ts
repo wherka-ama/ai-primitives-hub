@@ -20,7 +20,7 @@ describe('MCP Server Port Interface', () => {
       const server: McpServer = {
         start: vi.fn(),
         stop: vi.fn(),
-        registerTool: vi.fn(),
+        registerTool: vi.fn()
       };
 
       expect(server.start).toBeDefined();
@@ -31,7 +31,7 @@ describe('MCP Server Port Interface', () => {
       const server: McpServer = {
         start: vi.fn(),
         stop: vi.fn(),
-        registerTool: vi.fn(),
+        registerTool: vi.fn()
       };
 
       expect(server.stop).toBeDefined();
@@ -42,7 +42,7 @@ describe('MCP Server Port Interface', () => {
       const server: McpServer = {
         start: vi.fn(),
         stop: vi.fn(),
-        registerTool: vi.fn(),
+        registerTool: vi.fn()
       };
 
       expect(server.registerTool).toBeDefined();
@@ -58,10 +58,10 @@ describe('MCP Server Port Interface', () => {
         inputSchema: {
           type: 'object',
           properties: {
-            query: { type: 'string' },
-          },
+            query: { type: 'string' }
+          }
         },
-        handler: vi.fn(),
+        handler: vi.fn()
       };
 
       expect(tool.name).toBe('search_resources');
@@ -76,7 +76,7 @@ describe('MCP Server Port Interface', () => {
         name: 'test_tool',
         description: 'Test tool',
         inputSchema: {},
-        handler,
+        handler
       };
 
       const result = await tool.handler({ input: 'test' });
@@ -96,13 +96,13 @@ describe('MCP Server Port Interface', () => {
             context: {
               type: 'object',
               properties: {
-                techStack: { type: 'array', items: { type: 'string' } },
-              },
-            },
+                techStack: { type: 'array', items: { type: 'string' } }
+              }
+            }
           },
-          required: ['query'],
+          required: ['query']
         },
-        handler: vi.fn(),
+        handler: vi.fn()
       };
 
       expect(tool.inputSchema).toHaveProperty('type');
@@ -114,7 +114,7 @@ describe('MCP Server Port Interface', () => {
         name: 'simple_tool',
         description: 'Simple tool',
         inputSchema: {},
-        handler: vi.fn(),
+        handler: vi.fn()
       };
 
       expect(tool.inputSchema).toEqual({});
@@ -125,7 +125,7 @@ describe('MCP Server Port Interface', () => {
         name: 'search_resources_v2',
         description: 'Search tool v2',
         inputSchema: {},
-        handler: vi.fn(),
+        handler: vi.fn()
       };
 
       expect(tool.name).toBe('search_resources_v2');
@@ -137,7 +137,7 @@ describe('MCP Server Port Interface', () => {
         name: 'test_tool',
         description: longDesc,
         inputSchema: {},
-        handler: vi.fn(),
+        handler: vi.fn()
       };
 
       expect(tool.description).toBe(longDesc);
@@ -149,7 +149,7 @@ describe('MCP Server Port Interface', () => {
         name: 'failing_tool',
         description: 'Tool that fails',
         inputSchema: {},
-        handler,
+        handler
       };
 
       await expect(tool.handler({ input: 'test' })).rejects.toThrow('Tool error');
@@ -161,7 +161,7 @@ describe('MCP Server Port Interface', () => {
       const server: McpServer = {
         start: vi.fn().mockResolvedValue(undefined),
         stop: vi.fn(),
-        registerTool: vi.fn(),
+        registerTool: vi.fn()
       };
 
       await server.start();
@@ -172,7 +172,7 @@ describe('MCP Server Port Interface', () => {
       const server: McpServer = {
         start: vi.fn(),
         stop: vi.fn().mockResolvedValue(undefined),
-        registerTool: vi.fn(),
+        registerTool: vi.fn()
       };
 
       await server.stop();
@@ -184,12 +184,12 @@ describe('MCP Server Port Interface', () => {
         name: 'test_tool',
         description: 'Test tool',
         inputSchema: {},
-        handler: vi.fn(),
+        handler: vi.fn()
       };
       const server: McpServer = {
         start: vi.fn(),
         stop: vi.fn(),
-        registerTool: vi.fn(),
+        registerTool: vi.fn()
       };
 
       server.registerTool(tool);

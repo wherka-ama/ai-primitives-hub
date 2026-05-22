@@ -10,16 +10,12 @@ import {
   it,
   vi,
 } from 'vitest';
-import type {
-  CopilotSdk,
-  CopilotSession,
-  SessionOptions,
-  PermissionRequest,
-  PermissionResponse,
-} from '../src/ports/copilot-sdk';
 import {
   CopilotSdkClient,
 } from '../src/infra/discovery/copilot-sdk-client';
+import type {
+  SessionOptions,
+} from '../src/ports/copilot-sdk';
 
 describe('CopilotSdkClient', () => {
   let client: CopilotSdkClient;
@@ -40,7 +36,7 @@ describe('CopilotSdkClient', () => {
   it('should create a mock session', async () => {
     const options: SessionOptions = {
       skillDirectories: ['/skills'],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     };
 
     const session = await client.createSession(options);
@@ -54,7 +50,7 @@ describe('CopilotSdkClient', () => {
   it('should handle session sendAndWait', async () => {
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     const response = await session.sendAndWait('test prompt');
@@ -67,7 +63,7 @@ describe('CopilotSdkClient', () => {
     const chunks: string[] = [];
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     const response = await session.sendWithStream('test prompt', (chunk: string) => {
@@ -82,7 +78,7 @@ describe('CopilotSdkClient', () => {
   it('should handle session close', async () => {
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     await session.close();
@@ -94,14 +90,14 @@ describe('CopilotSdkClient', () => {
   it('should handle multiple sequential sessions', async () => {
     const session1 = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     await session1.close();
 
     const session2 = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     await session2.close();
@@ -113,7 +109,7 @@ describe('CopilotSdkClient', () => {
   it('should handle empty skill directories', async () => {
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     expect(session).toBeDefined();
@@ -123,7 +119,7 @@ describe('CopilotSdkClient', () => {
   it('should handle multiple skill directories', async () => {
     const session = await client.createSession({
       skillDirectories: ['/skills/1', '/skills/2', '/skills/3'],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     expect(session).toBeDefined();
@@ -135,7 +131,7 @@ describe('CopilotSdkClient', () => {
 
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest,
+      onPermissionRequest
     });
 
     // In mock implementation, this may not be called, but the callback should be accepted
@@ -148,7 +144,7 @@ describe('CopilotSdkClient', () => {
 
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest,
+      onPermissionRequest
     });
 
     expect(session).toBeDefined();
@@ -158,10 +154,10 @@ describe('CopilotSdkClient', () => {
   it('should handle long prompts in sendAndWait', async () => {
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
-    const longPrompt = 'a'.repeat(10000);
+    const longPrompt = 'a'.repeat(10_000);
     const response = await session.sendAndWait(longPrompt);
 
     // Mock implementation returns empty string
@@ -172,7 +168,7 @@ describe('CopilotSdkClient', () => {
   it('should handle special characters in prompts', async () => {
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     const specialPrompt = 'Test with "quotes" and \'apostrophes\' and <special> & symbols';
@@ -186,7 +182,7 @@ describe('CopilotSdkClient', () => {
   it('should handle unicode in prompts', async () => {
     const session = await client.createSession({
       skillDirectories: [],
-      onPermissionRequest: vi.fn(),
+      onPermissionRequest: vi.fn()
     });
 
     const unicodePrompt = 'Test with unicode 🎉🎊🎈 and emojis 🚀';

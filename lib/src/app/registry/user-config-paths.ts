@@ -21,6 +21,8 @@ export interface UserConfigPaths {
   userTargets: string;
   /** {root}/token (token cache) */
   tokenCache: string;
+  /** {root}/prompt-registry.lock.json (user-scope lockfile) */
+  userLockfile: string;
 }
 
 /**
@@ -41,6 +43,7 @@ export const resolveUserConfigPaths = (env: Record<string, string | undefined>):
     profileActivations: path.join(root, 'profile-activations'),
     activeHub: path.join(root, 'active-hub.json'),
     userTargets: path.join(root, 'targets.yml'),
-    tokenCache: path.join(root, 'token')
+    tokenCache: path.join(root, 'token'),
+    userLockfile: path.join(root, 'prompt-registry.lock.json')
   };
 };

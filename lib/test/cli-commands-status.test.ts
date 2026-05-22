@@ -260,4 +260,145 @@ describe('cli `status`', () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain('1 bundle installed');
   });
+
+  it('--verbose shows per-bundle details in JSON output', async () => {
+    const lock = {
+      schemaVersion: 1,
+      entries: [
+        {
+          bundleId: 'my-bundle',
+          bundleVersion: '1.2.3',
+          target: 'copilot',
+          sourceId: 'local',
+          installedAt: '2024-06-01T10:00:00Z',
+          files: []
+        }
+      ]
+    };
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.lock.json'),
+      JSON.stringify(lock)
+    );
+    const { exitCode, stdout } = await runCommand(
+      ['status'],
+      {
+        commands: [createStatusCommand({ output: 'json', verbose: true })],
+        context: {
+          cwd: tmpRoot,
+          fs: createNodeFsAdapter(),
+          env: { XDG_CONFIG_HOME: xdgConfig, XDG_CACHE_HOME: tmpRoot, HOME: tmpRoot }
+        }
+      }
+    );
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as {
+      data: {
+        lockfile: {
+          entries: number;
+          bundles?: { bundleId: string; bundleVersion: string; target: string }[];
+        } | null;
+      };
+    };
+    expect(parsed.data.lockfile?.bundles).toHaveLength(1);
+    expect(parsed.data.lockfile?.bundles?.[0].bundleId).toBe('my-bundle');
+    expect(parsed.data.lockfile?.bundles?.[0].bundleVersion).toBe('1.2.3');
+  });
+
+  it('--verbose shows per-bundle details in text output', async () => {
+    const lock = {
+      schemaVersion: 1,
+      entries: [
+        {
+          bundleId: 'verbose-bundle',
+          bundleVersion: '2.0.0',
+          target: 'copilot',
+          sourceId: 'local',
+          installedAt: '2024-06-01T10:00:00Z',
+          files: []
+        }
+      ]
+    };
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.lock.json'),
+      JSON.stringify(lock)
+    );
+    const { exitCode, stdout } = await runCommand(
+      ['status'],
+      {
+        commands: [createStatusCommand({ output: 'text', verbose: true })],
+        context: {
+          cwd: tmpRoot,
+          fs: createNodeFsAdapter(),
+          env: { XDG_CONFIG_HOME: xdgConfig, XDG_CACHE_HOME: tmpRoot, HOME: tmpRoot }
+        }
+      }
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('verbose-bundle@2.0.0');
+    expect(stdout).toContain('target=copilot');
+  });
+
+  it('uses user-level lockfile when no project lockfile exists', async () => {
+    const userLockDir = path.join(xdgConfig, 'prompt-registry');
+    await fs.mkdir(userLockDir, { recursive: true });
+    const userLockFile = path.join(userLockDir, 'prompt-registry.lock.json');
+    const lock = {
+      schemaVersion: 1,
+      entries: [
+        {
+          bundleId: 'user-bundle',
+          bundleVersion: '0.1.0',
+          target: 'user-target',
+          sourceId: 'local',
+          installedAt: '2024-06-01T10:00:00Z',
+          files: []
+        }
+      ]
+    };
+    await fs.writeFile(userLockFile, JSON.stringify(lock));
+    const { exitCode, stdout } = await runCommand(
+      ['status'],
+      {
+        commands: [createStatusCommand({ output: 'json' })],
+        context: {
+          cwd: tmpRoot,
+          fs: createNodeFsAdapter(),
+          env: { XDG_CONFIG_HOME: xdgConfig, HOME: tmpRoot }
+        }
+      }
+    );
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as {
+      data: { lockfile: { entries: number; path: string } | null };
+    };
+    expect(parsed.data.lockfile).not.toBeNull();
+    expect(parsed.data.lockfile!.entries).toBe(1);
+    expect(parsed.data.lockfile!.path).toBe(userLockFile);
+  });
+
+  it('reads user-level targets when no project config exists', async () => {
+    const userCfgDir = path.join(xdgConfig, 'prompt-registry');
+    await fs.mkdir(userCfgDir, { recursive: true });
+    await fs.writeFile(
+      path.join(userCfgDir, 'targets.yml'),
+      'targets:\n  - name: user-copilot\n    type: copilot-cli\n    scope: user\n'
+    );
+    const { exitCode, stdout } = await runCommand(
+      ['status'],
+      {
+        commands: [createStatusCommand({ output: 'json' })],
+        context: {
+          cwd: tmpRoot,
+          fs: createNodeFsAdapter(),
+          env: { XDG_CONFIG_HOME: xdgConfig, HOME: tmpRoot }
+        }
+      }
+    );
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as {
+      data: { targets: { name: string }[] };
+    };
+    expect(parsed.data.targets).toHaveLength(1);
+    expect(parsed.data.targets[0].name).toBe('user-copilot');
+  });
 });

@@ -22,7 +22,7 @@ import {
   resolveUserConfigPaths,
 } from '../../app/registry';
 import {
-  envTokenProvider,
+  defaultTokenProvider,
 } from '../../infra/github/token';
 import {
   NodeHttpClient,
@@ -432,7 +432,7 @@ const checkActiveHub = async (ctx: Context): Promise<DoctorCheck> => {
  */
 const checkGitHubAuth = async (ctx: Context): Promise<DoctorCheck> => {
   try {
-    const provider = envTokenProvider(ctx.env);
+    const provider = defaultTokenProvider(ctx.env);
     const token = await provider.getToken('api.github.com');
     if (token === null || token.length === 0) {
       return {
@@ -474,7 +474,7 @@ const checkApiReachable = async (ctx: Context): Promise<DoctorCheck> => {
   }
   try {
     const http = new NodeHttpClient();
-    const provider = envTokenProvider(ctx.env);
+    const provider = defaultTokenProvider(ctx.env);
     const token = await provider.getToken('api.github.com');
     const headers: Record<string, string> = {};
     if (token !== null && token.length > 0) {

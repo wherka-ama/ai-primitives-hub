@@ -124,7 +124,7 @@ export class HubListCommand extends BaseHubCommand {
       ctx, command: 'hub.list', output: fmt, status: 'ok',
       data: { hubs: enriched, activeId: active?.id ?? null },
       textRenderer: (d) => d.hubs.length === 0
-        ? 'No hubs imported.\n'
+        ? 'No hubs imported. Run `prompt-registry hub add <ref>` to import one.\n'
         : d.hubs.map((h: { id: string; name: string; check?: { status: string; reason?: string } }) => {
           const marker = h.id === d.activeId ? '*' : ' ';
           let probe: string;
@@ -199,7 +199,8 @@ export class HubAddCommand extends BaseHubCommand {
         if (d.synced) {
           actions.push('synced');
         }
-        return `${actions.join(', ')}.\n`;
+        const suffix = d.used ? '' : `\nRun \`prompt-registry hub use ${d.id}\` to activate it.`;
+        return `${actions.join(', ')}.${suffix}\n`;
       }
     });
     return 0;
@@ -338,7 +339,7 @@ export class HubCreateCommand extends BaseHubCommand {
  */
 export class HubSyncCommand extends BaseHubCommand {
   public static readonly paths = [['hub', 'sync']];
-  public hubId = Option.String();
+  public hubId = Option.String({ required: false });
 
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;

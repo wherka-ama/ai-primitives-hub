@@ -184,7 +184,7 @@ export class ProfileListCommand extends BaseProfileCommand {
       ctx, command: 'profile.list', output: fmt, status: 'ok',
       data: { hubId, profiles, sourceCount },
       textRenderer: (d) => d.profiles.length === 0
-        ? `No profiles in hub "${d.hubId}".\n`
+        ? `No profiles in hub "${d.hubId}". Run \`prompt-registry profile create <id> --name <name>\` to add one.\n`
         : d.profiles.map((p) => `${p.id}  ${p.name} (${String(p.bundles)} bundle${p.bundles === 1 ? '' : 's'})\n`).join('')
     });
     return 0;
@@ -829,7 +829,7 @@ async function cleanupKindRouteDirectories(ctx: Context, target: any, layout: { 
   const baseDir: string = layout.baseDir
     .replaceAll(/\$\{workspaceRoot\}/g, ctx.cwd())
     .replaceAll(/\$\{HOME\}/g, ctx.env.HOME ?? '')
-    .replaceAll(/^~/, ctx.env.HOME ?? '');
+    .replace(/^~/, ctx.env.HOME ?? '');
 
   for (const outPrefix of Object.values(layout.kindRoutes)) {
     const kindDir = path.join(baseDir, outPrefix);
@@ -864,13 +864,21 @@ async function cleanupKindRouteDirectories(ctx: Context, target: any, layout: { 
 async function adaptiveCleanup(ctx: Context, existing: { entries: { target: string }[] }): Promise<void> {
   try {
     const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
-    for (const entry of existing.entries) {
-      const target = targets.find((t) => t.name === entry.target);
-      if (!target) {
-        continue;
-      }
+    // If entries are empty, clean up all targets; otherwise clean up only targets from entries
+    const targetsToClean = existing.entries.length > 0
+      ? existing.entries.map((e) => targets.find((t) => t.name === e.target)).filter((t): t is any => t !== undefined)
+      : targets;
+    for (const target of targetsToClean) {
       const layout = resolveLayout(target);
       await cleanupKindRouteDirectories(ctx, target, layout);
+    }
+    // Also clean up .github directory if it's empty after removing kind routes
+    const githubDir = path.join(ctx.cwd(), '.github');
+    if (await ctx.fs.exists(githubDir)) {
+      const entries = await ctx.fs.readDir(githubDir);
+      if (entries.length === 0) {
+        await ctx.fs.remove(githubDir);
+      }
     }
   } catch {
     // Best-effort: if layout resolution fails, skip adaptive cleanup
@@ -897,9 +905,10 @@ async function cleanupDeactivatedLockfile(ctx: Context, lockPath: string): Promi
   await removeAllFiles(ctx, allFiles);
   const parentDirs = collectParentDirs(allFiles, ctx.cwd());
   await removeEmptyParentDirs(ctx, parentDirs);
+  // Run adaptive cleanup before clearing entries to ensure kind route directories are removed
   await adaptiveCleanup(ctx, existing);
 
-  await writeLockfile(lockPath, { ...existing, entries: [], useProfile: undefined }, ctx.fs);
+  await writeLockfile(lockPath, { ...existing, entries: [], sources: {}, useProfile: undefined }, ctx.fs);
 }
 
 const failWith = (ctx: Context, fmt: OutputFormat, err: RegistryError): number => {

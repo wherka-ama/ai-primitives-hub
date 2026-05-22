@@ -144,6 +144,80 @@ export const addTarget = async (
 };
 
 /**
+ * Read targets from a specific file path, bypassing the upward walk.
+ * Returns an empty array when the file is absent.
+ * @param filePath Absolute path to the targets YAML file.
+ * @param fs Filesystem adapter.
+ * @returns Targets array.
+ */
+export const readTargetsFromPath = async (
+  filePath: string,
+  fs: Pick<TargetStoreOptions['fs'], 'readFile' | 'exists'>
+): Promise<Target[]> => {
+  if (!(await fs.exists(filePath))) {
+    return [];
+  }
+  const raw = await fs.readFile(filePath);
+  const parsed = parseYaml(raw) as Record<string, unknown> | null | undefined;
+  if (parsed == null) {
+    return [];
+  }
+  const targets = parsed.targets;
+  return Array.isArray(targets) ? (targets as Target[]) : [];
+};
+
+/**
+ * Read targets with a user-level fallback. Returns project-level targets
+ * when found; falls back to `userTargetsPath` when the project walk yields
+ * nothing.
+ * @param opts cwd / fs.
+ * @param userTargetsPath Absolute path to the user-level targets file.
+ * @returns Targets array.
+ */
+export const readTargetsHierarchical = async (
+  opts: TargetStoreOptions,
+  userTargetsPath: string
+): Promise<Target[]> => {
+  const projectTargets = await readTargets(opts);
+  if (projectTargets.length > 0) {
+    return projectTargets;
+  }
+  return readTargetsFromPath(userTargetsPath, opts.fs);
+};
+
+/**
+ * Upsert a target into a specific file, bypassing the upward walk.
+ * Creates the file (and parent directories) when absent.
+ * @param filePath Absolute path to the targets YAML file.
+ * @param target Target to add or replace by name.
+ * @param fs Filesystem adapter.
+ * @returns Result `{file, created}`.
+ */
+export const addTargetToPath = async (
+  filePath: string,
+  target: Target,
+  fs: TargetStoreOptions['fs']
+): Promise<{ file: string; created: boolean }> => {
+  const exists = await fs.exists(filePath);
+  let parsed: Record<string, unknown> = {};
+  if (exists) {
+    const raw = await fs.readFile(filePath);
+    const loaded = parseYaml(raw) as Record<string, unknown> | null | undefined;
+    parsed = loaded ?? {};
+  }
+  const current = Array.isArray(parsed.targets) ? (parsed.targets as Target[]) : [];
+  parsed.targets = current.some((t) => t.name === target.name)
+    ? current.map((t) => (t.name === target.name ? target : t))
+    : [...current, target];
+  const dumped = stringifyYaml(parsed, { sortKeys: false, lineWidth: 100, noRefs: true });
+  if (!exists && fs.mkdir !== undefined) {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+  }
+  await fs.writeFile(filePath, dumped);
+  return { file: filePath, created: !exists };
+};
+
+/**
  * Remove a target by name. Throws when the name is not present.
  * @param opts cwd / fs.
  * @param name Target name to remove.

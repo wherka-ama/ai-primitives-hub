@@ -23,6 +23,7 @@ describe('resolveUserConfigPaths', () => {
     expect(paths.activeHub).toBe('/custom/config/prompt-registry/active-hub.json');
     expect(paths.userTargets).toBe('/custom/config/prompt-registry/targets.yml');
     expect(paths.tokenCache).toBe('/custom/config/prompt-registry/token');
+    expect(paths.userLockfile).toBe('/custom/config/prompt-registry/prompt-registry.lock.json');
   });
 
   it('resolves paths using HOME when XDG_CONFIG_HOME is not set', () => {
@@ -35,6 +36,7 @@ describe('resolveUserConfigPaths', () => {
     expect(paths.activeHub).toBe('/home/user/.config/prompt-registry/active-hub.json');
     expect(paths.userTargets).toBe('/home/user/.config/prompt-registry/targets.yml');
     expect(paths.tokenCache).toBe('/home/user/.config/prompt-registry/token');
+    expect(paths.userLockfile).toBe('/home/user/.config/prompt-registry/prompt-registry.lock.json');
   });
 
   it('resolves paths using USERPROFILE on Windows when HOME is not set', () => {
@@ -47,6 +49,7 @@ describe('resolveUserConfigPaths', () => {
     expect(paths.activeHub).toBe('C:\\Users\\user/.config/prompt-registry/active-hub.json');
     expect(paths.userTargets).toBe('C:\\Users\\user/.config/prompt-registry/targets.yml');
     expect(paths.tokenCache).toBe('C:\\Users\\user/.config/prompt-registry/token');
+    expect(paths.userLockfile).toBe('C:\\Users\\user/.config/prompt-registry/prompt-registry.lock.json');
   });
 
   it('uses empty string when neither XDG_CONFIG_HOME, HOME, nor USERPROFILE are set', () => {
@@ -59,6 +62,7 @@ describe('resolveUserConfigPaths', () => {
     expect(paths.activeHub).toBe('.config/prompt-registry/active-hub.json');
     expect(paths.userTargets).toBe('.config/prompt-registry/targets.yml');
     expect(paths.tokenCache).toBe('.config/prompt-registry/token');
+    expect(paths.userLockfile).toBe('.config/prompt-registry/prompt-registry.lock.json');
   });
 
   it('prefers XDG_CONFIG_HOME over HOME', () => {
@@ -95,7 +99,8 @@ describe('resolveUserConfigPaths', () => {
       'profileActivations',
       'activeHub',
       'userTargets',
-      'tokenCache'
+      'tokenCache',
+      'userLockfile'
     ]);
   });
 });

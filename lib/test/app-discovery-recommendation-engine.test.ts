@@ -13,14 +13,13 @@ import {
 import type {
   DetectedContext,
 } from '../src/app/context-detection';
-import type {
-  ResourceRecommendation,
-  DiscoveryOptions,
-} from '../src/domain/discovery/types';
 import {
   RecommendationEngine,
   RecommendationEngineError,
 } from '../src/app/discovery/recommendation-engine';
+import type {
+  DiscoveryOptions,
+} from '../src/domain/discovery/types';
 
 describe('RecommendationEngine', () => {
   let mockContext: DetectedContext;
@@ -33,23 +32,23 @@ describe('RecommendationEngine', () => {
         frameworks: ['React'],
         packageManagers: ['npm'],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: 'web-application',
         businessDomain: 'authentication',
-        technicalDomain: 'frontend',
+        technicalDomain: 'frontend'
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     mockCopilotSdk = {
       isAvailable: vi.fn(),
-      createSession: vi.fn(),
+      createSession: vi.fn()
     };
   });
 
@@ -60,7 +59,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -83,11 +82,11 @@ describe('RecommendationEngine', () => {
             relevanceScore: 0.95,
             reasoning: 'Matches your React frontend stack',
             source: 'amadeus-hub',
-            aiRecommended: true,
-          },
-        ],
+            aiRecommended: true
+          }
+        ]
       })),
-      close: vi.fn(),
+      close: vi.fn()
     };
 
     mockCopilotSdk.isAvailable.mockReturnValue(true);
@@ -97,7 +96,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -114,7 +113,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     await expect(
@@ -130,7 +129,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     await expect(
@@ -145,7 +144,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: false,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -162,7 +161,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     // Should throw RecommendationEngineError for session creation failure
@@ -177,7 +176,7 @@ describe('RecommendationEngine', () => {
   it('should handle malformed AI response gracefully', async () => {
     const mockSession = {
       sendAndWait: vi.fn().mockResolvedValue('invalid json'),
-      close: vi.fn(),
+      close: vi.fn()
     };
 
     mockCopilotSdk.isAvailable.mockReturnValue(true);
@@ -187,7 +186,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -199,7 +198,7 @@ describe('RecommendationEngine', () => {
   it('should handle empty AI response gracefully', async () => {
     const mockSession = {
       sendAndWait: vi.fn().mockResolvedValue(''),
-      close: vi.fn(),
+      close: vi.fn()
     };
 
     mockCopilotSdk.isAvailable.mockReturnValue(true);
@@ -209,7 +208,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -221,7 +220,7 @@ describe('RecommendationEngine', () => {
   it('should handle AI response with no recommendations field', async () => {
     const mockSession = {
       sendAndWait: vi.fn().mockResolvedValue(JSON.stringify({})),
-      close: vi.fn(),
+      close: vi.fn()
     };
 
     mockCopilotSdk.isAvailable.mockReturnValue(true);
@@ -231,7 +230,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -243,7 +242,7 @@ describe('RecommendationEngine', () => {
   it('should handle AI request errors gracefully', async () => {
     const mockSession = {
       sendAndWait: vi.fn().mockRejectedValue(new Error('Network error')),
-      close: vi.fn(),
+      close: vi.fn()
     };
 
     mockCopilotSdk.isAvailable.mockReturnValue(true);
@@ -253,7 +252,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     await expect(engine.generateRecommendations(mockContext, options)).rejects.toThrow(
@@ -276,11 +275,11 @@ describe('RecommendationEngine', () => {
             relevanceScore: 0.9,
             reasoning: 'Test',
             source: 'test',
-            aiRecommended: true,
-          },
-        ],
+            aiRecommended: true
+          }
+        ]
       })),
-      close: vi.fn().mockRejectedValue(new Error('Close error')),
+      close: vi.fn().mockRejectedValue(new Error('Close error'))
     };
 
     mockCopilotSdk.isAvailable.mockReturnValue(true);
@@ -290,7 +289,7 @@ describe('RecommendationEngine', () => {
     const options: DiscoveryOptions = {
       enableAI: true,
       interactive: false,
-      cwd: '/test/project',
+      cwd: '/test/project'
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -304,12 +303,12 @@ describe('RecommendationEngine', () => {
     const timeoutSdk = {
       isAvailable: vi.fn().mockResolvedValue(true),
       createSession: vi.fn().mockResolvedValue({
-        sendAndWait: vi.fn().mockImplementation(() => new Promise((_, reject) => 
+        sendAndWait: vi.fn().mockImplementation(() => new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout')), 10)
         )),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(timeoutSdk);
@@ -319,7 +318,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     // Timeout errors are thrown as RecommendationEngineError
@@ -334,8 +333,8 @@ describe('RecommendationEngine', () => {
       createSession: vi.fn().mockResolvedValue({
         sendAndWait: vi.fn().mockResolvedValue('[null, null]'),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(nullResponseSdk);
@@ -345,7 +344,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -358,8 +357,8 @@ describe('RecommendationEngine', () => {
       createSession: vi.fn().mockResolvedValue({
         sendAndWait: vi.fn().mockResolvedValue('[{"id": "test"}]'),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(missingFieldsSdk);
@@ -369,7 +368,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -382,8 +381,8 @@ describe('RecommendationEngine', () => {
       createSession: vi.fn().mockResolvedValue({
         sendAndWait: vi.fn().mockResolvedValue('[{"id": "test", "score": "invalid"}]'),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(invalidScoreSdk);
@@ -393,7 +392,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -406,8 +405,8 @@ describe('RecommendationEngine', () => {
       createSession: vi.fn().mockResolvedValue({
         sendAndWait: vi.fn().mockResolvedValue('[{"id": "test", "score": -0.5}]'),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(negativeScoreSdk);
@@ -417,7 +416,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -430,8 +429,8 @@ describe('RecommendationEngine', () => {
       createSession: vi.fn().mockResolvedValue({
         sendAndWait: vi.fn().mockResolvedValue('[{"id": "test", "score": 1.5}]'),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(highScoreSdk);
@@ -441,7 +440,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -454,8 +453,8 @@ describe('RecommendationEngine', () => {
       createSession: vi.fn().mockResolvedValue({
         sendAndWait: vi.fn().mockResolvedValue('[{"id": "test", "score": 999999}]'),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(largeScoreSdk);
@@ -465,7 +464,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -485,12 +484,12 @@ describe('RecommendationEngine', () => {
             relevanceScore: 0.9,
             reasoning: 'Test',
             source: 'test',
-            aiRecommended: true,
+            aiRecommended: true
           }))
         )),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(largeArraySdk);
@@ -500,7 +499,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -521,13 +520,13 @@ describe('RecommendationEngine', () => {
               relevanceScore: 0.95,
               reasoning: '测试推理',
               source: 'test',
-              aiRecommended: true,
-            },
-          ],
+              aiRecommended: true
+            }
+          ]
         })),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(unicodeSdk);
@@ -537,7 +536,7 @@ describe('RecommendationEngine', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);

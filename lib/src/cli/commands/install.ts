@@ -22,6 +22,9 @@ import type {
   Target,
 } from '../../domain/install';
 import {
+  type RegistrySource,
+} from '../../domain/registry/registry-source';
+import {
   parseBundleSpec,
 } from '../../domain/spec-parser';
 import {
@@ -52,9 +55,13 @@ import {
   readLocalBundle,
 } from '../../infra/resolvers/local-resolver';
 import {
+  SourceDispatcher,
+} from '../../infra/resolvers/resolver-registry';
+import {
   ActiveHubStore,
 } from '../../infra/stores/active-hub-store';
 import {
+  findLockfile,
   type LockfileEntry,
   type LockfileSource,
   readLockfile,
@@ -67,6 +74,7 @@ import {
 } from '../../infra/stores/target-state-store';
 import {
   readTargets,
+  readTargetsHierarchical,
 } from '../../infra/stores/target-store';
 import {
   HubStore,
@@ -84,6 +92,9 @@ import {
   type HttpClient,
   type TokenProvider,
 } from '../../ports/http';
+import {
+  type BundleResolver,
+} from '../../ports/source-resolver';
 import {
   Command,
   Option,
@@ -156,6 +167,11 @@ export interface InstallOptions {
    * Only applies when scope=repository.
    */
   commitMode?: RepositoryCommitMode;
+  /**
+   * Source configuration for resolver selection.
+   * If provided, SourceDispatcher will select the appropriate resolver.
+   */
+  sourceConfig?: RegistrySource;
 }
 
 /**
@@ -236,6 +252,8 @@ export class InstallCommand extends BaseInstallCommand {
       commitMode: this.commitMode as RepositoryCommitMode | undefined
     };
 
+    await detectInstallContext(opts, ctx);
+
     const { noBundle, noLockfile } = validateInstallInputs(opts);
     if (noBundle && noLockfile && !opts.from && !opts.source) {
       return failWith(ctx, fmt, new RegistryError({
@@ -252,8 +270,6 @@ export class InstallCommand extends BaseInstallCommand {
       const targetName = await resolveTargetName(opts, ctx);
       checkAllowTarget(targetName, opts);
       const target = await resolveTarget(targetName, ctx);
-
-      await autoLocateLockfile(opts, ctx);
 
       const mode = determineInstallMode(opts);
       if (mode === undefined) {
@@ -277,7 +293,7 @@ export class InstallCommand extends BaseInstallCommand {
  */
 function determineInstallMode(opts: InstallOptions): 'local' | 'lockfile' | 'remote' | 'interactive' | 'list' | undefined {
   const { noBundle } = validateInstallInputs(opts);
-  
+
   if (opts.source !== undefined && opts.source.length > 0 && noBundle) {
     return opts.interactive ? 'interactive' : 'list';
   }
@@ -291,16 +307,51 @@ function determineInstallMode(opts: InstallOptions): 'local' | 'lockfile' | 'rem
 }
 
 /**
- * Auto-locate lockfile when no mode flag supplied.
- * @param opts Install options.
+ * Detect install context from the project environment.
+ * Fills in `opts.lockfile`, `opts.source`, `opts.interactive`, and `opts.target`
+ * when they can be inferred without user input.
+ * @param opts Install options (mutated in-place).
  * @param ctx CLI context.
  */
-async function autoLocateLockfile(opts: InstallOptions, ctx: Context): Promise<void> {
+async function detectInstallContext(opts: InstallOptions, ctx: Context): Promise<void> {
   const { noBundle, noLockfile } = validateInstallInputs(opts);
-  if (noBundle && noLockfile && !opts.from && !opts.source) {
-    const foundLock = await findLockfile(ctx.cwd(), ctx.fs);
-    if (foundLock !== null) {
-      opts.lockfile = foundLock;
+  const noExplicitSource = !opts.source || opts.source.length === 0;
+  const noMode = noBundle && noLockfile && !opts.from && noExplicitSource;
+
+  const userPaths = resolveUserConfigPaths(ctx.env);
+
+  if (noMode && !opts.interactive) {
+    const found = await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
+    if (found !== null) {
+      opts.lockfile = found;
+    }
+  }
+
+  if (noMode && (!opts.lockfile || opts.lockfile.length === 0)) {
+    try {
+      if (await ctx.fs.exists(userPaths.root)) {
+        const activeStore = new ActiveHubStore(userPaths.activeHub, ctx.fs);
+        const hubId = await activeStore.get();
+        if (hubId !== null) {
+          const store = new HubStore(userPaths.hubs, ctx.fs);
+          if (await store.has(hubId)) {
+            opts.source = hubId;
+            opts.interactive = true;
+          }
+        }
+      }
+    } catch {
+      // Ignore errors; proceed without auto-detected hub
+    }
+  }
+
+  if (!opts.target || opts.target.length === 0) {
+    const targets = await readTargetsHierarchical(
+      { cwd: ctx.cwd(), fs: ctx.fs },
+      userPaths.userTargets
+    ).catch(() => []);
+    if (targets.length === 1) {
+      opts.target = targets[0].name;
     }
   }
 }
@@ -322,17 +373,22 @@ async function executeInstallMode(
   fmt: OutputFormat
 ): Promise<number> {
   switch (mode) {
-    case 'interactive':
+    case 'interactive': {
       return await interactiveBundleSelection(opts, target, ctx, fmt);
-    case 'list':
+    }
+    case 'list': {
       return await listSourceBundles(opts, ctx, fmt);
-    case 'local':
+    }
+    case 'local': {
       return await performLocalInstall(opts, target, ctx, fmt);
-    case 'lockfile':
+    }
+    case 'lockfile': {
       return await performLockfileInstall(opts, target, ctx, fmt);
+    }
     case 'remote':
-    default:
+    default: {
       return await performRemoteInstall(opts, target, ctx, fmt);
+    }
   }
 }
 
@@ -370,28 +426,6 @@ const createWriterFactory = (
     });
   };
 };
-
-/**
- * Find lockfile by searching current directory and parent directories.
- * @param startDir Starting directory.
- * @param fs Filesystem adapter.
- * @returns Lockfile path if found, null otherwise.
- */
-async function findLockfile(startDir: string, fs: Context['fs']): Promise<string | null> {
-  let currentDir = startDir;
-  while (true) {
-    const lockfile = path.join(currentDir, 'prompt-registry.lock.json');
-    if (await fs.exists(lockfile)) {
-      return lockfile;
-    }
-    const parent = path.dirname(currentDir);
-    if (parent === currentDir) {
-      break; // Reached root
-    }
-    currentDir = parent;
-  }
-  return null;
-}
 
 /**
  * Validate install inputs.
@@ -511,7 +545,23 @@ async function interactiveBundleSelection(
       }));
     }
 
-    const bundles = active.config.profiles.flatMap((p: { bundles: { id: string; version: string; source: string }[] }) => p.bundles);
+    // Create a map from source ID to RegistrySource
+    const sourceMap = new Map<string, RegistrySource>();
+    for (const source of active.config.sources) {
+      sourceMap.set(source.id, source);
+      sourceMap.set(source.name, source);
+    }
+
+    const allBundles = active.config.profiles.flatMap((p: { bundles: { id: string; version: string; source: string }[] }) => p.bundles);
+    const seenBundleKeys = new Set<string>();
+    const bundles = allBundles.filter((b: { id: string; source: string }) => {
+      const key = `${b.id}::${b.source}`;
+      if (seenBundleKeys.has(key)) {
+        return false;
+      }
+      seenBundleKeys.add(key);
+      return true;
+    });
     const bundleChoices = bundles.map((b: { id: string; version: string; source: string }) => ({
       name: `${b.id}@${b.version} (source: ${b.source})`,
       value: b.id,
@@ -552,7 +602,13 @@ async function interactiveBundleSelection(
 
     let installedCount = 0;
     for (const bundle of selectedBundles) {
-      const bundleOpts = { ...opts, bundle: bundle.id };
+      // Resolve the source from the hub's sources
+      const source = sourceMap.get(bundle.source);
+      if (!source) {
+        ctx.stderr.write(`Failed to install ${bundle.id}@${bundle.version}: source "${bundle.source}" not found in hub\n`);
+        continue;
+      }
+      const bundleOpts = { ...opts, bundle: bundle.id, source: source.url, sourceConfig: source };
       try {
         const result = await performRemoteInstall(bundleOpts, target, ctx, fmt);
         if (result === 0) {
@@ -573,15 +629,17 @@ async function interactiveBundleSelection(
     });
     return 0;
   } catch (err) {
-    return failWith(ctx, fmt, err instanceof Error ? new RegistryError({
-      code: 'INSTALL.ERROR',
-      message: err.message,
-      hint: 'Check the hub configuration and try again.'
-    }) : new RegistryError({
-      code: 'INSTALL.ERROR',
-      message: String(err),
-      hint: 'Check the hub configuration and try again.'
-    }));
+    return failWith(ctx, fmt, err instanceof Error
+      ? new RegistryError({
+        code: 'INSTALL.ERROR',
+        message: err.message,
+        hint: 'Check the hub configuration and try again.'
+      })
+      : new RegistryError({
+        code: 'INSTALL.ERROR',
+        message: String(err),
+        hint: 'Check the hub configuration and try again.'
+      }));
   }
 }
 
@@ -592,22 +650,25 @@ async function interactiveBundleSelection(
  * @returns Resolved target name.
  */
 async function resolveTargetName(opts: InstallOptions, ctx: Context): Promise<string> {
-  let targetName = opts.target;
+  const targetName = opts.target;
   if (targetName === undefined || targetName.length === 0) {
     const stateStore = new TargetStateStore({
       fs: ctx.fs,
       statePath: path.join(ctx.cwd(), '.prompt-registry', 'target-state.json')
     });
     const lastUsed = await stateStore.getLastUsedTarget();
-    if (lastUsed === null) {
-      throw new RegistryError({
-        code: 'USAGE.MISSING_FLAG',
-        message: 'install: --target <name> is required (no previous target found)',
-        hint: 'Configure a target with `prompt-registry target add <name> --type <kind>` first.'
-      });
-    } else {
-      targetName = lastUsed;
+    if (lastUsed !== null) {
+      return lastUsed;
     }
+    const configuredTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs }).catch(() => []);
+    const hint = configuredTargets.length > 1
+      ? `Multiple targets configured: ${configuredTargets.map((t) => t.name).join(', ')}. Specify with --target <name>.`
+      : 'Configure a target with `prompt-registry target add <name> --type <kind>` first.';
+    throw new RegistryError({
+      code: 'USAGE.MISSING_FLAG',
+      message: 'install: --target <name> is required',
+      hint
+    });
   }
   return targetName;
 }
@@ -858,7 +919,23 @@ async function performRemoteInstall(
     }
     const http = opts.http ?? new NodeHttpClient();
     const tokens = opts.tokens ?? defaultTokenProvider(ctx.env);
-    const resolver = new GitHubBundleResolver({ repoSlug, http, tokens });
+
+    // Use SourceDispatcher to select the appropriate resolver based on source config
+    let resolver: BundleResolver;
+    if (opts.sourceConfig) {
+      const dispatcher = new SourceDispatcher({ http, tokens, fs: ctx.fs });
+      const selectedResolver = dispatcher.resolverFor(opts.sourceConfig);
+      if (selectedResolver) {
+        resolver = selectedResolver;
+      } else {
+        // Fallback to GitHub resolver if source type has no resolver (e.g., local)
+        resolver = new GitHubBundleResolver({ repoSlug, http, tokens });
+      }
+    } else {
+      // Default to GitHub resolver when no source config is provided
+      resolver = new GitHubBundleResolver({ repoSlug, http, tokens });
+    }
+
     const downloader = new HttpsBundleDownloader(http, tokens);
     const extractor = new YauzlBundleExtractor();
 
@@ -874,7 +951,7 @@ async function performRemoteInstall(
     const dl = await downloader.download(installable);
     const files = await extractor.extract(dl.bytes);
     const manifest = validateManifest(files, {
-      expectedId: spec.bundleId,
+      expectedId: opts.sourceConfig === undefined ? spec.bundleId : undefined,
       expectedVersion: spec.bundleVersion === 'latest' ? undefined : spec.bundleVersion
     });
     if (opts.dryRun === true) {
@@ -1031,6 +1108,37 @@ async function updateTargetStateFromLockfile(ctx: Context, targetName: string, m
     lastInstalledBundles: newBundles,
     lastUsedAt: new Date().toISOString()
   });
+}
+
+/**
+ * Install a single bundle given an explicit source configuration.
+ * Shared by `install --interactive` and `index search --install`.
+ * @param bundleId Bundle ID to install.
+ * @param sourceConfig Source configuration (hub source).
+ * @param target Target to write into.
+ * @param ctx CLI context.
+ * @param http HTTP client.
+ * @param tokens Token provider.
+ * @param fmt Output format.
+ * @returns Exit code.
+ */
+export async function installBundleWithSource(
+  bundleId: string,
+  sourceConfig: RegistrySource,
+  target: Target,
+  ctx: Context,
+  http: HttpClient,
+  tokens: TokenProvider,
+  fmt: OutputFormat = 'text'
+): Promise<number> {
+  const opts: InstallOptions = {
+    bundle: bundleId,
+    source: sourceConfig.url,
+    sourceConfig,
+    http,
+    tokens
+  };
+  return performRemoteInstall(opts, target, ctx, fmt);
 }
 
 /**

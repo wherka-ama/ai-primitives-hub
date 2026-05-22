@@ -1,0 +1,28 @@
+{
+  "defaultHubs": [
+    {
+      "name": "Amadeus",
+      "description": "Profiles curated by Amadeus",
+      "icon": "☁️",
+      "reference": {
+        "type": "github",
+        "location": "Amadeus-xDLC/genai.prompt-registry-config",
+        "ref": "main"
+      },
+      "recommended": true,
+      "enabled": true
+    },
+    {
+      "name": "Prompt Registry Community Hub",
+      "description": "Profiles curated by the Prompt Registry Community",
+      "icon": "🌐",
+      "reference": {
+        "type": "github",
+        "location": "AmadeusITGroup/prompt-registry-config",
+        "ref": "main"
+      },
+      "recommended": true,
+      "enabled": true
+    }
+  ]
+}

@@ -4,7 +4,11 @@
  * Tests lockfile functions: readLockfile, writeLockfile, upsertEntry,
  * upsertSource, upsertHub, upsertProfile, upsertUseProfile, removeEntry.
  */
+import * as fsp from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -19,6 +23,7 @@ import {
   type LockfileProfile,
   type LockfileSource,
   type LockfileUseProfile,
+  findLockfile,
   readLockfile,
   removeEntry,
   upsertEntry,
@@ -28,6 +33,9 @@ import {
   upsertUseProfile,
   writeLockfile,
 } from '../src/infra/stores/json-lockfile-store';
+import {
+  createNodeFsAdapter,
+} from './cli/helpers/node-fs-adapter';
 
 describe('readLockfile', () => {
   const mockFs: LockfileFs = {
@@ -338,5 +346,60 @@ describe('removeEntry', () => {
     const originalEntries = lock.entries;
     removeEntry(lock, toRemove);
     expect(lock.entries).toBe(originalEntries);
+  });
+});
+
+describe('findLockfile', () => {
+  let tmp: string;
+  const realFs = createNodeFsAdapter();
+
+  beforeEach(async () => {
+    tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'prc-find-lock-'));
+  });
+
+  afterEach(async () => {
+    await fsp.rm(tmp, { recursive: true, force: true });
+  });
+
+  it('returns null when no lockfile found and no user fallback', async () => {
+    const result = await findLockfile(tmp, realFs);
+    expect(result).toBeNull();
+  });
+
+  it('finds lockfile in startDir', async () => {
+    const lockPath = path.join(tmp, 'prompt-registry.lock.json');
+    await fsp.writeFile(lockPath, JSON.stringify({ schemaVersion: 1, entries: [] }));
+    const result = await findLockfile(tmp, realFs);
+    expect(result).toBe(lockPath);
+  });
+
+  it('finds lockfile in parent directory', async () => {
+    const subDir = path.join(tmp, 'sub', 'dir');
+    await fsp.mkdir(subDir, { recursive: true });
+    const lockPath = path.join(tmp, 'prompt-registry.lock.json');
+    await fsp.writeFile(lockPath, JSON.stringify({ schemaVersion: 1, entries: [] }));
+    const result = await findLockfile(subDir, realFs);
+    expect(result).toBe(lockPath);
+  });
+
+  it('falls back to userLockfile when no project lockfile found', async () => {
+    const userLock = path.join(tmp, 'user.lock.json');
+    await fsp.writeFile(userLock, JSON.stringify({ schemaVersion: 1, entries: [] }));
+    const result = await findLockfile(tmp, realFs, userLock);
+    expect(result).toBe(userLock);
+  });
+
+  it('prefers project lockfile over user fallback', async () => {
+    const projectLock = path.join(tmp, 'prompt-registry.lock.json');
+    const userLock = path.join(tmp, 'user.lock.json');
+    await fsp.writeFile(projectLock, JSON.stringify({ schemaVersion: 1, entries: [] }));
+    await fsp.writeFile(userLock, JSON.stringify({ schemaVersion: 1, entries: [] }));
+    const result = await findLockfile(tmp, realFs, userLock);
+    expect(result).toBe(projectLock);
+  });
+
+  it('returns null when user fallback path is absent', async () => {
+    const result = await findLockfile(tmp, realFs, path.join(tmp, 'nonexistent.json'));
+    expect(result).toBeNull();
   });
 });

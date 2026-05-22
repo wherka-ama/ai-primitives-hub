@@ -12,10 +12,14 @@ import * as path from 'node:path';
 import {
   UninstallPipeline,
 } from '../../app/install/uninstall-pipeline';
+import {
+  resolveUserConfigPaths,
+} from '../../app/registry';
 import type {
   Target,
 } from '../../domain/install';
 import {
+  findLockfile,
   readLockfile,
   removeEntry,
   writeLockfile,
@@ -25,6 +29,7 @@ import {
 } from '../../infra/stores/target-state-store';
 import {
   readTargets,
+  readTargetsHierarchical,
 } from '../../infra/stores/target-store';
 import {
   FileTreeTargetWriter,
@@ -77,25 +82,30 @@ export interface UninstallOptions {
 }
 
 /**
- * Find lockfile by searching current directory and parent directories.
- * @param startDir Starting directory.
- * @param fs Filesystem adapter.
- * @returns Lockfile path if found, null otherwise.
+ * Detect uninstall context from the project environment (symmetric with install).
+ * Fills in `opts.lockfile` and `opts.target` when they can be inferred.
+ * @param opts Uninstall options (mutated in-place).
+ * @param ctx CLI context.
  */
-async function findLockfile(startDir: string, fs: Context['fs']): Promise<string | null> {
-  let currentDir = startDir;
-  while (true) {
-    const lockfile = path.join(currentDir, 'prompt-registry.lock.json');
-    if (await fs.exists(lockfile)) {
-      return lockfile;
+async function detectUninstallContext(opts: UninstallOptions, ctx: Context): Promise<void> {
+  const userPaths = resolveUserConfigPaths(ctx.env);
+
+  if (!opts.bundle && !opts.lockfile && !opts.all) {
+    const foundLock = await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
+    if (foundLock !== null) {
+      opts.lockfile = foundLock;
     }
-    const parent = path.dirname(currentDir);
-    if (parent === currentDir) {
-      break; // Reached root
-    }
-    currentDir = parent;
   }
-  return null;
+
+  if (!opts.target || opts.target.length === 0) {
+    const targets = await readTargetsHierarchical(
+      { cwd: ctx.cwd(), fs: ctx.fs },
+      userPaths.userTargets
+    ).catch(() => []);
+    if (targets.length === 1) {
+      opts.target = targets[0].name;
+    }
+  }
 }
 
 /**
@@ -175,13 +185,7 @@ export class UninstallCommand extends BaseUninstallCommand {
       commitMode: this.commitMode as RepositoryCommitMode | undefined
     };
 
-    // F-13: auto-locate prompt-registry.lock.json when no mode flag supplied
-    if (!opts.bundle && !opts.lockfile && !opts.all) {
-      const foundLock = await findLockfile(ctx.cwd(), ctx.fs);
-      if (foundLock !== null) {
-        opts.lockfile = foundLock;
-      }
-    }
+    await detectUninstallContext(opts, ctx);
 
     const { noBundle, noLockfile, noAll } = validateUninstallInputs(opts);
     if (noBundle && noLockfile && noAll) {
@@ -272,22 +276,25 @@ function validateUninstallInputs(opts: UninstallOptions): { noBundle: boolean; n
  * @returns Resolved target name.
  */
 async function resolveTargetName(opts: UninstallOptions, ctx: Context): Promise<string> {
-  let targetName = opts.target;
+  const targetName = opts.target;
   if (targetName === undefined || targetName.length === 0) {
     const stateStore = new TargetStateStore({
       fs: ctx.fs,
       statePath: path.join(ctx.cwd(), '.prompt-registry', 'target-state.json')
     });
     const lastUsed = await stateStore.getLastUsedTarget();
-    if (lastUsed === null) {
-      throw new RegistryError({
-        code: 'USAGE.MISSING_FLAG',
-        message: 'uninstall: --target <name> is required (no previous target found)',
-        hint: 'Configure a target with `prompt-registry target add <name> --type <kind>` first.'
-      });
-    } else {
-      targetName = lastUsed;
+    if (lastUsed !== null) {
+      return lastUsed;
     }
+    const configuredTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs }).catch(() => []);
+    const hint = configuredTargets.length > 1
+      ? `Multiple targets configured: ${configuredTargets.map((t) => t.name).join(', ')}. Specify with --target <name>.`
+      : 'Configure a target with `prompt-registry target add <name> --type <kind>` first.';
+    throw new RegistryError({
+      code: 'USAGE.MISSING_FLAG',
+      message: 'uninstall: --target <name> is required',
+      hint
+    });
   }
   return targetName;
 }

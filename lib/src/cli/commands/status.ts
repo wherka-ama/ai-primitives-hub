@@ -5,7 +5,6 @@
  * a concise dashboard without any network calls. Useful for verifying
  * that a project is correctly configured before activating profiles.
  */
-import * as path from 'node:path';
 import {
   resolveUserConfigPaths,
 } from '../../app/registry';
@@ -19,10 +18,11 @@ import {
   tryLoadIndex,
 } from '../../infra/stores/json-index-store';
 import {
+  findLockfile,
   readLockfile,
 } from '../../infra/stores/json-lockfile-store';
 import {
-  readTargets,
+  readTargetsHierarchical,
 } from '../../infra/stores/target-store';
 import {
   HubStore,
@@ -39,30 +39,39 @@ import {
   renderError,
 } from '../framework';
 
+/** Bundle detail shown in verbose mode. */
+export interface StatusBundle {
+  bundleId: string;
+  bundleVersion: string;
+  target: string;
+  installedAt: string;
+}
+
 /** Status data shape returned to callers. */
 export interface StatusData {
   targets: { name: string; type: string; scope: string }[];
   activeHubId: string | null;
   hubs: string[];
   index: { primitives: number; path: string } | null;
-  lockfile: { entries: number; path: string } | null;
+  lockfile: { entries: number; path: string; bundles?: StatusBundle[] } | null;
 }
 
 /**
  * Build the `status` command using defineCommand (for test compatibility).
  * @param opts CLI options.
  * @param opts.output Output format.
+ * @param opts.verbose Whether to include per-bundle details.
  * @returns CommandDefinition wired to the framework adapter.
  */
 export const createStatusCommand = (
-  opts: { output?: OutputFormat } = {}
+  opts: { output?: OutputFormat; verbose?: boolean } = {}
 ): CommandDefinition =>
   defineCommand({
     path: ['status'],
     description: 'Show current configuration state: targets, active hub, index, and lockfile.',
     category: 'Project',
     run: async ({ ctx }: { ctx: Context }): Promise<number> => {
-      return runStatus(ctx, opts.output ?? 'text');
+      return runStatus(ctx, opts.output ?? 'text', opts.verbose ?? false);
     }
   });
 
@@ -87,11 +96,12 @@ export class StatusCommand extends Command {
   });
 
   public output = Option.String('-o,--output');
+  public verbose = Option.Boolean('--verbose', false);
   public commandContext!: { ctx: Context };
 
   public async execute(): Promise<number> {
     const { ctx } = this.commandContext;
-    return runStatus(ctx, (this.output ?? 'text') as OutputFormat);
+    return runStatus(ctx, (this.output ?? 'text') as OutputFormat, this.verbose);
   }
 }
 
@@ -99,15 +109,16 @@ export class StatusCommand extends Command {
  * Core status logic shared by both command variants.
  * @param ctx CLI context.
  * @param fmt Output format.
+ * @param verbose Whether to include per-bundle details in the lockfile section.
  * @returns Exit code.
  */
-async function runStatus(ctx: Context, fmt: OutputFormat): Promise<number> {
+async function runStatus(ctx: Context, fmt: OutputFormat, verbose: boolean): Promise<number> {
   try {
     const cwd = ctx.cwd();
     const userPaths = resolveUserConfigPaths(ctx.env);
 
     const [targets, hubIds, activeHubId] = await Promise.all([
-      readTargets({ cwd, fs: ctx.fs }),
+      readTargetsHierarchical({ cwd, fs: ctx.fs }, userPaths.userTargets),
       readHubIds(userPaths.hubs, ctx),
       readActiveHubId(userPaths.activeHub, ctx)
     ]);
@@ -115,10 +126,21 @@ async function runStatus(ctx: Context, fmt: OutputFormat): Promise<number> {
     const indexPath = defaultIndexFile(ctx.env);
     const indexStats = tryLoadIndex(indexPath);
 
-    const lockPath = path.join(cwd, 'prompt-registry.lock.json');
-    const lockfile = await ctx.fs.exists(lockPath)
-      ? await readLockfile(lockPath, ctx.fs)
-      : null;
+    const lockPath = await findLockfile(cwd, ctx.fs, userPaths.userLockfile);
+    const lockfile = lockPath === null ? null : await readLockfile(lockPath, ctx.fs);
+
+    let lockfileData: StatusData['lockfile'] = null;
+    if (lockfile !== null && lockPath !== null) {
+      lockfileData = { entries: lockfile.entries.length, path: lockPath };
+      if (verbose) {
+        lockfileData.bundles = lockfile.entries.map((e) => ({
+          bundleId: e.bundleId,
+          bundleVersion: e.bundleVersion,
+          target: e.target,
+          installedAt: e.installedAt
+        }));
+      }
+    }
 
     const data: StatusData = {
       targets: targets.map((t) => ({ name: t.name, type: t.type, scope: t.scope ?? 'user' })),
@@ -127,9 +149,7 @@ async function runStatus(ctx: Context, fmt: OutputFormat): Promise<number> {
       index: indexStats === null
         ? null
         : { primitives: indexStats.search({}).total, path: indexPath },
-      lockfile: lockfile === null
-        ? null
-        : { entries: lockfile.entries.length, path: lockPath }
+      lockfile: lockfileData
     };
 
     formatOutput({
@@ -223,6 +243,11 @@ function renderStatusText(d: StatusData): string {
     lines.push('lockfile    (none)\n');
   } else {
     lines.push(`lockfile    ${d.lockfile.entries} bundle${d.lockfile.entries === 1 ? '' : 's'} installed  [${d.lockfile.path}]\n`);
+    if (d.lockfile.bundles !== undefined && d.lockfile.bundles.length > 0) {
+      for (const b of d.lockfile.bundles) {
+        lines.push(`              ${b.bundleId}@${b.bundleVersion}  target=${b.target}  installed=${b.installedAt}\n`);
+      }
+    }
   }
 
   return lines.join('');

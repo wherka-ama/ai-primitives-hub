@@ -12,9 +12,9 @@ import {
 import type {
   CopilotSdk,
   CopilotSession,
-  SessionOptions,
   PermissionRequest,
   PermissionResponse,
+  SessionOptions,
 } from '../src/ports/copilot-sdk';
 
 describe('Copilot SDK Port Interface', () => {
@@ -22,7 +22,7 @@ describe('Copilot SDK Port Interface', () => {
     it('should define isAvailable method', () => {
       const sdk: CopilotSdk = {
         isAvailable: vi.fn(),
-        createSession: vi.fn(),
+        createSession: vi.fn()
       };
 
       expect(sdk.isAvailable).toBeDefined();
@@ -32,7 +32,7 @@ describe('Copilot SDK Port Interface', () => {
     it('should define createSession method', () => {
       const sdk: CopilotSdk = {
         isAvailable: vi.fn(),
-        createSession: vi.fn(),
+        createSession: vi.fn()
       };
 
       expect(sdk.createSession).toBeDefined();
@@ -45,7 +45,7 @@ describe('Copilot SDK Port Interface', () => {
       const session: CopilotSession = {
         sendAndWait: vi.fn(),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
+        close: vi.fn()
       };
 
       expect(session.sendAndWait).toBeDefined();
@@ -56,7 +56,7 @@ describe('Copilot SDK Port Interface', () => {
       const session: CopilotSession = {
         sendAndWait: vi.fn(),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
+        close: vi.fn()
       };
 
       expect(session.sendWithStream).toBeDefined();
@@ -67,7 +67,7 @@ describe('Copilot SDK Port Interface', () => {
       const session: CopilotSession = {
         sendAndWait: vi.fn(),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
+        close: vi.fn()
       };
 
       expect(session.close).toBeDefined();
@@ -80,7 +80,7 @@ describe('Copilot SDK Port Interface', () => {
       const options: SessionOptions = {
         model: 'gpt-4',
         skillDirectories: ['/skills'],
-        onPermissionRequest: vi.fn(),
+        onPermissionRequest: vi.fn()
       };
 
       expect(options.model).toBe('gpt-4');
@@ -89,7 +89,7 @@ describe('Copilot SDK Port Interface', () => {
     it('should accept options without model', () => {
       const options: SessionOptions = {
         skillDirectories: ['/skills'],
-        onPermissionRequest: vi.fn(),
+        onPermissionRequest: vi.fn()
       };
 
       expect(options.model).toBeUndefined();
@@ -98,7 +98,7 @@ describe('Copilot SDK Port Interface', () => {
     it('should accept skill directories', () => {
       const options: SessionOptions = {
         skillDirectories: ['/skills', '/custom-skills'],
-        onPermissionRequest: vi.fn(),
+        onPermissionRequest: vi.fn()
       };
 
       expect(options.skillDirectories).toHaveLength(2);
@@ -108,7 +108,7 @@ describe('Copilot SDK Port Interface', () => {
       const handler = vi.fn();
       const options: SessionOptions = {
         skillDirectories: ['/skills'],
-        onPermissionRequest: handler,
+        onPermissionRequest: handler
       };
 
       expect(options.onPermissionRequest).toBe(handler);
@@ -118,7 +118,7 @@ describe('Copilot SDK Port Interface', () => {
   describe('PermissionRequest', () => {
     it('should accept permission request', () => {
       const request: PermissionRequest = {
-        kind: 'file-read',
+        kind: 'file-read'
       };
 
       expect(request.kind).toBe('file-read');
@@ -128,7 +128,7 @@ describe('Copilot SDK Port Interface', () => {
   describe('PermissionResponse', () => {
     it('should accept approved response', () => {
       const response: PermissionResponse = {
-        kind: 'approved',
+        kind: 'approved'
       };
 
       expect(response.kind).toBe('approved');
@@ -136,7 +136,7 @@ describe('Copilot SDK Port Interface', () => {
 
     it('should accept denied response', () => {
       const response: PermissionResponse = {
-        kind: 'denied',
+        kind: 'denied'
       };
 
       expect(response.kind).toBe('denied');
@@ -147,7 +147,7 @@ describe('Copilot SDK Port Interface', () => {
     it('should accept empty skill directories', () => {
       const options: SessionOptions = {
         skillDirectories: [],
-        onPermissionRequest: vi.fn(),
+        onPermissionRequest: vi.fn()
       };
 
       expect(options.skillDirectories).toHaveLength(0);
@@ -157,7 +157,7 @@ describe('Copilot SDK Port Interface', () => {
       const skillDirs = Array.from({ length: 50 }, (_, i) => `/skills/skill-${i}`);
       const options: SessionOptions = {
         skillDirectories: skillDirs,
-        onPermissionRequest: vi.fn(),
+        onPermissionRequest: vi.fn()
       };
 
       expect(options.skillDirectories).toHaveLength(50);
@@ -167,7 +167,7 @@ describe('Copilot SDK Port Interface', () => {
       const options: SessionOptions = {
         model: 'gpt-4-turbo-preview',
         skillDirectories: ['/skills'],
-        onPermissionRequest: vi.fn(),
+        onPermissionRequest: vi.fn()
       };
 
       expect(options.model).toBe('gpt-4-turbo-preview');
@@ -177,7 +177,7 @@ describe('Copilot SDK Port Interface', () => {
       const handler = vi.fn().mockResolvedValue({ kind: 'approved' as const });
       const options: SessionOptions = {
         skillDirectories: ['/skills'],
-        onPermissionRequest: handler,
+        onPermissionRequest: handler
       };
 
       const response = await options.onPermissionRequest({ kind: 'file-read' });
@@ -191,7 +191,7 @@ describe('Copilot SDK Port Interface', () => {
         'file-read',
         'file-write',
         'network-request',
-        'custom',
+        'custom'
       ];
 
       for (const kind of kinds) {

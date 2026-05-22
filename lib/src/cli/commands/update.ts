@@ -45,6 +45,7 @@ import {
   ActiveHubStore,
 } from '../../infra/stores/active-hub-store';
 import {
+  findLockfile,
   type LockfileEntry,
   type LockfileSource,
   readLockfile,
@@ -56,7 +57,7 @@ import {
   TargetStateStore,
 } from '../../infra/stores/target-state-store';
 import {
-  readTargets,
+  readTargetsHierarchical,
 } from '../../infra/stores/target-store';
 import {
   HubStore,
@@ -148,7 +149,10 @@ export class UpdateCommand extends BaseUpdateCommand {
     const tokens = this.commandContext.tokens ?? defaultTokenProvider(ctx.env);
     const fmt = (this.output ?? 'text');
 
-    const lockPath = await resolveLockfilePath(this.lockfile, ctx);
+    const userPaths = resolveUserConfigPaths(ctx.env);
+    const lockPath = this.lockfile !== undefined && this.lockfile.length > 0
+      ? (path.isAbsolute(this.lockfile) ? this.lockfile : path.join(ctx.cwd(), this.lockfile))
+      : await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
     if (lockPath === null) {
       return failWith(ctx, fmt, new RegistryError({
         code: 'USAGE.MISSING_FLAG',
@@ -284,24 +288,6 @@ function isRemoteSource(type: string): boolean {
   return type === 'github' || type === 'awesome-copilot' || type === 'skills';
 }
 
-async function resolveLockfilePath(explicit: string | undefined, ctx: Context): Promise<string | null> {
-  if (explicit !== undefined && explicit.length > 0) {
-    return path.isAbsolute(explicit) ? explicit : path.join(ctx.cwd(), explicit);
-  }
-  let dir = ctx.cwd();
-  while (true) {
-    const candidate = path.join(dir, 'prompt-registry.lock.json');
-    if (await ctx.fs.exists(candidate)) {
-      return candidate;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      return null;
-    }
-    dir = parent;
-  }
-}
-
 async function syncActiveHub(ctx: Context, http: HttpClient, tokens: TokenProvider): Promise<void> {
   try {
     const userPaths = resolveUserConfigPaths(ctx.env);
@@ -326,7 +312,8 @@ async function syncActiveHub(ctx: Context, http: HttpClient, tokens: TokenProvid
 }
 
 async function resolveTarget(targetName: string, ctx: Context): Promise<Target> {
-  const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
+  const userPaths = resolveUserConfigPaths(ctx.env);
+  const targets = await readTargetsHierarchical({ cwd: ctx.cwd(), fs: ctx.fs }, userPaths.userTargets);
   const target = targets.find((t) => t.name === targetName);
   if (target === undefined) {
     throw new RegistryError({

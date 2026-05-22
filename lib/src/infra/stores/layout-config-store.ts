@@ -103,7 +103,8 @@ async function tryLoadFile(
     const raw = parseYaml(text);
     return validateTargetLayoutsConfig(raw);
   } catch (err) {
-    // Invalid or unreadable file — skip silently
+    // eslint-disable-next-line no-console -- intentional user-facing warning
+    console.warn(`Skipping invalid layout config at ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }

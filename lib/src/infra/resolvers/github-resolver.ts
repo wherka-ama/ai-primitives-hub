@@ -151,11 +151,7 @@ export class GitHubBundleResolver implements BundleResolver {
     const { collection: bundleName } = decomposeBundleId(spec.bundleId, this.opts.repoSlug);
     const wantVersion = spec.bundleVersion;
     let release: GitHubRelease | undefined;
-    if (wantVersion === undefined || wantVersion === 'latest') {
-      release = this.findLatestRelease(releases, bundleName);
-    } else {
-      release = this.findSpecificRelease(releases, bundleName, wantVersion);
-    }
+    release = wantVersion === undefined || wantVersion === 'latest' ? this.findLatestRelease(releases, bundleName) : this.findSpecificRelease(releases, bundleName, wantVersion);
     if (release === undefined) {
       return null;
     }

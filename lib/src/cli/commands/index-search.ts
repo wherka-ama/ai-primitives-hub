@@ -10,17 +10,56 @@
  * with `--index <FILE>`.
  * @module cli/commands/index-search
  */
+import inquirer from 'inquirer';
+import {
+  HubManager,
+  resolveUserConfigPaths,
+} from '../../app/registry';
+import type {
+  Target,
+} from '../../domain/install';
+import type {
+  RegistrySource,
+} from '../../domain/registry/registry-source';
+import {
+  generateSourceId,
+} from '../../domain/source-id';
+import {
+  defaultTokenProvider,
+} from '../../infra/github/token';
 import {
   defaultIndexFile,
 } from '../../infra/harvest/default-paths';
+import {
+  NodeHttpClient,
+} from '../../infra/http/node-http-client';
+import {
+  CompositeHubResolver,
+  GitHubHubResolver,
+  LocalHubResolver,
+  UrlHubResolver,
+} from '../../infra/resolvers/hub-resolver';
 import type {
   PrimitiveKind,
   SearchQuery,
   SearchResult,
 } from '../../infra/search/types';
 import {
+  ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
+import {
   loadIndex,
 } from '../../infra/stores/json-index-store';
+import {
+  readTargets,
+} from '../../infra/stores/target-store';
+import {
+  HubStore,
+} from '../../infra/stores/yaml-hub-store';
+import type {
+  HttpClient,
+  TokenProvider,
+} from '../../ports/http';
 import {
   Command,
   type CommandDefinition,
@@ -32,6 +71,9 @@ import {
   RegistryError,
   renderError,
 } from '../framework';
+import {
+  installBundleWithSource,
+} from './install';
 
 export interface IndexSearchOptions {
   output?: OutputFormat;
@@ -55,6 +97,16 @@ export interface IndexSearchOptions {
   offset?: number;
   /** Include per-term explanation in each hit. */
   explain?: boolean;
+  /** After showing results, interactively select bundles and install them. */
+  install?: boolean;
+  /** Show a checkbox selector when combined with --install (mirrors install --interactive). */
+  interactive?: boolean;
+  /** Target name to install into (used with --install). Defaults to auto-detect. */
+  installTarget?: string;
+  /** DI seam: HTTP client (tests). */
+  http?: HttpClient;
+  /** DI seam: token provider (tests). */
+  tokens?: TokenProvider;
 }
 
 /**
@@ -69,7 +121,7 @@ export const createIndexSearchCommand = (
     path: ['index', 'search'],
     description: 'Search a primitive index by free text + facets.',
     category: 'Index Management',
-    run: ({ ctx }: { ctx: Context }): Promise<number> => {
+    run: async ({ ctx }: { ctx: Context }): Promise<number> => {
       const fmt = opts.output ?? 'text';
       const indexPath = opts.indexFile ?? defaultIndexFile(ctx.env);
       try {
@@ -94,7 +146,10 @@ export const createIndexSearchCommand = (
           data: result,
           textRenderer: (r) => renderSearchText(r)
         });
-        return Promise.resolve(0);
+        if (opts.install === true && result.hits.length > 0) {
+          return await searchAndInstall(result, opts, ctx, fmt);
+        }
+        return 0;
       } catch (cause) {
         return failWith(ctx, fmt, classifyError(cause, indexPath));
       }
@@ -132,6 +187,9 @@ export class IndexSearchCommand extends Command {
   public limit = Option.String('--limit');
   public offset = Option.String('--offset');
   public explain = Option.Boolean('--explain');
+  public install = Option.Boolean('--install', false);
+  public interactive = Option.Boolean('--interactive', false);
+  public installTarget = Option.String('--install-target');
 
   public async execute(): Promise<number> {
     const ctx = (this as any).commandContext?.ctx as Context;
@@ -164,11 +222,168 @@ export class IndexSearchCommand extends Command {
         data: result,
         textRenderer: (r) => renderSearchText(r)
       });
+      if (this.install && result.hits.length > 0) {
+        return await searchAndInstall(
+          result,
+          { installTarget: this.installTarget, interactive: this.interactive },
+          ctx,
+          fmt
+        );
+      }
       return 0;
     } catch (cause) {
       return failWith(ctx, fmt, classifyError(cause, indexPath));
     }
   }
+}
+
+/**
+ * After a search, offer interactive bundle selection and install.
+ * Maps primitive `bundle.sourceId` → hub RegistrySource via `generateSourceId`.
+ * @param result Search result.
+ * @param opts Options (installTarget, http, tokens).
+ * @param ctx CLI context.
+ * @param fmt Output format.
+ * @returns Exit code.
+ */
+async function searchAndInstall(
+  result: SearchResult,
+  opts: Pick<IndexSearchOptions, 'installTarget' | 'interactive' | 'http' | 'tokens'>,
+  ctx: Context,
+  fmt: OutputFormat
+): Promise<number> {
+  const http = opts.http ?? new NodeHttpClient();
+  const tokens = opts.tokens ?? defaultTokenProvider(ctx.env);
+
+  const userPaths = resolveUserConfigPaths(ctx.env);
+  const resolver = new CompositeHubResolver(
+    new GitHubHubResolver(http, tokens),
+    new LocalHubResolver(ctx.fs),
+    new UrlHubResolver(http, tokens)
+  );
+  const mgr = new HubManager(
+    new HubStore(userPaths.hubs, ctx.fs),
+    new ActiveHubStore(userPaths.activeHub, ctx.fs),
+    resolver
+  );
+  const active = await mgr.getActiveHub();
+  if (active === null) {
+    ctx.stderr.write('No active hub found. Run `prompt-registry hub use <id>` first.\n');
+    return 1;
+  }
+
+  const sourceById = new Map<string, RegistrySource>();
+  for (const src of active.config.sources) {
+    sourceById.set(generateSourceId(src.type, src.url), src);
+    sourceById.set(src.id, src);
+  }
+
+  const seen = new Set<string>();
+  const candidates: { bundleId: string; version: string; source: RegistrySource }[] = [];
+  for (const hit of result.hits) {
+    const b = hit.primitive.bundle;
+    if (seen.has(b.bundleId)) {
+      continue;
+    }
+    seen.add(b.bundleId);
+    const src = sourceById.get(b.sourceId);
+    if (src !== undefined) {
+      candidates.push({ bundleId: b.bundleId, version: b.bundleVersion, source: src });
+    }
+  }
+
+  if (candidates.length === 0) {
+    ctx.stdout.write('No bundles from the active hub matched the search results.\n');
+    return 0;
+  }
+
+  let selectedIds: string[];
+
+  if (opts.interactive) {
+    const choices = candidates.map((c) => ({
+      name: `${c.bundleId}@${c.version}  (${c.source.name})`,
+      value: c.bundleId,
+      short: c.bundleId
+    }));
+
+    const answer = await inquirer.prompt<{ selectedIds: string[] }>([
+      {
+        type: 'checkbox',
+        name: 'selectedIds',
+        message: 'Select bundles to install:',
+        choices,
+        validate: (input: string[]) => input.length > 0 || 'Select at least one bundle'
+      }
+    ]);
+    selectedIds = answer.selectedIds;
+
+    if (selectedIds.length === 0) {
+      ctx.stdout.write('No bundles selected.\n');
+      return 0;
+    }
+  } else {
+    selectedIds = candidates.map((c) => c.bundleId);
+  }
+
+  const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs }).catch(() => [] as Target[]);
+  let target: Target | undefined;
+  if (opts.installTarget && opts.installTarget.length > 0) {
+    target = targets.find((t) => t.name === opts.installTarget);
+  } else if (targets.length === 1) {
+    target = targets[0];
+  } else if (targets.length > 1) {
+    if (opts.interactive) {
+      const { chosenTarget } = await inquirer.prompt<{ chosenTarget: string }>([
+        {
+          type: 'list',
+          name: 'chosenTarget',
+          message: 'Select target:',
+          choices: targets.map((t) => ({ name: `${t.name} (${t.type})`, value: t.name }))
+        }
+      ]);
+      target = targets.find((t) => t.name === chosenTarget);
+    } else {
+      ctx.stderr.write(
+        'Multiple targets configured. Use --install-target <name> to specify one.\n'
+      );
+      return 1;
+    }
+  }
+
+  if (target === undefined) {
+    ctx.stderr.write('No target found. Run `prompt-registry target add` first.\n');
+    return 1;
+  }
+
+  ctx.stdout.write(`\nInstalling ${selectedIds.length} bundle(s) to target "${target.name}"\n`);
+  if (opts.interactive) {
+    const { proceed } = await inquirer.prompt<{ proceed: boolean }>([
+      { type: 'confirm', name: 'proceed', message: 'Proceed with installation?', default: true }
+    ]);
+    if (!proceed) {
+      ctx.stdout.write('Installation cancelled.\n');
+      return 0;
+    }
+  }
+
+  let installed = 0;
+  for (const bundleId of selectedIds) {
+    const c = candidates.find((x) => x.bundleId === bundleId);
+    if (c === undefined) {
+      continue;
+    }
+    try {
+      const code = await installBundleWithSource(bundleId, c.source, target, ctx, http, tokens, fmt);
+      if (code === 0) {
+        installed++;
+      }
+    } catch (err) {
+      ctx.stderr.write(`Failed to install ${bundleId}: ${err instanceof Error ? err.message : String(err)}\n`);
+    }
+  }
+
+  ctx.stdout.write(`Installed ${installed}/${selectedIds.length} bundle(s)\n`);
+  return installed === selectedIds.length ? 0 : 1;
 }
 
 const classifyError = (cause: unknown, indexPath: string): RegistryError => {

@@ -845,7 +845,7 @@ describe('renderDiscoveryText', () => {
           contentHash: 'hash1',
           bundle: { sourceId: 'source-1', bundleId: 'bundle-1', sourceType: 'github', bundleVersion: '1.0.0', installed: false }
         },
-        score: 1.0
+        score: 1
       }
     ];
 
@@ -889,7 +889,7 @@ describe('renderDiscoveryText', () => {
           contentHash: 'hash1',
           bundle: { sourceId: 'source-1', bundleId: 'bundle-1', sourceType: 'github', bundleVersion: '1.0.0', installed: false }
         },
-        score: 0.0
+        score: 0
       }
     ];
 
@@ -977,7 +977,7 @@ describe('renderDiscoveryText', () => {
           contentHash: 'hash1',
           bundle: { sourceId: 'source-1', bundleId: 'bundle-1', sourceType: 'github', bundleVersion: '1.0.0', installed: false }
         },
-        score: 0.987654321
+        score: 0.987_654_321
       }
     ];
 
@@ -1186,7 +1186,7 @@ describe('renderDiscoveryText', () => {
     };
 
     const queries = ['test'];
-    const longPreview = 'a'.repeat(10000);
+    const longPreview = 'a'.repeat(10_000);
     const results: SearchHit[] = [
       {
         primitive: {

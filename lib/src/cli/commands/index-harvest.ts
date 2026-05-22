@@ -8,10 +8,19 @@
  * @module cli/commands/index-harvest
  */
 import {
+  resolveUserConfigPaths,
+} from '../../app/registry';
+import {
   harvestHub as defaultHarvestHub,
   type HubHarvestPipelineOptions,
   type HubHarvestPipelineResult,
 } from '../../infra/harvest/hub-harvester';
+import {
+  ActiveHubStore,
+} from '../../infra/stores/active-hub-store';
+import {
+  HubStore,
+} from '../../infra/stores/yaml-hub-store';
 import {
   Command,
   type CommandDefinition,
@@ -128,6 +137,42 @@ export const createIndexHarvestCommand = (
     }
   });
 
+/**
+ * Populate hub source fields on `cmd` from the currently active hub
+ * when the user hasn't provided them explicitly.
+ * @param cmd IndexHarvestCommand instance (mutated).
+ * @param cmd.hubRepo
+ * @param cmd.hubBranch
+ * @param cmd.hubConfigFile
+ * @param ctx CLI context.
+ */
+async function autoDetectHubFromActive(
+  cmd: { hubRepo?: string; hubBranch?: string; hubConfigFile?: string },
+  ctx: Context
+): Promise<void> {
+  try {
+    const userPaths = resolveUserConfigPaths(ctx.env);
+    const activeStore = new ActiveHubStore(userPaths.activeHub, ctx.fs);
+    const activeId = await activeStore.get();
+    if (activeId === null) {
+      return;
+    }
+    const hubStore = new HubStore(userPaths.hubs, ctx.fs);
+    const saved = await hubStore.load(activeId);
+    const ref = saved.reference;
+    if (ref.type === 'github') {
+      cmd.hubRepo = ref.location;
+      if (ref.ref) {
+        cmd.hubBranch = ref.ref;
+      }
+    } else if (ref.type === 'local' || ref.type === 'url') {
+      cmd.hubConfigFile = ref.location;
+    }
+  } catch {
+    // If detection fails for any reason, fall through to the explicit error below.
+  }
+}
+
 const failWith = (ctx: Context, output: OutputFormat, err: RegistryError): number => {
   if (output === 'json' || output === 'yaml' || output === 'ndjson') {
     formatOutput({
@@ -185,13 +230,19 @@ export class IndexHarvestCommand extends Command {
 
     const fmt = (this.output ?? 'text') as OutputFormat;
     const noHubConfig = this.noHubConfig === true;
+
+    if (!noHubConfig && !this.hubConfigFile && (!this.hubRepo || this.hubRepo.length === 0)) {
+      await autoDetectHubFromActive(this, ctx);
+    }
+
     const hubConfigFile = this.hubConfigFile;
 
     if (!noHubConfig && hubConfigFile === undefined
       && (!this.hubRepo || this.hubRepo.length === 0)) {
       return failWith(ctx, fmt, new RegistryError({
         code: 'USAGE.MISSING_FLAG',
-        message: 'index harvest: --hub-repo <OWNER/REPO> is required (or use --no-hub-config / --hub-config-file)'
+        message: 'index harvest: --hub-repo <OWNER/REPO> is required (or use --no-hub-config / --hub-config-file)',
+        hint: 'Run `prompt-registry hub add <ref>` and `hub use <id>` to configure an active hub, or pass --hub-repo directly.'
       }));
     }
 

@@ -10,13 +10,13 @@ import {
   it,
   vi,
 } from 'vitest';
+import {
+  McpServerImpl,
+} from '../src/infra/discovery/mcp-server';
 import type {
   McpServer,
   McpTool,
 } from '../src/ports/mcp-server';
-import {
-  McpServerImpl,
-} from '../src/infra/discovery/mcp-server';
 
 describe('McpServerImpl', () => {
   let server: McpServer;
@@ -49,7 +49,7 @@ describe('McpServerImpl', () => {
       name: 'test_tool',
       description: 'Test tool',
       inputSchema: {},
-      handler: vi.fn(),
+      handler: vi.fn()
     };
 
     server.registerTool(tool);
@@ -62,14 +62,14 @@ describe('McpServerImpl', () => {
       name: 'tool1',
       description: 'Tool 1',
       inputSchema: {},
-      handler: vi.fn(),
+      handler: vi.fn()
     };
 
     const tool2: McpTool = {
       name: 'tool2',
       description: 'Tool 2',
       inputSchema: {},
-      handler: vi.fn(),
+      handler: vi.fn()
     };
 
     server.registerTool(tool1);
@@ -86,11 +86,11 @@ describe('McpServerImpl', () => {
         type: 'object',
         properties: {
           query: { type: 'string' },
-          type: { type: 'string', enum: ['profile', 'bundle', 'primitive'] },
+          type: { type: 'string', enum: ['profile', 'bundle', 'primitive'] }
         },
-        required: ['query'],
+        required: ['query']
       },
-      handler: vi.fn(),
+      handler: vi.fn()
     };
 
     server.registerTool(tool);
@@ -104,7 +104,7 @@ describe('McpServerImpl', () => {
       name: 'executable_tool',
       description: 'Tool that executes',
       inputSchema: {},
-      handler,
+      handler
     };
 
     server.registerTool(tool);
@@ -120,7 +120,7 @@ describe('McpServerImpl', () => {
       name: 'failing_tool',
       description: 'Tool that fails',
       inputSchema: {},
-      handler,
+      handler
     };
 
     server.registerTool(tool);
@@ -139,7 +139,7 @@ describe('McpServerImpl', () => {
 
   it('should handle tool with async handler', async () => {
     const handler = vi.fn().mockImplementation(async (input: unknown) => {
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
       return { result: 'async success' };
     });
 
@@ -147,7 +147,7 @@ describe('McpServerImpl', () => {
       name: 'async_tool',
       description: 'Tool with async handler',
       inputSchema: {},
-      handler,
+      handler
     };
 
     server.registerTool(tool);
@@ -167,18 +167,18 @@ describe('McpServerImpl', () => {
           nested: {
             type: 'object',
             properties: {
-              value: { type: 'string' },
-            },
-          },
-        },
+              value: { type: 'string' }
+            }
+          }
+        }
       },
-      handler,
+      handler
     };
 
     server.registerTool(tool);
 
     const complexInput = {
-      nested: { value: 'test' },
+      nested: { value: 'test' }
     };
 
     const result = await tool.handler(complexInput);
@@ -191,7 +191,7 @@ describe('McpServerImpl', () => {
       name: 'tool_🚀',
       description: 'Tool with unicode name',
       inputSchema: {},
-      handler: vi.fn(),
+      handler: vi.fn()
     };
 
     server.registerTool(tool);
@@ -205,7 +205,7 @@ describe('McpServerImpl', () => {
       name: 'long_desc_tool',
       description: longDesc,
       inputSchema: {},
-      handler: vi.fn(),
+      handler: vi.fn()
     };
 
     server.registerTool(tool);
@@ -218,7 +218,7 @@ describe('McpServerImpl', () => {
       name: 'no_desc_tool',
       description: '',
       inputSchema: {},
-      handler: vi.fn(),
+      handler: vi.fn()
     };
 
     server.registerTool(tool);

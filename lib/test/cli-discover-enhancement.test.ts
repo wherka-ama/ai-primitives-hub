@@ -25,7 +25,7 @@ describe('Discover Command Enhancement', () => {
 
   it('should include enableAI flag in DiscoverOptions', () => {
     const cmd = createDiscoverCommand({
-      enableAI: true,
+      enableAI: true
     });
 
     expect(cmd).toBeDefined();
@@ -34,7 +34,7 @@ describe('Discover Command Enhancement', () => {
 
   it('should include interactive flag in DiscoverOptions', () => {
     const cmd = createDiscoverCommand({
-      interactive: true,
+      interactive: true
     });
 
     expect(cmd).toBeDefined();
@@ -44,7 +44,7 @@ describe('Discover Command Enhancement', () => {
   it('should handle both AI and interactive flags', () => {
     const cmd = createDiscoverCommand({
       enableAI: true,
-      interactive: true,
+      interactive: true
     });
 
     expect(cmd).toBeDefined();
@@ -52,7 +52,7 @@ describe('Discover Command Enhancement', () => {
 
   it('should use fallback when AI is disabled', () => {
     const cmd = createDiscoverCommand({
-      enableAI: false,
+      enableAI: false
     });
 
     expect(cmd).toBeDefined();

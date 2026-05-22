@@ -44,6 +44,8 @@ function extractUrl(entry: Record<string, unknown>): string | undefined {
  * Generate the ID string for an entry.
  * @param entry - Raw config entry object.
  * @param ownerRepo - Normalized owner/repo.
+ * @param ownerRepo.owner
+ * @param ownerRepo.repo
  * @returns ID string.
  */
 function generateId(entry: Record<string, unknown>, ownerRepo: { owner: string; repo: string }): string {
@@ -54,6 +56,8 @@ function generateId(entry: Record<string, unknown>, ownerRepo: { owner: string; 
  * Generate the name string for an entry.
  * @param entry - Raw config entry object.
  * @param ownerRepo - Normalized owner/repo.
+ * @param ownerRepo.owner
+ * @param ownerRepo.repo
  * @returns Name string.
  */
 function generateName(entry: Record<string, unknown>, ownerRepo: { owner: string; repo: string }): string {

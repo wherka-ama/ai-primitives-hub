@@ -158,7 +158,13 @@ export class GitHubHubResolver {
     }
     const res = await this.http.fetch({ url, headers });
     if (res.statusCode === 404) {
-      throw new Error(`hub-config.yml not found at ${repoSlug}`);
+      const authHint = token === null
+        ? ' (no authentication - private repo may require auth)'
+        : '';
+      throw new Error(`hub-config.yml not found at ${repoSlug}${authHint}`);
+    }
+    if (res.statusCode === 401 || res.statusCode === 403) {
+      throw new Error(`Authentication failed for ${repoSlug} - check GitHub token permissions`);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw new Error(`GitHub API ${String(res.statusCode)} for ${url}`);

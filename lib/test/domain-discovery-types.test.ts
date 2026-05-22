@@ -9,10 +9,10 @@ import {
   it,
 } from 'vitest';
 import type {
+  DiscoveryOptions,
+  ProfileDraft,
   ResourceRecommendation,
   ResourceSelection,
-  ProfileDraft,
-  DiscoveryOptions,
 } from '../src/domain/discovery/types';
 
 describe('Discovery Domain Types', () => {
@@ -26,7 +26,7 @@ describe('Discovery Domain Types', () => {
         relevanceScore: 0.95,
         reasoning: 'Matches your Java backend stack',
         source: 'amadeus-hub',
-        aiRecommended: true,
+        aiRecommended: true
       };
 
       expect(rec.type).toBe('profile');
@@ -45,7 +45,7 @@ describe('Discovery Domain Types', () => {
         reasoning: 'Relevant to Spring Boot framework',
         source: 'github:Amadeus-xDLC/spring-boot-skills',
         kind: 'skill',
-        aiRecommended: true,
+        aiRecommended: true
       };
 
       expect(rec.type).toBe('bundle');
@@ -62,7 +62,7 @@ describe('Discovery Domain Types', () => {
         reasoning: 'Matches code review activity',
         source: 'primitive-index',
         kind: 'prompt',
-        aiRecommended: false,
+        aiRecommended: false
       };
 
       expect(rec.type).toBe('primitive');
@@ -78,7 +78,7 @@ describe('Discovery Domain Types', () => {
         relevanceScore: 0.5,
         reasoning: 'Test reasoning',
         source: 'test-hub',
-        aiRecommended: true,
+        aiRecommended: true
       };
 
       expect(rec.relevanceScore).toBeGreaterThanOrEqual(0);
@@ -91,7 +91,7 @@ describe('Discovery Domain Types', () => {
       const selection: ResourceSelection = {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
+        selectedAt: new Date().toISOString()
       };
 
       expect(selection.selected).toBe(true);
@@ -101,7 +101,7 @@ describe('Discovery Domain Types', () => {
     it('should accept unselected resource', () => {
       const selection: ResourceSelection = {
         id: 'resource-2',
-        selected: false,
+        selected: false
       };
 
       expect(selection.selected).toBe(false);
@@ -120,10 +120,10 @@ describe('Discovery Domain Types', () => {
           {
             id: 'resource-1',
             selected: true,
-            selectedAt: new Date().toISOString(),
-          },
+            selectedAt: new Date().toISOString()
+          }
         ],
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       };
 
       expect(draft.id).toBe('draft-1');
@@ -137,7 +137,7 @@ describe('Discovery Domain Types', () => {
         name: 'Simple Profile',
         description: 'Simple profile without icon',
         selections: [],
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       };
 
       expect(draft.icon).toBeUndefined();
@@ -152,7 +152,7 @@ describe('Discovery Domain Types', () => {
         cwd: '/test/project',
         indexFile: '/test/index.json',
         limit: 10,
-        kinds: ['prompt', 'skill'],
+        kinds: ['prompt', 'skill']
       };
 
       expect(opts.enableAI).toBe(true);
@@ -164,7 +164,7 @@ describe('Discovery Domain Types', () => {
       const opts: DiscoveryOptions = {
         enableAI: true,
         interactive: true,
-        cwd: '/test/project',
+        cwd: '/test/project'
       };
 
       expect(opts.interactive).toBe(true);
@@ -174,7 +174,7 @@ describe('Discovery Domain Types', () => {
       const opts: DiscoveryOptions = {
         enableAI: false,
         interactive: false,
-        cwd: '/test/project',
+        cwd: '/test/project'
       };
 
       expect(opts.limit).toBeUndefined();
@@ -192,7 +192,7 @@ describe('Discovery Domain Types', () => {
         relevanceScore: 0.5,
         reasoning: 'Test reasoning',
         source: 'test-hub',
-        aiRecommended: true,
+        aiRecommended: true
       };
 
       // TypeScript should enforce readonly at compile time
@@ -212,7 +212,7 @@ describe('Discovery Domain Types', () => {
         relevanceScore: 0,
         reasoning: 'Test reasoning',
         source: 'test-hub',
-        aiRecommended: false,
+        aiRecommended: false
       };
 
       expect(rec.relevanceScore).toBe(0);
@@ -227,7 +227,7 @@ describe('Discovery Domain Types', () => {
         relevanceScore: 1,
         reasoning: 'Test reasoning',
         source: 'test-hub',
-        aiRecommended: true,
+        aiRecommended: true
       };
 
       expect(rec.relevanceScore).toBe(1);
@@ -242,7 +242,7 @@ describe('Discovery Domain Types', () => {
         relevanceScore: 0.735,
         reasoning: 'Test reasoning',
         source: 'test-hub',
-        aiRecommended: true,
+        aiRecommended: true
       };
 
       expect(rec.relevanceScore).toBe(0.735);
@@ -258,7 +258,7 @@ describe('Discovery Domain Types', () => {
         relevanceScore: 0.5,
         reasoning: 'Test reasoning',
         source: 'test-hub',
-        aiRecommended: true,
+        aiRecommended: true
       };
 
       expect(rec.description).toBe(longDesc);
@@ -273,7 +273,7 @@ describe('Discovery Domain Types', () => {
         relevanceScore: 0.5,
         reasoning: 'Test reasoning',
         source: 'test-hub',
-        aiRecommended: true,
+        aiRecommended: true
       };
 
       expect(rec.description).toContain('quotes');
@@ -286,7 +286,7 @@ describe('Discovery Domain Types', () => {
       const selection: ResourceSelection = {
         id: 'resource-1',
         selected: true,
-        selectedAt: isoString,
+        selectedAt: isoString
       };
 
       expect(selection.selectedAt).toBe(isoString);
@@ -295,7 +295,7 @@ describe('Discovery Domain Types', () => {
     it('should accept resource IDs with special characters', () => {
       const selection: ResourceSelection = {
         id: 'resource-1-with-special_chars.123',
-        selected: true,
+        selected: true
       };
 
       expect(selection.id).toBe('resource-1-with-special_chars.123');
@@ -309,7 +309,7 @@ describe('Discovery Domain Types', () => {
         name: 'Empty Profile',
         description: 'Profile with no selections',
         selections: [],
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       };
 
       expect(draft.selections).toHaveLength(0);
@@ -319,7 +319,7 @@ describe('Discovery Domain Types', () => {
       const selections: ResourceSelection[] = Array.from({ length: 100 }, (_, i) => ({
         id: `resource-${i}`,
         selected: true,
-        selectedAt: new Date().toISOString(),
+        selectedAt: new Date().toISOString()
       }));
 
       const draft: ProfileDraft = {
@@ -327,7 +327,7 @@ describe('Discovery Domain Types', () => {
         name: 'Large Profile',
         description: 'Profile with many selections',
         selections,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       };
 
       expect(draft.selections).toHaveLength(100);
@@ -339,7 +339,7 @@ describe('Discovery Domain Types', () => {
         name: '🎉 Profile with unicode',
         description: 'Profile with emojis 🚀 and unicode characters',
         selections: [],
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       };
 
       expect(draft.name).toContain('🎉');
@@ -353,7 +353,7 @@ describe('Discovery Domain Types', () => {
         enableAI: false,
         interactive: false,
         cwd: '/test/project',
-        limit: 1000,
+        limit: 1000
       };
 
       expect(opts.limit).toBe(1000);
@@ -364,7 +364,7 @@ describe('Discovery Domain Types', () => {
         enableAI: false,
         interactive: false,
         cwd: '/test/project',
-        kinds: ['prompt', 'skill', 'instruction', 'agent', 'chatmode', 'mcp-server'],
+        kinds: ['prompt', 'skill', 'instruction', 'agent', 'chatmode', 'mcp-server']
       };
 
       expect(opts.kinds).toHaveLength(6);
@@ -375,7 +375,7 @@ describe('Discovery Domain Types', () => {
         enableAI: false,
         interactive: false,
         cwd: '/test/project',
-        indexFile: '/custom/path/to/index.json',
+        indexFile: '/custom/path/to/index.json'
       };
 
       expect(opts.indexFile).toBe('/custom/path/to/index.json');

@@ -13,19 +13,15 @@ import {
 import type {
   DetectedContext,
 } from '../src/app/context-detection';
-import type {
-  DiscoveryOptions,
-} from '../src/domain/discovery/types';
-import {
-  RecommendationEngine,
-} from '../src/app/discovery/recommendation-engine';
 import {
   ProfileGenerator,
 } from '../src/app/discovery/profile-generator';
 import {
   buildSearchQueries,
+  RecommendationEngine,
 } from '../src/app/discovery/recommendation-engine';
 import type {
+  DiscoveryOptions,
   ResourceSelection,
 } from '../src/domain/discovery/types';
 
@@ -42,18 +38,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: ['React', 'Express'],
         packageManagers: ['npm'],
         buildTools: ['webpack'],
-        testFrameworks: ['jest'],
+        testFrameworks: ['jest']
       },
       domain: {
         category: 'web-application',
         businessDomain: 'authentication',
-        technicalDomain: 'frontend',
+        technicalDomain: 'frontend'
       },
       activity: {
         recentFiles: ['src/index.ts', 'src/components/Button.tsx'],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     mockCopilotSdk = {
@@ -67,13 +63,13 @@ describe('Discovery Flow Integration', () => {
               description: 'JWT token management',
               kind: 'skill',
               relevance: 0.9,
-              source: 'github.com/example/auth-bundle',
-            },
-          ],
+              source: 'github.com/example/auth-bundle'
+            }
+          ]
         })),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
   });
 
@@ -95,7 +91,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -112,16 +108,16 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
     const generator = new ProfileGenerator();
 
-    const selections: ResourceSelection[] = recommendations.map(rec => ({
+    const selections: ResourceSelection[] = recommendations.map((rec) => ({
       id: rec.id,
       selected: true,
-      selectedAt: new Date().toISOString(),
+      selectedAt: new Date().toISOString()
     }));
 
     const draft = generator.generateDraft(
@@ -141,8 +137,8 @@ describe('Discovery Flow Integration', () => {
       createSession: vi.fn().mockResolvedValue({
         sendAndWait: vi.fn(),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(unavailableSdk);
@@ -152,7 +148,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -168,13 +164,13 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
+        selectedAt: new Date().toISOString()
       },
       {
         id: 'resource-2',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -215,18 +211,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: ['React', 'Express', 'Django', 'Gin'],
         packageManagers: ['npm', 'pip', 'go mod'],
         buildTools: ['webpack', 'make'],
-        testFrameworks: ['jest', 'pytest'],
+        testFrameworks: ['jest', 'pytest']
       },
       domain: {
         category: 'microservices',
         businessDomain: 'fintech',
-        technicalDomain: 'backend',
+        technicalDomain: 'backend'
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(complexContext);
@@ -239,7 +235,7 @@ describe('Discovery Flow Integration', () => {
   it('should integrate error handling across discovery flow', async () => {
     const errorSdk = {
       isAvailable: vi.fn().mockRejectedValue(new Error('SDK error')),
-      createSession: vi.fn(),
+      createSession: vi.fn()
     };
 
     const engine = new RecommendationEngine(errorSdk);
@@ -249,7 +245,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     await expect(engine.generateRecommendations(mockContext, options)).rejects.toThrow();
@@ -261,8 +257,8 @@ describe('Discovery Flow Integration', () => {
       createSession: vi.fn().mockResolvedValue({
         sendAndWait: vi.fn().mockResolvedValue('invalid json'),
         sendWithStream: vi.fn(),
-        close: vi.fn(),
-      }),
+        close: vi.fn()
+      })
     };
 
     const engine = new RecommendationEngine(malformedSdk);
@@ -272,7 +268,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     // The engine handles malformed JSON by returning empty array
@@ -285,7 +281,7 @@ describe('Discovery Flow Integration', () => {
     const selections: ResourceSelection[] = Array.from({ length: 50 }, (_, i) => ({
       id: `resource-${i}`,
       selected: true,
-      selectedAt: new Date().toISOString(),
+      selectedAt: new Date().toISOString()
     }));
 
     const draft = generator.generateDraft(
@@ -304,18 +300,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(emptyContext);
@@ -330,18 +326,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: 'web-application',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/项目/папка',
+        workingDirectory: '/test/项目/папка'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(unicodeContext);
@@ -356,18 +352,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: 'data-science/ML',
         businessDomain: 'fintech & healthcare',
-        technicalDomain: 'backend + API',
+        technicalDomain: 'backend + API'
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(specialContext);
@@ -382,18 +378,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/'.repeat(100) + 'very/deep/path',
+        workingDirectory: '/'.repeat(100) + 'very/deep/path'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(longPathContext);
@@ -408,18 +404,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: Array.from({ length: 100 }, (_, i) => `/test/file${i}.ts`),
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(manyFilesContext);
@@ -429,13 +425,13 @@ describe('Discovery Flow Integration', () => {
 
   it('should integrate with profile generator for large descriptions', async () => {
     const generator = new ProfileGenerator();
-    const longDesc = 'A '.repeat(10000);
+    const longDesc = 'A '.repeat(10_000);
     const selections: ResourceSelection[] = [
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -445,7 +441,7 @@ describe('Discovery Flow Integration', () => {
     );
 
     expect(draft.name).toBe('long-desc-profile');
-    expect(draft.description.length).toBeGreaterThan(10000);
+    expect(draft.description.length).toBeGreaterThan(10_000);
   });
 
   it('should integrate with profile generator for unicode names', async () => {
@@ -454,8 +450,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -475,18 +471,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const engine = new RecommendationEngine(mockCopilotSdk);
@@ -496,7 +492,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(emptyContext, options);
@@ -513,7 +509,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -530,7 +526,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -543,11 +539,11 @@ describe('Discovery Flow Integration', () => {
     const engine = new RecommendationEngine(mockCopilotSdk);
     const options: DiscoveryOptions = {
       kinds: ['skill', 'prompt'],
-      limit: 10000,
+      limit: 10_000,
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -564,7 +560,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -579,8 +575,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -598,8 +594,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -619,8 +615,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -639,18 +635,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: ['React', 'Express', 'Next.js'],
         packageManagers: ['npm', 'yarn'],
         buildTools: ['webpack', 'vite'],
-        testFrameworks: ['jest', 'mocha'],
+        testFrameworks: ['jest', 'mocha']
       },
       domain: {
         category: 'web-application',
         businessDomain: 'e-commerce',
-        technicalDomain: 'full-stack',
+        technicalDomain: 'full-stack'
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(fullContext);
@@ -667,18 +663,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: ['npm', 'yarn', 'pnpm'],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(pmContext);
@@ -694,18 +690,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: ['webpack', 'vite', 'rollup'],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(buildContext);
@@ -721,18 +717,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: ['jest', 'mocha', 'vitest'],
+        testFrameworks: ['jest', 'mocha', 'vitest']
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(testContext);
@@ -749,7 +745,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -764,8 +760,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -784,8 +780,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -805,18 +801,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: 'web-application',
         businessDomain: '',
-        technicalDomain: 'frontend',
+        technicalDomain: 'frontend'
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(mixedContext);
@@ -833,18 +829,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: 'data-science',
         businessDomain: 'healthcare',
-        technicalDomain: 'backend',
+        technicalDomain: 'backend'
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(domainOnlyContext);
@@ -862,7 +858,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -877,13 +873,13 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
+        selectedAt: new Date().toISOString()
       },
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -901,13 +897,13 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: false,
-        selectedAt: new Date().toISOString(),
+        selectedAt: new Date().toISOString()
       },
       {
         id: 'resource-2',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -926,18 +922,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(longLangContext);
@@ -953,7 +949,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -968,8 +964,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -989,18 +985,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: 'a'.repeat(1000),
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(longDomainContext);
@@ -1014,8 +1010,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -1035,7 +1031,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -1051,18 +1047,18 @@ describe('Discovery Flow Integration', () => {
         frameworks: [],
         packageManagers: [],
         buildTools: [],
-        testFrameworks: [],
+        testFrameworks: []
       },
       domain: {
         category: '',
         businessDomain: '',
-        technicalDomain: '',
+        technicalDomain: ''
       },
       activity: {
         recentFiles: [],
-        workingDirectory: '/test/project',
+        workingDirectory: '/test/project'
       },
-      detectedAt: new Date().toISOString(),
+      detectedAt: new Date().toISOString()
     };
 
     const queries = buildSearchQueries(unicodeLangContext);
@@ -1076,8 +1072,8 @@ describe('Discovery Flow Integration', () => {
       {
         id: 'resource-1',
         selected: true,
-        selectedAt: new Date().toISOString(),
-      },
+        selectedAt: new Date().toISOString()
+      }
     ];
 
     const draft = generator.generateDraft(
@@ -1098,7 +1094,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: false,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);
@@ -1115,7 +1111,7 @@ describe('Discovery Flow Integration', () => {
       indexFile: '/test/index.json',
       cwd: '/test/project',
       enableAI: true,
-      interactive: false,
+      interactive: false
     };
 
     const recommendations = await engine.generateRecommendations(mockContext, options);

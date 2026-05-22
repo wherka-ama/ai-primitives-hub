@@ -9,10 +9,12 @@ import {
   TARGET_TYPES,
 } from '../../domain/install';
 import {
+  Command,
   type CommandDefinition,
   type Context,
   defineCommand,
   formatOutput,
+  Option,
   type OutputFormat,
 } from '../framework';
 
@@ -44,10 +46,44 @@ export interface TargetTypesOptions {
 }
 
 /**
- * Build the `target types` command.
- * @param opts Command options.
- * @returns CommandDefinition.
+ * Target types command class.
  */
+export class TargetTypesCommand extends Command {
+  public static readonly paths = [['target', 'types']];
+  // eslint-disable-next-line new-cap -- Command.Usage is a static method, not a constructor
+  public static readonly usage = Command.Usage({
+    description: 'List all supported install target types with descriptions.',
+    category: 'Installation'
+  });
+
+  public output = Option.String('-o,--output');
+
+  public async execute(): Promise<number> {
+    const ctx = (this as any).commandContext?.ctx as Context;
+    if (!ctx) {
+      throw new Error('CommandContext not available');
+    }
+
+    const data: TargetTypeEntry[] = TARGET_TYPES.map((t) => ({
+      type: t,
+      description: TARGET_DESCRIPTIONS[t] ?? ''
+    }));
+    formatOutput({
+      ctx,
+      command: 'target.types',
+      output: (this.output as OutputFormat) ?? 'text',
+      status: 'ok',
+      data,
+      textRenderer: (d) => [
+        'Supported target types:\n',
+        ...d.map((t) => `  ${t.type.padEnd(22)} ${t.description}\n`),
+        '\nUsage: prompt-registry target add <name> --type <type>\n'
+      ].join('')
+    });
+    return 0;
+  }
+}
+
 export const createTargetTypesCommand = (opts: TargetTypesOptions = {}): CommandDefinition =>
   defineCommand({
     path: ['target', 'types'],
