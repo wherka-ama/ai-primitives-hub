@@ -159,6 +159,23 @@ const failWith = async (ctx: Context, output: OutputFormat, err: RegistryError):
   return 1;
 };
 
+const buildIndexExportError = (cause: unknown, indexPath: string): RegistryError => {
+  const msg = cause instanceof Error ? cause.message : String(cause);
+  return /ENOENT|no such file/i.test(msg)
+    ? new RegistryError({
+      code: 'INDEX.NOT_FOUND',
+      message: `index not found: ${indexPath}`,
+      hint: 'Run `prompt-registry index build` or `prompt-registry index harvest` first.',
+      cause: cause instanceof Error ? cause : undefined
+    })
+    : new RegistryError({
+      code: 'INDEX.EXPORT_FAILED',
+      message: `index export failed: ${msg}`,
+      hint: 'Please check the error message and try again.',
+      cause: cause instanceof Error ? cause : undefined
+    });
+};
+
 /**
  * Index export command class.
  * Exports a shortlist as a hub profile YAML.
@@ -250,23 +267,9 @@ export class IndexExportCommand extends Command {
           + (d.collectionFile === undefined ? '' : `\nwrote ${d.collectionFile}`)
           + '\n'
       });
-      return Promise.resolve(0);
+      return 0;
     } catch (cause) {
-      const msg = cause instanceof Error ? cause.message : String(cause);
-      const err = /ENOENT|no such file/i.test(msg)
-        ? new RegistryError({
-          code: 'INDEX.NOT_FOUND',
-          message: `index not found: ${indexPath}`,
-          hint: 'Run `prompt-registry index build` or `prompt-registry index harvest` first.',
-          cause: cause instanceof Error ? cause : undefined
-        })
-        : new RegistryError({
-          code: 'INDEX.EXPORT_FAILED',
-          message: `index export failed: ${msg}`,
-          hint: 'Please check the error message and try again.',
-          cause: cause instanceof Error ? cause : undefined
-        });
-      return failWith(ctx, fmt, err);
+      return failWith(ctx, fmt, buildIndexExportError(cause, indexPath));
     }
   }
 }

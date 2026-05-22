@@ -4,7 +4,6 @@
  */
 
 import {
-  beforeEach,
   describe,
   expect,
   it,
@@ -12,17 +11,8 @@ import {
 import {
   createDiscoverCommand,
 } from '../src/cli/commands/discover';
-import {
-  createTestContext,
-} from '../src/cli/framework';
 
 describe('Discover Command Enhancement', () => {
-  let mockCtx: any;
-
-  beforeEach(() => {
-    mockCtx = createTestContext();
-  });
-
   it('should include enableAI flag in DiscoverOptions', () => {
     const cmd = createDiscoverCommand({
       enableAI: true

@@ -495,6 +495,27 @@ export class ProfileCreateCommand extends BaseProfileCommand {
   }
 }
 
+const applyBundleRemovals = (bundles: ProfileBundle[], spec: string): ProfileBundle[] => {
+  const result = [...bundles];
+  for (const bundleId of spec.split(',').map((b) => b.trim())) {
+    const idx = result.findIndex((b) => b.id === bundleId);
+    if (idx !== -1) {
+      result.splice(idx, 1);
+    }
+  }
+  return result;
+};
+
+const applyBundleAdditions = (bundles: ProfileBundle[], spec: string, hubId: string): ProfileBundle[] => {
+  const result = [...bundles];
+  for (const bundleId of spec.split(',').map((b) => b.trim())) {
+    if (!result.some((b) => b.id === bundleId)) {
+      result.push({ id: bundleId, version: 'latest', source: hubId, required: false });
+    }
+  }
+  return result;
+};
+
 /**
  * profile edit - edit an existing local profile
  */
@@ -565,30 +586,12 @@ export class ProfileEditCommand extends BaseProfileCommand {
     }
 
     // Build updated profile
-    const updatedBundles = [...existingProfile.bundles];
-
+    let updatedBundles = [...existingProfile.bundles];
     if (this.removeBundles) {
-      const toRemove = this.removeBundles.split(',').map((b) => b.trim());
-      for (const bundleId of toRemove) {
-        const idx = updatedBundles.findIndex((b) => b.id === bundleId);
-        if (idx !== -1) {
-          updatedBundles.splice(idx, 1);
-        }
-      }
+      updatedBundles = applyBundleRemovals(updatedBundles, this.removeBundles);
     }
-
     if (this.addBundles) {
-      const toAdd = this.addBundles.split(',').map((b) => b.trim());
-      for (const bundleId of toAdd) {
-        if (!updatedBundles.some((b) => b.id === bundleId)) {
-          updatedBundles.push({
-            id: bundleId,
-            version: 'latest',
-            source: hubId,
-            required: false
-          });
-        }
-      }
+      updatedBundles = applyBundleAdditions(updatedBundles, this.addBundles, hubId);
     }
 
     const updatedProfile = await mgr.addProfile(hubId, {

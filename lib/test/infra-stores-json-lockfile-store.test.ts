@@ -16,6 +16,7 @@ import {
   vi,
 } from 'vitest';
 import {
+  findLockfile,
   type Lockfile,
   type LockfileEntry,
   type LockfileFs,
@@ -23,7 +24,6 @@ import {
   type LockfileProfile,
   type LockfileSource,
   type LockfileUseProfile,
-  findLockfile,
   readLockfile,
   removeEntry,
   upsertEntry,

@@ -25,7 +25,7 @@ describe('Copilot SDK Port Interface', () => {
         createSession: vi.fn()
       };
 
-      expect(sdk.isAvailable).toBeDefined();
+      expect(sdk).toHaveProperty('isAvailable');
       expect(typeof sdk.isAvailable).toBe('function');
     });
 
@@ -35,7 +35,7 @@ describe('Copilot SDK Port Interface', () => {
         createSession: vi.fn()
       };
 
-      expect(sdk.createSession).toBeDefined();
+      expect(sdk).toHaveProperty('createSession');
       expect(typeof sdk.createSession).toBe('function');
     });
   });
@@ -48,7 +48,7 @@ describe('Copilot SDK Port Interface', () => {
         close: vi.fn()
       };
 
-      expect(session.sendAndWait).toBeDefined();
+      expect(session).toHaveProperty('sendAndWait');
       expect(typeof session.sendAndWait).toBe('function');
     });
 
@@ -59,7 +59,7 @@ describe('Copilot SDK Port Interface', () => {
         close: vi.fn()
       };
 
-      expect(session.sendWithStream).toBeDefined();
+      expect(session).toHaveProperty('sendWithStream');
       expect(typeof session.sendWithStream).toBe('function');
     });
 
@@ -70,7 +70,7 @@ describe('Copilot SDK Port Interface', () => {
         close: vi.fn()
       };
 
-      expect(session.close).toBeDefined();
+      expect(session).toHaveProperty('close');
       expect(typeof session.close).toBe('function');
     });
   });

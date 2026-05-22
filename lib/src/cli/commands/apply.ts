@@ -220,7 +220,7 @@ export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =
       // Type is validated by validateHubAndProfile
       let profile: any;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- validateHubAndProfile returns untyped YAML data
         profile = await validateHubAndProfile(mgr, hubId, profileId, ctx, fmt);
       } catch (err) {
         if (err instanceof RegistryError) {
@@ -249,11 +249,11 @@ export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =
 
       const activator = new ProfileActivator({ fs: ctx.fs, env: ctx.env, http: httpClient, tokens: tokenProvider });
       const sources = Object.fromEntries((await mgr.listSources(hubId)).map((s) => [s.id, s]));
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- activator.activate returns untyped activation output
       const out = await activator.activate({ hubId, profile, sources, targets });
       await activations.save(out.state);
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- updateLockfileWithChecksums returns untyped lockfile data
       const nextLock = await updateLockfileWithChecksums(lock, out, profile, sources, ctx);
       await writeLockfile(lockPath, nextLock, ctx.fs);
 

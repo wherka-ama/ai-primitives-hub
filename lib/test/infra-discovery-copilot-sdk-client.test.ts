@@ -25,8 +25,8 @@ describe('CopilotSdkClient', () => {
   });
 
   it('should implement CopilotSdk interface', () => {
-    expect(client.isAvailable).toBeDefined();
-    expect(client.createSession).toBeDefined();
+    expect(client).toHaveProperty('isAvailable');
+    expect(client).toHaveProperty('createSession');
   });
 
   it('should return false for isAvailable by default (mock implementation)', () => {
@@ -42,9 +42,9 @@ describe('CopilotSdkClient', () => {
     const session = await client.createSession(options);
 
     expect(session).toBeDefined();
-    expect(session.sendAndWait).toBeDefined();
-    expect(session.sendWithStream).toBeDefined();
-    expect(session.close).toBeDefined();
+    expect(session).toHaveProperty('sendAndWait');
+    expect(session).toHaveProperty('sendWithStream');
+    expect(session).toHaveProperty('close');
   });
 
   it('should handle session sendAndWait', async () => {

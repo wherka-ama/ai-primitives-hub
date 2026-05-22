@@ -127,7 +127,7 @@ export class GitHubBundleResolver implements BundleResolver {
    * @param bundleId Bundle ID for asset naming.
    * @returns Asset or undefined.
    */
-  private findAsset(release: GitHubRelease, bundleId: string): { name: string; browser_download_url: string; url?: string } | undefined {
+  private findAsset(release: GitHubRelease, bundleId: string): GitHubRelease['assets'][number] | undefined {
     const candidates = this.assetCandidates(bundleId);
     for (const candidate of candidates) {
       const asset = candidate === '*.bundle.zip' ? release.assets.find((a) => a.name.endsWith('.bundle.zip')) : release.assets.find((a) => a.name === candidate);
@@ -150,8 +150,9 @@ export class GitHubBundleResolver implements BundleResolver {
     }
     const { collection: bundleName } = decomposeBundleId(spec.bundleId, this.opts.repoSlug);
     const wantVersion = spec.bundleVersion;
-    let release: GitHubRelease | undefined;
-    release = wantVersion === undefined || wantVersion === 'latest' ? this.findLatestRelease(releases, bundleName) : this.findSpecificRelease(releases, bundleName, wantVersion);
+    const release: GitHubRelease | undefined = wantVersion === undefined || wantVersion === 'latest'
+      ? this.findLatestRelease(releases, bundleName)
+      : this.findSpecificRelease(releases, bundleName, wantVersion);
     if (release === undefined) {
       return null;
     }

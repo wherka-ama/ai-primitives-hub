@@ -85,7 +85,7 @@ export class IndexStatsCommand extends BaseIndexStatsCommand {
         data: stats,
         textRenderer: (s) => renderStatsText(s)
       });
-      return Promise.resolve(0);
+      return 0;
     } catch (cause) {
       const msg = cause instanceof Error ? cause.message : String(cause);
       const err = /ENOENT|no such file/i.test(msg)

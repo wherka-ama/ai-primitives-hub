@@ -22,6 +22,55 @@ export interface ConfigListOptions {
   output?: OutputFormat;
 }
 
+const renderHubsSection = (hubs: Record<string, unknown>): string[] => {
+  const lines: string[] = ['=== Hubs ===', `Active hub: ${(hubs.activeHub as string | undefined) ?? 'none'}`];
+  const configuredHubs = hubs.configuredHubs as Record<string, unknown> | undefined;
+  if (configuredHubs !== undefined && typeof configuredHubs === 'object') {
+    lines.push(`Configured hubs: ${Object.keys(configuredHubs).join(', ') || 'none'}`);
+  }
+  lines.push('');
+  return lines;
+};
+
+const renderTargetsSection = (rawTargets: unknown): string[] => {
+  const targetArray: { name: string; type: string }[] | undefined = Array.isArray(rawTargets)
+    ? (rawTargets as { name: string; type: string }[])
+    : ((rawTargets as Record<string, unknown> | undefined)?.targets as { name: string; type: string }[] | undefined);
+  if (targetArray === undefined) {
+    return [];
+  }
+  const items = targetArray.length === 0
+    ? ['No targets configured']
+    : targetArray.map((t) => `  - ${t.name} (${t.type})`);
+  return ['=== Targets ===', ...items, ''];
+};
+
+const renderProfilesSection = (profiles: Record<string, unknown>): string[] => [
+  '=== Profiles ===',
+  `Active profile: ${(profiles.activeProfile as string | undefined) ?? 'none'}`,
+  ''
+];
+
+const renderGithubSection = (github: Record<string, unknown>): string[] => [
+  '=== GitHub Authentication ===',
+  `Token configured: ${(github.token as string | undefined) ? 'yes' : 'no'}`,
+  ''
+];
+
+const renderPathsSection = (paths: Record<string, unknown>): string[] => {
+  const lines: string[] = ['=== Paths ==='];
+  const configPath = paths.configPath as string | undefined;
+  const cachePath = paths.cachePath as string | undefined;
+  if (configPath !== undefined) {
+    lines.push(`Config path: ${configPath}`);
+  }
+  if (cachePath !== undefined) {
+    lines.push(`Cache path: ${cachePath}`);
+  }
+  lines.push('');
+  return lines;
+};
+
 /**
  * Render config in a human-readable format.
  * @param config - Resolved config object.
@@ -30,79 +79,31 @@ export interface ConfigListOptions {
 const renderConfigText = (config: Record<string, unknown>): string => {
   const versionStr = typeof config.version === 'string' ? config.version : 'unknown';
   const outputStr = typeof config.output === 'string' ? config.output : 'text';
-  const verboseStr = String(Boolean(config.verbose));
-  const quietStr = String(Boolean(config.quiet));
-
   const lines: string[] = [
     '=== Prompt Registry Configuration ===\n',
     `Version: ${versionStr}`,
     `Output format: ${outputStr}`,
-    `Verbose: ${verboseStr}`,
-    `Quiet: ${quietStr}`,
+    `Verbose: ${String(Boolean(config.verbose))}`,
+    `Quiet: ${String(Boolean(config.quiet))}`,
     ''
   ];
-
-  // Hubs
   const hubs = config.hubs as Record<string, unknown> | undefined;
-  if (hubs && typeof hubs === 'object') {
-    lines.push('=== Hubs ===');
-    const activeHub = hubs.activeHub as string | undefined;
-    lines.push(`Active hub: ${activeHub ?? 'none'}`);
-    const configuredHubs = hubs.configuredHubs as Record<string, unknown> | undefined;
-    if (configuredHubs && typeof configuredHubs === 'object') {
-      lines.push(`Configured hubs: ${Object.keys(configuredHubs).join(', ') || 'none'}`);
-    }
-    lines.push('');
+  if (hubs !== undefined && typeof hubs === 'object') {
+    lines.push(...renderHubsSection(hubs));
   }
-
-  // Targets
-  const rawTargets = config.targets;
-  const targetArray: { name: string; type: string }[] | undefined = Array.isArray(rawTargets)
-    ? (rawTargets as { name: string; type: string }[])
-    : ((rawTargets as Record<string, unknown> | undefined)?.targets as { name: string; type: string }[] | undefined);
-  if (targetArray !== undefined) {
-    lines.push('=== Targets ===');
-    if (targetArray.length === 0) {
-      lines.push('No targets configured');
-    } else {
-      for (const t of targetArray) {
-        lines.push(`  - ${t.name} (${t.type})`);
-      }
-    }
-    lines.push('');
-  }
-
-  // Profiles
+  lines.push(...renderTargetsSection(config.targets));
   const profiles = config.profiles as Record<string, unknown> | undefined;
-  if (profiles && typeof profiles === 'object') {
-    lines.push('=== Profiles ===');
-    const activeProfile = profiles.activeProfile as string | undefined;
-    lines.push(`Active profile: ${activeProfile ?? 'none'}`, '');
+  if (profiles !== undefined && typeof profiles === 'object') {
+    lines.push(...renderProfilesSection(profiles));
   }
-
-  // GitHub auth
   const github = config.github as Record<string, unknown> | undefined;
-  if (github && typeof github === 'object') {
-    lines.push('=== GitHub Authentication ===');
-    const token = github.token as string | undefined;
-    lines.push(`Token configured: ${token ? 'yes' : 'no'}`, '');
+  if (github !== undefined && typeof github === 'object') {
+    lines.push(...renderGithubSection(github));
   }
-
-  // Paths
   const paths = config.paths as Record<string, unknown> | undefined;
-  if (paths && typeof paths === 'object') {
-    lines.push('=== Paths ===');
-    const configPath = paths.configPath as string | undefined;
-    const cachePath = paths.cachePath as string | undefined;
-    if (configPath) {
-      lines.push(`Config path: ${configPath}`);
-    }
-    if (cachePath) {
-      lines.push(`Cache path: ${cachePath}`);
-    }
-    lines.push('');
+  if (paths !== undefined && typeof paths === 'object') {
+    lines.push(...renderPathsSection(paths));
   }
-
   return lines.join('\n');
 };
 

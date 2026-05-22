@@ -228,8 +228,8 @@ setup_environment() {
     log_section "Setting up test environment"
 
     PR_TEST_ROOT="$HOME/.test-prompt-registry-e2e"
-    XDG_CONFIG_HOME="$PR_TEST_ROOT/xdg"
-    XDG_CACHE_HOME="$PR_TEST_ROOT/cache"
+    export XDG_CONFIG_HOME="$PR_TEST_ROOT/xdg"
+    export XDG_CACHE_HOME="$PR_TEST_ROOT/cache"
     # Let's assume we start it from the root of the repository of from the lib folder. 
     # We need to identify first which if them and select the REPO_ROOT accordingly
     # We do not want to hardcode absolute paths here

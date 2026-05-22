@@ -269,9 +269,13 @@ export const findLockfile = async (
   let dir = startDir;
   while (true) {
     const candidate = path.join(dir, 'prompt-registry.lock.json');
-    if (await fs.exists(candidate)) return candidate;
+    if (await fs.exists(candidate)) {
+      return candidate;
+    }
     const parent = path.dirname(dir);
-    if (parent === dir) break;
+    if (parent === dir) {
+      break;
+    }
     dir = parent;
   }
   if (userLockfile !== undefined && await fs.exists(userLockfile)) {

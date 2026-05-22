@@ -26,9 +26,9 @@ describe('McpServerImpl', () => {
   });
 
   it('should implement McpServer interface', () => {
-    expect(server.start).toBeDefined();
-    expect(server.stop).toBeDefined();
-    expect(server.registerTool).toBeDefined();
+    expect(server).toHaveProperty('start');
+    expect(server).toHaveProperty('stop');
+    expect(server).toHaveProperty('registerTool');
   });
 
   it('should start successfully', async () => {
@@ -138,7 +138,7 @@ describe('McpServerImpl', () => {
   });
 
   it('should handle tool with async handler', async () => {
-    const handler = vi.fn().mockImplementation(async (input: unknown) => {
+    const handler = vi.fn().mockImplementation(async (_input: unknown) => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return { result: 'async success' };
     });

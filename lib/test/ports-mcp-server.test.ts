@@ -23,7 +23,7 @@ describe('MCP Server Port Interface', () => {
         registerTool: vi.fn()
       };
 
-      expect(server.start).toBeDefined();
+      expect(server).toHaveProperty('start');
       expect(typeof server.start).toBe('function');
     });
 
@@ -34,7 +34,7 @@ describe('MCP Server Port Interface', () => {
         registerTool: vi.fn()
       };
 
-      expect(server.stop).toBeDefined();
+      expect(server).toHaveProperty('stop');
       expect(typeof server.stop).toBe('function');
     });
 
@@ -45,7 +45,7 @@ describe('MCP Server Port Interface', () => {
         registerTool: vi.fn()
       };
 
-      expect(server.registerTool).toBeDefined();
+      expect(server).toHaveProperty('registerTool');
       expect(typeof server.registerTool).toBe('function');
     });
   });
@@ -158,25 +158,27 @@ describe('MCP Server Port Interface', () => {
 
   describe('McpServer edge cases', () => {
     it('should handle start method returning Promise', async () => {
+      const startMock = vi.fn().mockResolvedValue(undefined);
       const server: McpServer = {
-        start: vi.fn().mockResolvedValue(undefined),
+        start: startMock,
         stop: vi.fn(),
         registerTool: vi.fn()
       };
 
       await server.start();
-      expect(server.start).toHaveBeenCalled();
+      expect(startMock).toHaveBeenCalled();
     });
 
     it('should handle stop method returning Promise', async () => {
+      const stopMock = vi.fn().mockResolvedValue(undefined);
       const server: McpServer = {
         start: vi.fn(),
-        stop: vi.fn().mockResolvedValue(undefined),
+        stop: stopMock,
         registerTool: vi.fn()
       };
 
       await server.stop();
-      expect(server.stop).toHaveBeenCalled();
+      expect(stopMock).toHaveBeenCalled();
     });
 
     it('should handle registerTool method with tool', () => {
@@ -186,14 +188,15 @@ describe('MCP Server Port Interface', () => {
         inputSchema: {},
         handler: vi.fn()
       };
+      const registerMock = vi.fn();
       const server: McpServer = {
         start: vi.fn(),
         stop: vi.fn(),
-        registerTool: vi.fn()
+        registerTool: registerMock
       };
 
       server.registerTool(tool);
-      expect(server.registerTool).toHaveBeenCalledWith(tool);
+      expect(registerMock).toHaveBeenCalledWith(tool);
     });
   });
 });
