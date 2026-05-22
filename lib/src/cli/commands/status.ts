@@ -205,50 +205,55 @@ async function readActiveHubId(activeHubPath: string, ctx: Context): Promise<str
   }
 }
 
+function renderTargetsLine(targets: StatusData['targets']): string {
+  if (targets.length === 0) {
+    return 'targets     (none — run `prompt-registry target add`)\n';
+  }
+  return `targets     ${targets.map((t) => `${t.name} [${t.type}]`).join(', ')}\n`;
+}
+
+function renderHubLines(activeHubId: string | null, hubs: string[]): string[] {
+  if (activeHubId !== null) {
+    return [`active hub  ${activeHubId}\n`];
+  }
+  if (hubs.length > 0) {
+    return [`active hub  (none — run \`prompt-registry hub use <id>\`)\n`, `hubs        ${hubs.join(', ')}\n`];
+  }
+  return ['active hub  (none — run `prompt-registry hub add <ref>`)\n'];
+}
+
+function renderIndexLine(index: StatusData['index']): string {
+  if (index === null) {
+    return 'index       (none — run `prompt-registry index build`)\n';
+  }
+  return `index       ${index.primitives} primitives  [${index.path}]\n`;
+}
+
+function renderLockfileLines(lockfile: StatusData['lockfile']): string[] {
+  if (lockfile === null) {
+    return ['lockfile    (none)\n'];
+  }
+  const lines: string[] = [`lockfile    ${lockfile.entries} bundle${lockfile.entries === 1 ? '' : 's'} installed  [${lockfile.path}]\n`];
+  if (lockfile.bundles !== undefined && lockfile.bundles.length > 0) {
+    for (const b of lockfile.bundles) {
+      lines.push(`              ${b.bundleId}@${b.bundleVersion}  target=${b.target}  installed=${b.installedAt}\n`);
+    }
+  }
+  return lines;
+}
+
 /**
  * Render status as human-readable text.
  * @param d Status data.
  * @returns Rendered text.
  */
 function renderStatusText(d: StatusData): string {
-  const lines: string[] = ['prompt-registry status\n', '─'.repeat(40) + '\n'];
-
-  if (d.targets.length === 0) {
-    lines.push('targets     (none — run `prompt-registry target add`)\n');
-  } else {
-    const targetList = d.targets.map((t) => `${t.name} [${t.type}]`).join(', ');
-    lines.push(`targets     ${targetList}\n`);
-  }
-
-  if (d.activeHubId === null) {
-    if (d.hubs.length > 0) {
-      lines.push(
-        `active hub  (none — run \`prompt-registry hub use <id>\`)\n`,
-        `hubs        ${d.hubs.join(', ')}\n`
-      );
-    } else {
-      lines.push('active hub  (none — run `prompt-registry hub add <ref>`)\n');
-    }
-  } else {
-    lines.push(`active hub  ${d.activeHubId}\n`);
-  }
-
-  if (d.index === null) {
-    lines.push('index       (none — run `prompt-registry index build`)\n');
-  } else {
-    lines.push(`index       ${d.index.primitives} primitives  [${d.index.path}]\n`);
-  }
-
-  if (d.lockfile === null) {
-    lines.push('lockfile    (none)\n');
-  } else {
-    lines.push(`lockfile    ${d.lockfile.entries} bundle${d.lockfile.entries === 1 ? '' : 's'} installed  [${d.lockfile.path}]\n`);
-    if (d.lockfile.bundles !== undefined && d.lockfile.bundles.length > 0) {
-      for (const b of d.lockfile.bundles) {
-        lines.push(`              ${b.bundleId}@${b.bundleVersion}  target=${b.target}  installed=${b.installedAt}\n`);
-      }
-    }
-  }
-
-  return lines.join('');
+  return [
+    'prompt-registry status\n',
+    '─'.repeat(40) + '\n',
+    renderTargetsLine(d.targets),
+    ...renderHubLines(d.activeHubId, d.hubs),
+    renderIndexLine(d.index),
+    ...renderLockfileLines(d.lockfile)
+  ].join('');
 }

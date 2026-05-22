@@ -246,6 +246,84 @@ export class IndexSearchCommand extends Command {
  * @param fmt Output format.
  * @returns Exit code.
  */
+
+type SearchCandidate = { bundleId: string; version: string; source: RegistrySource };
+
+function buildSearchCandidates(sources: RegistrySource[], hits: SearchResult['hits']): SearchCandidate[] {
+  const sourceById = new Map<string, RegistrySource>();
+  for (const src of sources) {
+    sourceById.set(generateSourceId(src.type, src.url), src);
+    sourceById.set(src.id, src);
+  }
+  const seen = new Set<string>();
+  const result: SearchCandidate[] = [];
+  for (const hit of hits) {
+    const b = hit.primitive.bundle;
+    if (seen.has(b.bundleId)) {
+      continue;
+    }
+    seen.add(b.bundleId);
+    const src = sourceById.get(b.sourceId);
+    if (src !== undefined) {
+      result.push({ bundleId: b.bundleId, version: b.bundleVersion, source: src });
+    }
+  }
+  return result;
+}
+
+async function selectBundleIds(candidates: SearchCandidate[], interactive: boolean, ctx: Context): Promise<string[] | null> {
+  if (!interactive) {
+    return candidates.map((c) => c.bundleId);
+  }
+  const choices = candidates.map((c) => ({
+    name: `${c.bundleId}@${c.version}  (${c.source.name})`,
+    value: c.bundleId,
+    short: c.bundleId
+  }));
+  const answer = await inquirer.prompt<{ selectedIds: string[] }>([
+    {
+      type: 'checkbox',
+      name: 'selectedIds',
+      message: 'Select bundles to install:',
+      choices,
+      validate: (input: string[]) => input.length > 0 || 'Select at least one bundle'
+    }
+  ]);
+  if (answer.selectedIds.length === 0) {
+    ctx.stdout.write('No bundles selected.\n');
+    return null;
+  }
+  return answer.selectedIds;
+}
+
+async function installSelectedBundles(
+  selectedIds: string[],
+  candidates: SearchCandidate[],
+  target: Target,
+  ctx: Context,
+  http: HttpClient,
+  tokens: TokenProvider,
+  fmt: OutputFormat
+): Promise<number> {
+  let installed = 0;
+  for (const bundleId of selectedIds) {
+    const c = candidates.find((x) => x.bundleId === bundleId);
+    if (c === undefined) {
+      continue;
+    }
+    try {
+      const code = await installBundleWithSource(bundleId, c.source, target, ctx, http, tokens, fmt);
+      if (code === 0) {
+        installed++;
+      }
+    } catch (err) {
+      ctx.stderr.write(`Failed to install ${bundleId}: ${err instanceof Error ? err.message : String(err)}\n`);
+    }
+  }
+  ctx.stdout.write(`Installed ${installed}/${selectedIds.length} bundle(s)\n`);
+  return installed === selectedIds.length ? 0 : 1;
+}
+
 async function searchAndInstall(
   result: SearchResult,
   opts: Pick<IndexSearchOptions, 'installTarget' | 'interactive' | 'http' | 'tokens'>,
@@ -272,57 +350,16 @@ async function searchAndInstall(
     return 1;
   }
 
-  const sourceById = new Map<string, RegistrySource>();
-  for (const src of active.config.sources) {
-    sourceById.set(generateSourceId(src.type, src.url), src);
-    sourceById.set(src.id, src);
-  }
-
-  const seen = new Set<string>();
-  const candidates: { bundleId: string; version: string; source: RegistrySource }[] = [];
-  for (const hit of result.hits) {
-    const b = hit.primitive.bundle;
-    if (seen.has(b.bundleId)) {
-      continue;
-    }
-    seen.add(b.bundleId);
-    const src = sourceById.get(b.sourceId);
-    if (src !== undefined) {
-      candidates.push({ bundleId: b.bundleId, version: b.bundleVersion, source: src });
-    }
-  }
+  const candidates = buildSearchCandidates(active.config.sources, result.hits);
 
   if (candidates.length === 0) {
     ctx.stdout.write('No bundles from the active hub matched the search results.\n');
     return 0;
   }
 
-  let selectedIds: string[];
-
-  if (opts.interactive) {
-    const choices = candidates.map((c) => ({
-      name: `${c.bundleId}@${c.version}  (${c.source.name})`,
-      value: c.bundleId,
-      short: c.bundleId
-    }));
-
-    const answer = await inquirer.prompt<{ selectedIds: string[] }>([
-      {
-        type: 'checkbox',
-        name: 'selectedIds',
-        message: 'Select bundles to install:',
-        choices,
-        validate: (input: string[]) => input.length > 0 || 'Select at least one bundle'
-      }
-    ]);
-    selectedIds = answer.selectedIds;
-
-    if (selectedIds.length === 0) {
-      ctx.stdout.write('No bundles selected.\n');
-      return 0;
-    }
-  } else {
-    selectedIds = candidates.map((c) => c.bundleId);
+  const selectedIds = await selectBundleIds(candidates, opts.interactive ?? false, ctx);
+  if (selectedIds === null) {
+    return 0;
   }
 
   const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs }).catch(() => [] as Target[]);
@@ -331,23 +368,14 @@ async function searchAndInstall(
     target = targets.find((t) => t.name === opts.installTarget);
   } else if (targets.length === 1) {
     target = targets[0];
+  } else if (targets.length > 1 && opts.interactive) {
+    const { chosenTarget } = await inquirer.prompt<{ chosenTarget: string }>([
+      { type: 'list', name: 'chosenTarget', message: 'Select target:', choices: targets.map((t) => ({ name: `${t.name} (${t.type})`, value: t.name })) }
+    ]);
+    target = targets.find((t) => t.name === chosenTarget);
   } else if (targets.length > 1) {
-    if (opts.interactive) {
-      const { chosenTarget } = await inquirer.prompt<{ chosenTarget: string }>([
-        {
-          type: 'list',
-          name: 'chosenTarget',
-          message: 'Select target:',
-          choices: targets.map((t) => ({ name: `${t.name} (${t.type})`, value: t.name }))
-        }
-      ]);
-      target = targets.find((t) => t.name === chosenTarget);
-    } else {
-      ctx.stderr.write(
-        'Multiple targets configured. Use --install-target <name> to specify one.\n'
-      );
-      return 1;
-    }
+    ctx.stderr.write('Multiple targets configured. Use --install-target <name> to specify one.\n');
+    return 1;
   }
 
   if (target === undefined) {
@@ -366,24 +394,7 @@ async function searchAndInstall(
     }
   }
 
-  let installed = 0;
-  for (const bundleId of selectedIds) {
-    const c = candidates.find((x) => x.bundleId === bundleId);
-    if (c === undefined) {
-      continue;
-    }
-    try {
-      const code = await installBundleWithSource(bundleId, c.source, target, ctx, http, tokens, fmt);
-      if (code === 0) {
-        installed++;
-      }
-    } catch (err) {
-      ctx.stderr.write(`Failed to install ${bundleId}: ${err instanceof Error ? err.message : String(err)}\n`);
-    }
-  }
-
-  ctx.stdout.write(`Installed ${installed}/${selectedIds.length} bundle(s)\n`);
-  return installed === selectedIds.length ? 0 : 1;
+  return installSelectedBundles(selectedIds, candidates, target, ctx, http, tokens, fmt);
 }
 
 const classifyError = (cause: unknown, indexPath: string): RegistryError => {

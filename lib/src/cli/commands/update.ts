@@ -121,6 +121,33 @@ abstract class BaseUpdateCommand extends Command {
   public commandContext: UpdateContext = { ctx: null as unknown as Context };
 }
 
+type UpdateEntry = { bundleId: string; target: string; from: string; to: string };
+
+function renderDryRunOutput(d: { checked: number; updates: UpdateEntry[] }): string {
+  if (d.updates.length === 0) {
+    return `All bundles are up to date. (checked ${String(d.checked)})
+`;
+  }
+  const lines = [`Available updates (${String(d.updates.length)}):`];
+  for (const u of d.updates) {
+    lines.push(`  ${u.bundleId} [${u.target}]: ${u.from} → ${u.to}`);
+  }
+  lines.push('\nRe-run without --dry-run to apply.');
+  return lines.join('\n') + '\n';
+}
+
+function renderUpdateOutput(d: { updated: number; checked: number; updates: UpdateEntry[] }): string {
+  if (d.updated === 0) {
+    return `All bundles are up to date. (checked ${String(d.checked)})
+`;
+  }
+  const lines = [`Updated ${String(d.updated)} bundle${d.updated === 1 ? '' : 's'}:`];
+  for (const u of d.updates) {
+    lines.push(`  ${u.bundleId} [${u.target}]: ${u.from} → ${u.to}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
 export class UpdateCommand extends BaseUpdateCommand {
   public static readonly paths = [['update']];
   // eslint-disable-next-line new-cap -- Command.Usage is a Clipanion static factory, not a constructor
@@ -150,9 +177,12 @@ export class UpdateCommand extends BaseUpdateCommand {
     const fmt = (this.output ?? 'text');
 
     const userPaths = resolveUserConfigPaths(ctx.env);
-    const lockPath = this.lockfile !== undefined && this.lockfile.length > 0
-      ? (path.isAbsolute(this.lockfile) ? this.lockfile : path.join(ctx.cwd(), this.lockfile))
-      : await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
+    let lockPath: string | null;
+    if (this.lockfile !== undefined && this.lockfile.length > 0) {
+      lockPath = path.isAbsolute(this.lockfile) ? this.lockfile : path.join(ctx.cwd(), this.lockfile);
+    } else {
+      lockPath = await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
+    }
     if (lockPath === null) {
       return failWith(ctx, fmt, new RegistryError({
         code: 'USAGE.MISSING_FLAG',
@@ -213,17 +243,7 @@ export class UpdateCommand extends BaseUpdateCommand {
           checked: scopedEntries.length, updated: 0, skipped: skipped.length,
           updates: candidates.map((c) => ({ bundleId: c.entry.bundleId, target: c.entry.target, from: c.from, to: c.to }))
         },
-        textRenderer: (d) => {
-          if (d.updates.length === 0) {
-            return `All bundles are up to date. (checked ${String(d.checked)})\n`;
-          }
-          const lines = [`Available updates (${String(d.updates.length)}):`];
-          for (const u of d.updates) {
-            lines.push(`  ${u.bundleId} [${u.target}]: ${u.from} → ${u.to}`);
-          }
-          lines.push('\nRe-run without --dry-run to apply.');
-          return lines.join('\n') + '\n';
-        }
+        textRenderer: renderDryRunOutput
       });
       return 0;
     }
@@ -269,16 +289,7 @@ export class UpdateCommand extends BaseUpdateCommand {
     formatOutput({
       ctx, command: 'update', output: fmt, status: 'ok',
       data: { lockfile: lockPath, checked: scopedEntries.length, updated: updatedCount, skipped: skipped.length, updates: updateResults },
-      textRenderer: (d) => {
-        if (d.updated === 0) {
-          return `All bundles are up to date. (checked ${String(d.checked)})\n`;
-        }
-        const lines = [`Updated ${String(d.updated)} bundle${d.updated === 1 ? '' : 's'}:`];
-        for (const u of d.updates) {
-          lines.push(`  ${u.bundleId} [${u.target}]: ${u.from} → ${u.to}`);
-        }
-        return lines.join('\n') + '\n';
-      }
+      textRenderer: renderUpdateOutput
     });
     return 0;
   }

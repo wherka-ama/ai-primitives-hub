@@ -185,6 +185,15 @@ const failWith = (ctx: Context, output: OutputFormat, err: RegistryError): numbe
   return 1;
 };
 
+const buildHarvestError = (cause: unknown): RegistryError => new RegistryError({
+  code: 'INDEX.HARVEST_FAILED',
+  message: `index harvest failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+  cause: cause instanceof Error ? cause : undefined
+});
+
+const isHubRefMissing = (noHubConfig: boolean, hubConfigFile: string | undefined, hubRepo: string | undefined): boolean =>
+  !noHubConfig && !hubConfigFile && (!hubRepo || hubRepo.length === 0);
+
 /**
  * Index harvest command class.
  * Fetches hub-config, walks every source, and writes a primitive index.
@@ -231,14 +240,13 @@ export class IndexHarvestCommand extends Command {
     const fmt = (this.output ?? 'text') as OutputFormat;
     const noHubConfig = this.noHubConfig === true;
 
-    if (!noHubConfig && !this.hubConfigFile && (!this.hubRepo || this.hubRepo.length === 0)) {
+    if (isHubRefMissing(noHubConfig, this.hubConfigFile, this.hubRepo)) {
       await autoDetectHubFromActive(this, ctx);
     }
 
     const hubConfigFile = this.hubConfigFile;
 
-    if (!noHubConfig && hubConfigFile === undefined
-      && (!this.hubRepo || this.hubRepo.length === 0)) {
+    if (isHubRefMissing(noHubConfig, hubConfigFile, this.hubRepo)) {
       return failWith(ctx, fmt, new RegistryError({
         code: 'USAGE.MISSING_FLAG',
         message: 'index harvest: --hub-repo <OWNER/REPO> is required (or use --no-hub-config / --hub-config-file)',
@@ -281,11 +289,7 @@ export class IndexHarvestCommand extends Command {
     try {
       result = await runner(pipelineOpts, ctx.env as NodeJS.ProcessEnv);
     } catch (cause) {
-      return failWith(ctx, fmt, new RegistryError({
-        code: 'INDEX.HARVEST_FAILED',
-        message: `index harvest failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-        cause: cause instanceof Error ? cause : undefined
-      }));
+      return failWith(ctx, fmt, buildHarvestError(cause));
     }
 
     formatOutput({

@@ -414,11 +414,21 @@ async function importAndSyncHub(
   const location = refType === 'local' && !path.isAbsolute(hubRef)
     ? path.resolve(ctx.cwd(), hubRef)
     : hubRef;
-  const ref = hubRefParam ?? opts.hubType ? undefined : undefined;
+  const ref = hubRefParam;
 
   const hubId = await mgr.importHub({ type: refType, location, ref });
   await mgr.syncHub(hubId);
   return hubId;
+}
+
+function describeTargetStep(name: string, type: string, file: string, created: boolean, updated: boolean): string {
+  if (created) {
+    return `target "${name}" (${type}) → ${file}`;
+  }
+  if (updated) {
+    return `target "${name}" updated to type "${type}"`;
+  }
+  return `target "${name}" already exists`;
 }
 
 /**
@@ -465,6 +475,41 @@ function buildInitOutput(data: { steps: string[]; target: { file: string; name: 
   return lines.join('');
 }
 
+function classifyInitError(cause: unknown): RegistryError {
+  if (cause instanceof RegistryError) {
+    return cause;
+  }
+  const msg = cause instanceof Error ? cause.message : String(cause);
+  const err = cause instanceof Error ? cause : undefined;
+  if (msg.includes('hub-config.yml not found at')) {
+    return new RegistryError({
+      code: 'HUB.ACCESS_DENIED',
+      message: `Cannot access hub: ${msg}`,
+      hint: 'Run `gh auth status` to check which account is active. Use `gh auth switch` to select an account with access, or choose a different hub.',
+      cause: err
+    });
+  }
+  const isAuthError = msg.includes('401')
+    || msg.includes('403')
+    || msg.toLowerCase().includes('unauthorized')
+    || msg.toLowerCase().includes('forbidden')
+    || msg.toLowerCase().includes('authentication failed');
+  if (isAuthError) {
+    return new RegistryError({
+      code: 'AUTH.ERROR',
+      message: `Failed to connect to hub: ${msg}`,
+      hint: 'Check your GitHub authentication with `gh auth status` or `gh auth login`',
+      cause: err
+    });
+  }
+  return new RegistryError({
+    code: 'INTERNAL.UNEXPECTED',
+    message: `Failed to initialize project: ${msg}`,
+    hint: 'Run `prompt-registry doctor` for diagnostics',
+    cause: err
+  });
+}
+
 /**
  * Core init logic shared by both command variants.
  * @param ctx CLI context.
@@ -506,11 +551,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
     const result = await createOrReuseTarget(ctx, targetName, targetType, targetScope, configPath);
     const updated = result.updated === true;
     const steps: string[] = [
-      result.created
-        ? `target "${targetName}" (${targetType}) → ${result.file}`
-        : (updated
-          ? `target "${targetName}" updated to type "${targetType}"`
-          : `target "${targetName}" already exists`)
+      describeTargetStep(targetName, targetType, result.file, result.created ?? false, updated)
     ];
 
     const lockfilePath = targetScope === 'user'
@@ -548,41 +589,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
     });
     return 0;
   } catch (cause) {
-    if (cause instanceof RegistryError) {
-      return failWith(ctx, fmt, cause);
-    }
-    const causeMsg = cause instanceof Error ? cause.message : String(cause);
-
-    const isHubAccessError = causeMsg.includes('hub-config.yml not found at');
-    if (isHubAccessError) {
-      return failWith(ctx, fmt, new RegistryError({
-        code: 'HUB.ACCESS_DENIED',
-        message: `Cannot access hub: ${causeMsg}`,
-        hint: 'Run `gh auth status` to check which account is active. Use `gh auth switch` to select an account with access, or choose a different hub.',
-        cause: cause instanceof Error ? cause : undefined
-      }));
-    }
-
-    const isAuthError = causeMsg.includes('401')
-      || causeMsg.includes('403')
-      || causeMsg.toLowerCase().includes('unauthorized')
-      || causeMsg.toLowerCase().includes('forbidden')
-      || causeMsg.toLowerCase().includes('authentication failed');
-
-    if (isAuthError) {
-      return failWith(ctx, fmt, new RegistryError({
-        code: 'AUTH.ERROR',
-        message: `Failed to connect to hub: ${causeMsg}`,
-        hint: 'Check your GitHub authentication with `gh auth status` or `gh auth login`',
-        cause: cause instanceof Error ? cause : undefined
-      }));
-    }
-    return failWith(ctx, fmt, new RegistryError({
-      code: 'INTERNAL.UNEXPECTED',
-      message: `Failed to initialize project: ${causeMsg}`,
-      hint: 'Run `prompt-registry doctor` for diagnostics',
-      cause: cause instanceof Error ? cause : undefined
-    }));
+    return failWith(ctx, fmt, classifyInitError(cause));
   }
 }
 

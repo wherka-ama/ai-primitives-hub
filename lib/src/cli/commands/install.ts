@@ -306,6 +306,22 @@ function determineInstallMode(opts: InstallOptions): 'local' | 'lockfile' | 'rem
   return 'remote';
 }
 
+async function autoDetectHubSource(opts: InstallOptions, ctx: Context, userPaths: ReturnType<typeof resolveUserConfigPaths>): Promise<void> {
+  if (!(await ctx.fs.exists(userPaths.root))) {
+    return;
+  }
+  const activeStore = new ActiveHubStore(userPaths.activeHub, ctx.fs);
+  const hubId = await activeStore.get();
+  if (hubId === null) {
+    return;
+  }
+  const store = new HubStore(userPaths.hubs, ctx.fs);
+  if (await store.has(hubId)) {
+    opts.source = hubId;
+    opts.interactive = true;
+  }
+}
+
 /**
  * Detect install context from the project environment.
  * Fills in `opts.lockfile`, `opts.source`, `opts.interactive`, and `opts.target`
@@ -329,17 +345,7 @@ async function detectInstallContext(opts: InstallOptions, ctx: Context): Promise
 
   if (noMode && (!opts.lockfile || opts.lockfile.length === 0)) {
     try {
-      if (await ctx.fs.exists(userPaths.root)) {
-        const activeStore = new ActiveHubStore(userPaths.activeHub, ctx.fs);
-        const hubId = await activeStore.get();
-        if (hubId !== null) {
-          const store = new HubStore(userPaths.hubs, ctx.fs);
-          if (await store.has(hubId)) {
-            opts.source = hubId;
-            opts.interactive = true;
-          }
-        }
-      }
+      await autoDetectHubSource(opts, ctx, userPaths);
     } catch {
       // Ignore errors; proceed without auto-detected hub
     }
@@ -385,7 +391,6 @@ async function executeInstallMode(
     case 'lockfile': {
       return await performLockfileInstall(opts, target, ctx, fmt);
     }
-    case 'remote':
     default: {
       return await performRemoteInstall(opts, target, ctx, fmt);
     }
@@ -502,6 +507,14 @@ async function listSourceBundles(
       cause: err instanceof Error ? err : undefined
     }));
   }
+}
+
+function buildInstallError(err: unknown): RegistryError {
+  return new RegistryError({
+    code: 'INSTALL.ERROR',
+    message: err instanceof Error ? err.message : String(err),
+    hint: 'Check the hub configuration and try again.'
+  });
 }
 
 /**
@@ -629,17 +642,7 @@ async function interactiveBundleSelection(
     });
     return 0;
   } catch (err) {
-    return failWith(ctx, fmt, err instanceof Error
-      ? new RegistryError({
-        code: 'INSTALL.ERROR',
-        message: err.message,
-        hint: 'Check the hub configuration and try again.'
-      })
-      : new RegistryError({
-        code: 'INSTALL.ERROR',
-        message: String(err),
-        hint: 'Check the hub configuration and try again.'
-      }));
+    return failWith(ctx, fmt, buildInstallError(err));
   }
 }
 
@@ -925,12 +928,7 @@ async function performRemoteInstall(
     if (opts.sourceConfig) {
       const dispatcher = new SourceDispatcher({ http, tokens, fs: ctx.fs });
       const selectedResolver = dispatcher.resolverFor(opts.sourceConfig);
-      if (selectedResolver) {
-        resolver = selectedResolver;
-      } else {
-        // Fallback to GitHub resolver if source type has no resolver (e.g., local)
-        resolver = new GitHubBundleResolver({ repoSlug, http, tokens });
-      }
+      resolver = selectedResolver ?? new GitHubBundleResolver({ repoSlug, http, tokens });
     } else {
       // Default to GitHub resolver when no source config is provided
       resolver = new GitHubBundleResolver({ repoSlug, http, tokens });
