@@ -141,8 +141,8 @@ function firstHeading(body: string): string | null {
 function humaniseFromPath(relPath: string): string {
   const leaf = relPath.split('/').pop() ?? relPath;
   return leaf
-    .replaceAll(/\.(prompt|instructions?|chatmode|chat-mode|agent)\.md$/i, '')
-    .replaceAll(/\.md$/i, '')
+    .replaceAll(/\.(prompt|instructions?|chatmode|chat-mode|agent)\.md$/gi, '')
+    .replaceAll(/\.md$/gi, '')
     .replaceAll(/[-_]+/g, ' ')
     .trim() || relPath;
 }
