@@ -143,7 +143,7 @@ function humaniseFromPath(relPath: string): string {
   return leaf
     .replaceAll(/\.(prompt|instructions?|chatmode|chat-mode|agent)\.md$/i, '')
     .replaceAll(/\.md$/i, '')
-    .replaceAll(/[-_]+/, ' ')
+    .replaceAll(/[-_]+/g, ' ')
     .trim() || relPath;
 }
 
