@@ -209,7 +209,8 @@ function renderTargetsLine(targets: StatusData['targets']): string {
   if (targets.length === 0) {
     return 'targets     (none — run `prompt-registry target add`)\n';
   }
-  return `targets     ${targets.map((t) => `${t.name} [${t.type}]`).join(', ')}\n`;
+  const targetStrings = targets.map((t) => t.name + ' [' + t.type + ']');
+  return 'targets     ' + targetStrings.join(', ') + '\n';
 }
 
 function renderHubLines(activeHubId: string | null, hubs: string[]): string[] {
