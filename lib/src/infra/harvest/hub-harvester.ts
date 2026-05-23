@@ -17,7 +17,7 @@ import {
 import * as path from 'node:path';
 import type {
   HubSourceSpec,
-} from '../../domain';
+} from '../../domain/hub/types';
 import type {
   TokenProvider,
 } from '../../ports/http';
