@@ -176,13 +176,7 @@ export class UpdateCommand extends BaseUpdateCommand {
     const tokens = this.commandContext.tokens ?? defaultTokenProvider(ctx.env);
     const fmt = (this.output ?? 'text');
 
-    const userPaths = resolveUserConfigPaths(ctx.env);
-    let lockPath: string | null;
-    if (this.lockfile !== undefined && this.lockfile.length > 0) {
-      lockPath = path.isAbsolute(this.lockfile) ? this.lockfile : path.join(ctx.cwd(), this.lockfile);
-    } else {
-      lockPath = await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
-    }
+    const lockPath = await resolveLockfilePath(ctx, this.lockfile);
     if (lockPath === null) {
       return failWith(ctx, fmt, new RegistryError({
         code: 'USAGE.MISSING_FLAG',
@@ -197,102 +191,155 @@ export class UpdateCommand extends BaseUpdateCommand {
       await syncActiveHub(ctx, http, tokens);
     }
 
-    const scopedEntries = lock.entries.filter((e) => {
-      if (this.target !== undefined && this.target.length > 0 && e.target !== this.target) {
-        return false;
-      }
-      return true;
-    });
-    const entries = scopedEntries.filter((e) => {
-      const src = lock.sources?.[e.sourceId];
-      return src !== undefined && isRemoteSource(src.type);
-    });
-
-    const candidates: UpdateCandidate[] = [];
-    const skipped: string[] = [];
-    const dispatcher = new SourceDispatcher({ http, tokens, fs: ctx.fs });
-
-    for (const entry of entries) {
-      const src = lock.sources![entry.sourceId];
-      try {
-        const sourceAsRegistrySource = { ...src, id: entry.sourceId } as unknown as RegistrySource;
-        const resolver = dispatcher.resolverFor(sourceAsRegistrySource);
-        if (resolver === null) {
-          skipped.push(entry.bundleId);
-          continue;
-        }
-        const installable = await resolver.resolve({ bundleId: entry.bundleId, bundleVersion: 'latest' });
-        if (installable === null) {
-          skipped.push(entry.bundleId);
-          continue;
-        }
-        const latestVersion = installable.ref.bundleVersion;
-        if (isNewerVersion(latestVersion, entry.bundleVersion)) {
-          candidates.push({ entry, source: src, from: entry.bundleVersion, to: latestVersion, installable });
-        }
-      } catch {
-        skipped.push(entry.bundleId);
-      }
-    }
+    const entries = filterUpdateEntries(lock.entries, lock.sources ?? {}, this.target);
+    const { candidates, skipped } = await findUpdateCandidates(entries, lock.sources ?? {}, ctx, http, tokens);
 
     if (this.dryRun) {
-      formatOutput({
-        ctx, command: 'update', output: fmt, status: 'ok',
-        data: {
-          dryRun: true, lockfile: lockPath,
-          checked: scopedEntries.length, updated: 0, skipped: skipped.length,
-          updates: candidates.map((c) => ({ bundleId: c.entry.bundleId, target: c.entry.target, from: c.from, to: c.to }))
-        },
-        textRenderer: renderDryRunOutput
-      });
-      return 0;
+      return renderDryRun(ctx, fmt, lockPath, entries.length, skipped.length, candidates);
     }
 
-    let toInstall = candidates;
-    if (this.interactive && candidates.length > 0) {
-      const answers = await (inquirer.prompt as (q: unknown) => Promise<{ selected: UpdateCandidate[] }>)([{
-        type: 'checkbox',
-        name: 'selected',
-        message: 'Select bundles to update:',
-        choices: candidates.map((c) => ({
-          name: `${c.entry.bundleId} [${c.entry.target}]: ${c.from} → ${c.to}`,
-          value: c,
-          checked: true
-        }))
-      }]);
-      toInstall = answers.selected;
-    }
-
+    const toInstall = await selectUpdatesInteractively(this.interactive, candidates, ctx);
     if (toInstall.length === 0) {
-      formatOutput({
-        ctx, command: 'update', output: fmt, status: 'ok',
-        data: { checked: scopedEntries.length, updated: 0, skipped: skipped.length, updates: [] },
-        textRenderer: () => `All bundles are up to date. (checked ${String(scopedEntries.length)})\n`
-      });
-      return 0;
+      return renderNoUpdates(ctx, fmt, entries.length, skipped.length);
     }
 
-    let updatedCount = 0;
-    const updateResults: { bundleId: string; target: string; from: string; to: string }[] = [];
-
-    for (const candidate of toInstall) {
-      try {
-        const target = await resolveTarget(candidate.entry.target, ctx);
-        await applyUpdate(candidate, target, lockPath, ctx, http, tokens);
-        updateResults.push({ bundleId: candidate.entry.bundleId, target: candidate.entry.target, from: candidate.from, to: candidate.to });
-        updatedCount++;
-      } catch (err) {
-        ctx.stderr.write(`Failed to update ${candidate.entry.bundleId}: ${err instanceof Error ? err.message : String(err)}\n`);
-      }
-    }
+    const { updatedCount, updateResults } = await applyUpdates(toInstall, lockPath, ctx, http, tokens);
 
     formatOutput({
       ctx, command: 'update', output: fmt, status: 'ok',
-      data: { lockfile: lockPath, checked: scopedEntries.length, updated: updatedCount, skipped: skipped.length, updates: updateResults },
+      data: { lockfile: lockPath, checked: entries.length, updated: updatedCount, skipped: skipped.length, updates: updateResults },
       textRenderer: renderUpdateOutput
     });
     return 0;
   }
+}
+
+async function resolveLockfilePath(ctx: Context, lockfileFlag: string | undefined): Promise<string | null> {
+  const userPaths = resolveUserConfigPaths(ctx.env);
+  if (lockfileFlag !== undefined && lockfileFlag.length > 0) {
+    return path.isAbsolute(lockfileFlag) ? lockfileFlag : path.join(ctx.cwd(), lockfileFlag);
+  }
+  return await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
+}
+
+function filterUpdateEntries(entries: LockfileEntry[], sources: Record<string, LockfileSource>, targetFlag: string | undefined): LockfileEntry[] {
+  const scopedEntries = entries.filter((e) => {
+    if (targetFlag !== undefined && targetFlag.length > 0 && e.target !== targetFlag) {
+      return false;
+    }
+    return true;
+  });
+  return scopedEntries.filter((e) => {
+    const src = sources?.[e.sourceId];
+    return src !== undefined && isRemoteSource(src.type);
+  });
+}
+
+async function findUpdateCandidates(
+  entries: LockfileEntry[],
+  sources: Record<string, LockfileSource>,
+  ctx: Context,
+  http: HttpClient,
+  tokens: TokenProvider
+): Promise<{ candidates: UpdateCandidate[]; skipped: string[] }> {
+  const candidates: UpdateCandidate[] = [];
+  const skipped: string[] = [];
+  const dispatcher = new SourceDispatcher({ http, tokens, fs: ctx.fs });
+
+  for (const entry of entries) {
+    const src = sources[entry.sourceId];
+    try {
+      const sourceAsRegistrySource = { ...src, id: entry.sourceId } as unknown as RegistrySource;
+      const resolver = dispatcher.resolverFor(sourceAsRegistrySource);
+      if (resolver === null) {
+        skipped.push(entry.bundleId);
+        continue;
+      }
+      const installable = await resolver.resolve({ bundleId: entry.bundleId, bundleVersion: 'latest' });
+      if (installable === null) {
+        skipped.push(entry.bundleId);
+        continue;
+      }
+      const latestVersion = installable.ref.bundleVersion;
+      if (isNewerVersion(latestVersion, entry.bundleVersion)) {
+        candidates.push({ entry, source: src, from: entry.bundleVersion, to: latestVersion, installable });
+      }
+    } catch {
+      skipped.push(entry.bundleId);
+    }
+  }
+
+  return { candidates, skipped };
+}
+
+function renderDryRun(
+  ctx: Context,
+  fmt: string,
+  lockPath: string,
+  checked: number,
+  skippedCount: number,
+  candidates: UpdateCandidate[]
+): number {
+  formatOutput({
+    ctx, command: 'update', output: fmt as OutputFormat, status: 'ok',
+    data: {
+      dryRun: true, lockfile: lockPath,
+      checked, updated: 0, skipped: skippedCount,
+      updates: candidates.map((c) => ({ bundleId: c.entry.bundleId, target: c.entry.target, from: c.from, to: c.to }))
+    },
+    textRenderer: renderDryRunOutput
+  });
+  return 0;
+}
+
+async function selectUpdatesInteractively(interactive: boolean, candidates: UpdateCandidate[], ctx: Context): Promise<UpdateCandidate[]> {
+  if (!interactive || candidates.length === 0) {
+    return candidates;
+  }
+  const answers = await (inquirer.prompt as (q: unknown) => Promise<{ selected: UpdateCandidate[] }>)([{
+    type: 'checkbox',
+    name: 'selected',
+    message: 'Select bundles to update:',
+    choices: candidates.map((c) => ({
+      name: `${c.entry.bundleId} [${c.entry.target}]: ${c.from} → ${c.to}`,
+      value: c,
+      checked: true
+    }))
+  }]);
+  return answers.selected;
+}
+
+function renderNoUpdates(ctx: Context, fmt: string, checked: number, skippedCount: number): number {
+  formatOutput({
+    ctx, command: 'update', output: fmt as OutputFormat, status: 'ok',
+    data: { checked, updated: 0, skipped: skippedCount, updates: [] },
+    textRenderer: () => `All bundles are up to date. (checked ${String(checked)})\n`
+  });
+  return 0;
+}
+
+async function applyUpdates(
+  toInstall: UpdateCandidate[],
+  lockPath: string,
+  ctx: Context,
+  http: HttpClient,
+  tokens: TokenProvider
+): Promise<{ updatedCount: number; updateResults: { bundleId: string; target: string; from: string; to: string }[] }> {
+  let updatedCount = 0;
+  const updateResults: { bundleId: string; target: string; from: string; to: string }[] = [];
+
+  for (const candidate of toInstall) {
+    try {
+      const target = await resolveTarget(candidate.entry.target, ctx);
+      await applyUpdate(candidate, target, lockPath, ctx, http, tokens);
+      updateResults.push({ bundleId: candidate.entry.bundleId, target: candidate.entry.target, from: candidate.from, to: candidate.to });
+      updatedCount++;
+    } catch (err) {
+      ctx.stderr.write(`Failed to update ${candidate.entry.bundleId}: ${err instanceof Error ? err.message : String(err)}\n`);
+    }
+  }
+
+  return { updatedCount, updateResults };
 }
 
 function isRemoteSource(type: string): boolean {
