@@ -37,10 +37,9 @@ import {
   PrimitiveIndex,
 } from '../search/primitive-index';
 import type {
+  BundleProvider,
   IndexStats,
   Primitive,
-  BundleProvider,
-  BundleRef,
 } from '../search/types';
 import {
   saveIndex,
