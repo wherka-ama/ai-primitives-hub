@@ -110,6 +110,18 @@ import {
 } from '../framework';
 
 /**
+ * Extract repo slug from a GitHub URL.
+ * @param url GitHub URL (e.g., "https://github.com/owner/repo" or "owner/repo").
+ * @returns Repo slug (e.g., "owner/repo").
+ */
+function extractRepoSlug(url: string): string {
+  if (url.startsWith('https://github.com/')) {
+    return url.replace('https://github.com/', '');
+  }
+  return url;
+}
+
+/**
  * Install command options.
  */
 export interface InstallOptions {
@@ -1185,7 +1197,7 @@ export async function installBundleWithSource(
 ): Promise<number> {
   const opts: InstallOptions = {
     bundle: bundleId,
-    source: sourceConfig.url,
+    source: extractRepoSlug(sourceConfig.url),
     sourceConfig,
     http,
     tokens
