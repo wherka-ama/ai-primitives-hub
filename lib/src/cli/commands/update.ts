@@ -191,23 +191,23 @@ export class UpdateCommand extends BaseUpdateCommand {
       await syncActiveHub(ctx, http, tokens);
     }
 
-    const entries = filterUpdateEntries(lock.entries, lock.sources ?? {}, this.target);
+    const { scopedEntries, entries } = filterUpdateEntries(lock.entries, lock.sources ?? {}, this.target);
     const { candidates, skipped } = await findUpdateCandidates(entries, lock.sources ?? {}, ctx, http, tokens);
 
     if (this.dryRun) {
-      return renderDryRun(ctx, fmt, lockPath, entries.length, skipped.length, candidates);
+      return renderDryRun(ctx, fmt, lockPath, scopedEntries.length, skipped.length, candidates);
     }
 
     const toInstall = await selectUpdatesInteractively(this.interactive, candidates, ctx);
     if (toInstall.length === 0) {
-      return renderNoUpdates(ctx, fmt, entries.length, skipped.length);
+      return renderNoUpdates(ctx, fmt, scopedEntries.length, skipped.length);
     }
 
     const { updatedCount, updateResults } = await applyUpdates(toInstall, lockPath, ctx, http, tokens);
 
     formatOutput({
       ctx, command: 'update', output: fmt, status: 'ok',
-      data: { lockfile: lockPath, checked: entries.length, updated: updatedCount, skipped: skipped.length, updates: updateResults },
+      data: { lockfile: lockPath, checked: scopedEntries.length, updated: updatedCount, skipped: skipped.length, updates: updateResults },
       textRenderer: renderUpdateOutput
     });
     return 0;
@@ -222,17 +222,18 @@ async function resolveLockfilePath(ctx: Context, lockfileFlag: string | undefine
   return await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
 }
 
-function filterUpdateEntries(entries: LockfileEntry[], sources: Record<string, LockfileSource>, targetFlag: string | undefined): LockfileEntry[] {
+function filterUpdateEntries(entries: LockfileEntry[], sources: Record<string, LockfileSource>, targetFlag: string | undefined): { scopedEntries: LockfileEntry[]; entries: LockfileEntry[] } {
   const scopedEntries = entries.filter((e) => {
     if (targetFlag !== undefined && targetFlag.length > 0 && e.target !== targetFlag) {
       return false;
     }
     return true;
   });
-  return scopedEntries.filter((e) => {
+  const filteredEntries = scopedEntries.filter((e) => {
     const src = sources?.[e.sourceId];
     return src !== undefined && isRemoteSource(src.type);
   });
+  return { scopedEntries, entries: filteredEntries };
 }
 
 async function findUpdateCandidates(
