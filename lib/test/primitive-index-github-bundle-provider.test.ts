@@ -126,7 +126,9 @@ describe('GitHubSingleBundleProvider', () => {
     const provider = new GitHubSingleBundleProvider({ spec: makeSpec(), client, cache });
 
     const refs: Awaited<ReturnType<typeof provider.listBundles> extends AsyncIterable<infer T> ? T : never>[] = [];
-    for await (const r of provider.listBundles()) refs.push(r);
+    for await (const r of provider.listBundles()) {
+      refs.push(r);
+    }
 
     const content = await provider.readFile(refs[0], 'skills/my-skill/SKILL.md');
     expect(content).toContain('title: My Skill');

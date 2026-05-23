@@ -257,6 +257,78 @@ describe('hub-harvester', () => {
     expect(r.index.stats().primitives).toBe(2);
   });
 
+  it('harvests an awesome-copilot source (one bundle per collection)', async () => {
+    const collection1Content = `id: collection-1
+name: Collection 1
+description: Test collection
+version: 1.0.0
+items:
+  - path: prompts/hello.prompt.md
+    kind: prompt
+`;
+    const collection2Content = `id: collection-2
+name: Collection 2
+description: Another test collection
+version: 1.0.0
+items:
+  - path: skills/test/SKILL.md
+    kind: skill
+`;
+    const promptContent = 'Hello world';
+    const skillContent = 'Test skill';
+    const collection1Bytes = Buffer.from(collection1Content, 'utf8');
+    const collection2Bytes = Buffer.from(collection2Content, 'utf8');
+    const promptBytes = Buffer.from(promptContent, 'utf8');
+    const skillBytes = Buffer.from(skillContent, 'utf8');
+    const collection1Sha = computeGitBlobSha(collection1Bytes);
+    const collection2Sha = computeGitBlobSha(collection2Bytes);
+    const promptSha = computeGitBlobSha(promptBytes);
+    const skillSha = computeGitBlobSha(skillBytes);
+
+    const repos = new Map([
+      ['amadeus-digital/refx-mcp-server', {
+        sha: 'collections-sha',
+        tree: [
+          { path: 'collections/collection-1.collection.yml', sha: collection1Sha, size: collection1Bytes.length },
+          { path: 'collections/collection-2.collection.yml', sha: collection2Sha, size: collection2Bytes.length },
+          { path: 'prompts/hello.prompt.md', sha: promptSha, size: promptBytes.length },
+          { path: 'skills/test/SKILL.md', sha: skillSha, size: skillBytes.length }
+        ],
+        blobs: new Map([
+          [collection1Sha, collection1Bytes],
+          [collection2Sha, collection2Bytes],
+          [promptSha, promptBytes],
+          [skillSha, skillBytes]
+        ])
+      }]
+    ]);
+    const fetch = makeFetch(repos);
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(path.join(tmp, 'blobs'));
+
+    const awesomeCopilotSpec: HubSourceSpec = {
+      id: 'refx',
+      name: 'refx-mcp-server',
+      type: 'awesome-copilot',
+      url: 'https://github.com/amadeus-digital/refx-mcp-server',
+      owner: 'amadeus-digital',
+      repo: 'refx-mcp-server',
+      branch: 'main',
+      collectionsPath: 'collections'
+    };
+    const h = new HubHarvester({
+      sources: [awesomeCopilotSpec],
+      client,
+      cache,
+      progressFile: path.join(tmp, 'progress.jsonl'),
+      concurrency: 1
+    });
+    const r = await h.run();
+    expect(r.error).toBe(0);
+    expect(r.primitives).toBeGreaterThanOrEqual(2);
+    expect(r.index.stats().primitives).toBe(2);
+  });
+
   it('extracts mcp-server primitives from a plugin with mcp.items', async () => {
     const manifestBody = Buffer.from(JSON.stringify({
       id: 'mcp-pl', name: 'mcp-pl', description: 'has mcp',

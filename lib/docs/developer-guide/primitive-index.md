@@ -186,14 +186,14 @@ Sources are processed with `p-limit` up to `concurrency` at a time. For each sou
 | Source type | Provider |
 |-------------|----------|
 | `github` | `GitHubSingleBundleProvider` |
-| `awesome-copilot` | `GitHubSingleBundleProvider` |
+| `awesome-copilot` | `AwesomeCopilotBundleProvider` |
 | `awesome-copilot-plugin` | `AwesomeCopilotPluginBundleProvider` |
 
 **Key files:** `src/infra/harvest/bundle-providers/`
 
 #### 3c. GitHubSingleBundleProvider — tree enumeration
 
-For `github` and `awesome-copilot` sources, the provider fetches the full recursive git tree via `GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1`. Each blob entry is tested against `isPrimitiveCandidatePath()`.
+For `github` sources, the provider fetches the full recursive git tree via `GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1`. Each blob entry is tested against `isPrimitiveCandidatePath()`.
 
 A path is a **primitive candidate** if it matches one of these patterns:
 
@@ -235,7 +235,22 @@ Results are stored in the blob cache keyed by git blob SHA (`BlobCache.getOrFetc
 - `src/infra/github/client.ts`
 - `src/infra/github/blob-cache.ts`
 
-#### 3f. harvestManifestItems — extract primitives
+#### 3g. AwesomeCopilotBundleProvider — multi-bundle discovery
+
+For `awesome-copilot` sources, the provider yields one bundle per collection file. It:
+
+1. Enumerates the full repo tree (same as GitHubSingleBundleProvider)
+2. Filters for files matching `{collectionsPath}/*.collection.yml` (default `collections/`)
+3. Parses each collection file to extract the `id` field
+4. Stores a mapping from `collection.id` → actual file path (since `id` may not match the filename)
+5. Yields one `BundleRef` per collection with `bundleId = collection.id`
+6. Uses `collection.items` for the manifest items list
+
+This ensures that `bundleId` matches what `AwesomeCopilotBundleResolver` expects during installation (the collection's `id` field from the YAML, not necessarily the filename).
+
+**Key file:** `src/infra/harvest/bundle-providers/awesome-copilot-bundle-provider.ts`
+
+#### 3h. harvestManifestItems — extract primitives
 
 For each path in the manifest items, `harvestManifestItems`:
 

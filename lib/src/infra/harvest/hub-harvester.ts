@@ -44,6 +44,9 @@ import {
   saveIndex,
 } from '../stores/json-index-store';
 import {
+  AwesomeCopilotBundleProvider,
+} from './bundle-providers/awesome-copilot-bundle-provider';
+import {
   GitHubSingleBundleProvider,
 } from './bundle-providers/github-bundle-provider';
 import {
@@ -598,6 +601,40 @@ export class HubHarvester {
         // A final source-level "done" marker uses the spec.id as bundleId
         // (matching the github case) so the shouldResume() fast-path works
         // unchanged on warm runs: unchanged repo sha → all plugins skipped.
+        await log.recordDone({
+          sourceId: spec.id, bundleId, commitSha,
+          primitives: 0, ms: Date.now() - startedRepo
+        });
+      } else if (spec.type === 'awesome-copilot') {
+        const provider = new AwesomeCopilotBundleProvider({
+          spec, client: this.opts.client, cache: this.opts.cache
+        });
+        // Collect refs first, then harvest collections in parallel
+        const refs: Parameters<typeof harvestBundle>[1][] = [];
+        for await (const ref of provider.listBundles()) {
+          refs.push(ref);
+        }
+        const collectionConcurrency = Math.max(1, this.opts.concurrency ?? 4);
+        const sha = commitSha;
+        const harvestOne = async (ref: Parameters<typeof harvestBundle>[1]): Promise<number> => {
+          const perStart = Date.now();
+          await log.recordStart({
+            sourceId: spec.id, bundleId: ref.bundleId, commitSha: sha
+          });
+          const prims = await harvestBundle(provider, ref);
+          const ms = Date.now() - perStart;
+          out.push(...prims);
+          await log.recordDone({
+            sourceId: spec.id, bundleId: ref.bundleId, commitSha: sha,
+            primitives: prims.length, ms
+          });
+          return prims.length;
+        };
+        for (let i = 0; i < refs.length; i += collectionConcurrency) {
+          const batch = refs.slice(i, i + collectionConcurrency);
+          const counts = await Promise.all(batch.map((r) => harvestOne(r)));
+          primsTotal += counts.reduce((a, b) => a + b, 0);
+        }
         await log.recordDone({
           sourceId: spec.id, bundleId, commitSha,
           primitives: 0, ms: Date.now() - startedRepo
