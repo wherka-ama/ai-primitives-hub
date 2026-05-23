@@ -1299,7 +1299,16 @@ async function replayLockfileEntries(
   }
 
   for (const e of matching) {
-    const result = await replaySingleEntry(e, sources, http, tokens, writer, target, ctx, verbose);
+    const result = await replaySingleEntry({
+      entry: e,
+      sources,
+      http,
+      tokens,
+      writer,
+      target,
+      ctx,
+      verbose
+    });
     if (result.success) {
       replayed.push(e.bundleId);
     } else {
@@ -1313,16 +1322,21 @@ async function replayLockfileEntries(
   return { replayed, failures };
 }
 
+interface ReplaySingleEntryOptions {
+  entry: LockfileEntry;
+  sources: Record<string, LockfileSource>;
+  http: HttpClient;
+  tokens: TokenProvider;
+  writer: TargetWriter;
+  target: Target;
+  ctx: Context;
+  verbose: boolean;
+}
+
 async function replaySingleEntry(
-  entry: LockfileEntry,
-  sources: Record<string, LockfileSource>,
-  http: HttpClient,
-  tokens: TokenProvider,
-  writer: TargetWriter,
-  target: Target,
-  ctx: Context,
-  verbose: boolean
+  opts: ReplaySingleEntryOptions
 ): Promise<{ success: boolean; reason: string }> {
+  const { entry, sources, http, tokens, writer, target, ctx, verbose } = opts;
   const src = sources[entry.sourceId];
   if (src === undefined) {
     const reason = `source ${entry.sourceId} missing from lockfile.sources`;
