@@ -183,12 +183,12 @@ describe('FileTreeTargetWriter', () => {
     expect(has('/tmp/k/agents')).toBe(true);
   });
 
-  it('copilot-cli default base dir is ~/.copilot; skills routed, agents not (plugin-distributed)', () => {
+  it('copilot-cli default base dir is ~/.copilot; skills and agents routed', () => {
     const layout = resolveLayout({ name: 'c', type: 'copilot-cli', scope: 'user' });
     expect(layout.baseDir).toBe('${HOME}/.copilot');
     expect(layout.kindRoutes['prompts/']).toBe('prompts/');
     expect(layout.kindRoutes['skills/']).toBe('skills/');
-    expect(layout.kindRoutes['agents/']).toBeUndefined();
+    expect(layout.kindRoutes['agents/']).toBe('agents/');
   });
 
   it('vscode repository scope: skills go to .github/skills/, agents not routed', () => {
