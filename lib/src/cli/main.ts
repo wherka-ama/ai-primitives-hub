@@ -398,8 +398,7 @@ const readPackageVersion = (): string => {
 // Build-time version injection for bundled/SEA distributions.
 // Falls back to reading package.json for development builds.
 declare const CLI_VERSION: string | undefined;
-// NOSONAR
-export const CLI_VERSION_CONST = typeof CLI_VERSION === 'undefined' ? readPackageVersion() : CLI_VERSION;
+export const CLI_VERSION_CONST = ('CLI_VERSION' in globalThis) ? (globalThis as any).CLI_VERSION : readPackageVersion();
 
 /**
  * CLI binary entry: only place where process.exit/console.error are
