@@ -898,7 +898,7 @@ async function performLockfileInstall(
   const writerFactory = createWriterFactory(ctx, opts);
   const writer = writerFactory(target);
 
-  const { replayed, failures } = await replayLockfileEntries(
+  const { replayed, failures } = await replayLockfileEntries({
     matching,
     sources,
     http,
@@ -906,8 +906,8 @@ async function performLockfileInstall(
     writer,
     target,
     ctx,
-    opts.verbose ?? false
-  );
+    verbose: opts.verbose ?? false
+  });
 
   if (replayed.length > 0) {
     await updateTargetStateFromLockfile(ctx, target.name, matching, replayed);
@@ -1273,18 +1273,24 @@ const failWith = (ctx: Context, output: OutputFormat, err: RegistryError): numbe
  * @param writer Target writer.
  * @param target Target configuration.
  * @param ctx CLI context.
+ * @param verbose
  * @returns Replay results.
  */
+interface ReplayLockfileEntriesOptions {
+  matching: LockfileEntry[];
+  sources: Record<string, LockfileSource>;
+  http: HttpClient;
+  tokens: TokenProvider;
+  writer: TargetWriter;
+  target: Target;
+  ctx: Context;
+  verbose: boolean;
+}
+
 async function replayLockfileEntries(
-  matching: LockfileEntry[],
-  sources: Record<string, LockfileSource>,
-  http: HttpClient,
-  tokens: TokenProvider,
-  writer: TargetWriter,
-  target: Target,
-  ctx: Context,
-  verbose: boolean
+  opts: ReplayLockfileEntriesOptions
 ): Promise<{ replayed: string[]; failures: { bundleId: string; reason: string }[] }> {
+  const { matching, sources, http, tokens, writer, target, ctx, verbose } = opts;
   const replayed: string[] = [];
   const failures: { bundleId: string; reason: string }[] = [];
 

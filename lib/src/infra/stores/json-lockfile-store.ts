@@ -132,6 +132,7 @@ export interface LockfileFs {
 /**
  * Migrate VS Code extension lockfile format to CLI format.
  * VS Code format uses `bundles` (object), CLI format uses `entries` (array).
+ * @param parsed
  */
 function migrateLockfile(parsed: unknown): Lockfile {
   const raw = parsed as Record<string, unknown>;
