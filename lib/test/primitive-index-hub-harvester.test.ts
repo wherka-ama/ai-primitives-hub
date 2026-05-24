@@ -23,6 +23,7 @@ import {
   staticTokenProvider,
 } from '../src/infra/github/token';
 import {
+  harvestHub,
   HubHarvester,
 } from '../src/infra/harvest/hub-harvester';
 
@@ -540,5 +541,21 @@ items:
     // Should still succeed despite corrupt snapshot
     expect(r.done).toBe(1);
     expect(r.error).toBe(0);
+  });
+
+  describe('harvestHub pipeline', () => {
+    it('throws when hubRepo is required but missing', async () => {
+      await expect(harvestHub({})).rejects.toThrow('hubRepo is required');
+    });
+
+    it('throws when hubRepo format is invalid', async () => {
+      await expect(harvestHub({
+        hubRepo: 'invalid-format',
+        explicitToken: 'test-token',
+        outFile: path.join(tmp, 'out.json'),
+        progressFile: path.join(tmp, 'progress.jsonl'),
+        cacheDir: path.join(tmp, 'cache')
+      })).rejects.toThrow('Invalid hubRepo');
+    });
   });
 });
