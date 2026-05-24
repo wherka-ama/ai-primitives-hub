@@ -125,7 +125,18 @@ export class GitHubBundleResolver implements BundleResolver {
     }
     // Fallback: try to find any release with the matching version (ignoring bundle name prefix)
     // This handles cases where the primitive index bundle ID doesn't match the actual release tag name
-    return releases.find((r) => extractSemver(r.tag_name) === wantVersion);
+    const versionMatch = releases.find((r) => extractSemver(r.tag_name) === wantVersion);
+    if (versionMatch !== undefined) {
+      return versionMatch;
+    }
+    // Second fallback: try to find a release where the tag starts with the version (handles prereleases like v0.0.0-prerelease.1)
+    const prefixMatch = releases.find((r) => (bundleName === null || r.tag_name.startsWith(bundleName)) && r.tag_name.startsWith(`v${wantVersion}`));
+    if (prefixMatch !== undefined) {
+      return prefixMatch;
+    }
+    // Third fallback: try to find any release where the tag starts with the version (ignoring bundle name)
+    const versionPrefixMatch = releases.find((r) => r.tag_name.startsWith(`v${wantVersion}`));
+    return versionPrefixMatch;
   }
 
   /**
