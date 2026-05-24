@@ -321,4 +321,192 @@ items: []
     expect(refs.length).toBe(1);
     expect(refs[0].bundleId).toBe('test');
   });
+
+  it('throws error when readManifest called with unknown bundleId', async () => {
+    const collectionContent = `id: test
+name: Test
+version: 1.0.0
+items: []
+`;
+    const collectionBytes = Buffer.from(collectionContent, 'utf8');
+    const collectionSha = computeGitBlobSha(collectionBytes);
+
+    const fetch = fakeGithubFetch({
+      commitSha: 'sha1',
+      collectionFiles: [
+        { name: 'collections/test.collection.yml', content: collectionContent }
+      ],
+      tree: [
+        { path: 'collections/test.collection.yml', sha: collectionSha, size: collectionBytes.length }
+      ],
+      blobs: new Map([[collectionSha, collectionBytes]])
+    });
+
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(tmp);
+    const provider = new AwesomeCopilotBundleProvider({
+      spec: makeSpec(),
+      client,
+      cache
+    });
+
+    const unknownRef = {
+      sourceId: 'src-a',
+      sourceType: 'awesome-copilot',
+      bundleId: 'unknown-bundle',
+      bundleVersion: 'sha1',
+      installed: false
+    };
+
+    await expect(provider.readManifest(unknownRef)).rejects.toThrow('Collection file not found');
+  });
+
+  it('throws error when readFile called with path not in repo tree', async () => {
+    const collectionContent = `id: test
+name: Test
+version: 1.0.0
+items: []
+`;
+    const collectionBytes = Buffer.from(collectionContent, 'utf8');
+    const collectionSha = computeGitBlobSha(collectionBytes);
+
+    const fetch = fakeGithubFetch({
+      commitSha: 'sha1',
+      collectionFiles: [
+        { name: 'collections/test.collection.yml', content: collectionContent }
+      ],
+      tree: [
+        { path: 'collections/test.collection.yml', sha: collectionSha, size: collectionBytes.length }
+      ],
+      blobs: new Map([[collectionSha, collectionBytes]])
+    });
+
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(tmp);
+    const provider = new AwesomeCopilotBundleProvider({
+      spec: makeSpec(),
+      client,
+      cache
+    });
+
+    const refs: Awaited<ReturnType<typeof provider.listBundles> extends AsyncIterable<infer T> ? T : never>[] = [];
+    for await (const r of provider.listBundles()) {
+      refs.push(r);
+    }
+
+    await expect(provider.readFile(refs[0], 'nonexistent/file.md')).rejects.toThrow('not a primitive candidate');
+  });
+
+  it('getCommitSha returns the commit sha', async () => {
+    const collectionContent = `id: test
+name: Test
+version: 1.0.0
+items: []
+`;
+    const collectionBytes = Buffer.from(collectionContent, 'utf8');
+    const collectionSha = computeGitBlobSha(collectionBytes);
+
+    const fetch = fakeGithubFetch({
+      commitSha: 'abc123',
+      collectionFiles: [
+        { name: 'collections/test.collection.yml', content: collectionContent }
+      ],
+      tree: [
+        { path: 'collections/test.collection.yml', sha: collectionSha, size: collectionBytes.length }
+      ],
+      blobs: new Map([[collectionSha, collectionBytes]])
+    });
+
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(tmp);
+    const provider = new AwesomeCopilotBundleProvider({
+      spec: makeSpec(),
+      client,
+      cache
+    });
+
+    const commitSha = await provider.getCommitSha();
+    expect(commitSha).toBe('abc123');
+  });
+
+  it('skips collections with invalid YAML', async () => {
+    const invalidContent = 'invalid: yaml: content: [unclosed';
+    const validContent = `id: valid
+name: Valid
+version: 1.0.0
+items: []
+`;
+    const validBytes = Buffer.from(validContent, 'utf8');
+    const validSha = computeGitBlobSha(validBytes);
+
+    const fetch = fakeGithubFetch({
+      commitSha: 'sha1',
+      collectionFiles: [
+        { name: 'collections/invalid.collection.yml', content: invalidContent },
+        { name: 'collections/valid.collection.yml', content: validContent }
+      ],
+      tree: [
+        { path: 'collections/valid.collection.yml', sha: validSha, size: validBytes.length }
+      ],
+      blobs: new Map([[validSha, validBytes]])
+    });
+
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(tmp);
+    const provider = new AwesomeCopilotBundleProvider({
+      spec: makeSpec(),
+      client,
+      cache
+    });
+
+    const refs: Awaited<ReturnType<typeof provider.listBundles> extends AsyncIterable<infer T> ? T : never>[] = [];
+    for await (const r of provider.listBundles()) {
+      refs.push(r);
+    }
+
+    expect(refs.length).toBe(1);
+    expect(refs[0].bundleId).toBe('valid');
+  });
+
+  it('skips collections missing id field', async () => {
+    const noIdContent = `name: No ID
+version: 1.0.0
+items: []
+`;
+    const validContent = `id: valid
+name: Valid
+version: 1.0.0
+items: []
+`;
+    const validBytes = Buffer.from(validContent, 'utf8');
+    const validSha = computeGitBlobSha(validBytes);
+
+    const fetch = fakeGithubFetch({
+      commitSha: 'sha1',
+      collectionFiles: [
+        { name: 'collections/no-id.collection.yml', content: noIdContent },
+        { name: 'collections/valid.collection.yml', content: validContent }
+      ],
+      tree: [
+        { path: 'collections/valid.collection.yml', sha: validSha, size: validBytes.length }
+      ],
+      blobs: new Map([[validSha, validBytes]])
+    });
+
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(tmp);
+    const provider = new AwesomeCopilotBundleProvider({
+      spec: makeSpec(),
+      client,
+      cache
+    });
+
+    const refs: Awaited<ReturnType<typeof provider.listBundles> extends AsyncIterable<infer T> ? T : never>[] = [];
+    for await (const r of provider.listBundles()) {
+      refs.push(r);
+    }
+
+    expect(refs.length).toBe(1);
+    expect(refs[0].bundleId).toBe('valid');
+  });
 });
