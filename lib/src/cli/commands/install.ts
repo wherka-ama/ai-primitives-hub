@@ -1046,8 +1046,8 @@ async function performRemoteInstall(
     const entry: LockfileEntry = {
       target: target.name,
       sourceId: installable.ref.sourceId,
-      bundleId: installable.ref.bundleId,
-      bundleVersion: installable.ref.bundleVersion,
+      bundleId: manifest.id,
+      bundleVersion: manifest.version,
       sha256: dl.sha256,
       installedAt: new Date().toISOString(),
       files: [...files.keys()].filter((f) => f !== 'deployment-manifest.yml'),
