@@ -89,4 +89,95 @@ describe('bundle manifest', () => {
     const parsed = JSON.parse(result.stdout) as { errors: { code: string }[] };
     expect(parsed.errors[0].code).toBe('BUNDLE.ITEM_NOT_FOUND');
   });
+
+  it('exits 1 when collections/ directory is missing and no explicit file', async () => {
+    await fs.rm(path.join(tmpRoot, 'collections'), { recursive: true });
+    const result = await runCommand(['bundle', 'manifest'], {
+      commands: [createBundleManifestCommand({
+        output: 'json',
+        version: '1.0.0',
+        outFile: path.join(tmpRoot, 'm.yml')
+      })],
+      context: { cwd: tmpRoot, fs: realFs }
+    });
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { errors: { code: string }[] };
+    expect(parsed.errors[0].code).toBe('FS.NOT_FOUND');
+  });
+
+  it('exits 1 when no collection.yml files exist in collections/', async () => {
+    await fs.rm(path.join(tmpRoot, 'collections', 'demo.collection.yml'));
+    const result = await runCommand(['bundle', 'manifest'], {
+      commands: [createBundleManifestCommand({
+        output: 'json',
+        version: '1.0.0',
+        outFile: path.join(tmpRoot, 'm.yml')
+      })],
+      context: { cwd: tmpRoot, fs: realFs }
+    });
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { errors: { code: string }[] };
+    expect(parsed.errors[0].code).toBe('BUNDLE.NOT_FOUND');
+  });
+
+  it('extracts metadata from markdown with description blockquote', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompts', 'foo.prompt.md'),
+      '# Foo\n\n> Description from blockquote\n\nBody\n'
+    );
+    const result = await runCommand(['bundle', 'manifest'], {
+      commands: [createBundleManifestCommand({
+        output: 'json',
+        version: '1.0.0',
+        collectionFile: 'collections/demo.collection.yml',
+        outFile: path.join(tmpRoot, 'm.yml')
+      })],
+      context: { cwd: tmpRoot, fs: realFs }
+    });
+    expect(result.exitCode).toBe(0);
+    const manifestText = await fs.readFile(path.join(tmpRoot, 'm.yml'), 'utf8');
+    const manifest = yaml.load(manifestText) as { prompts: { description: string }[] };
+    expect(manifest.prompts[0].description).toBe('Description from blockquote');
+  });
+
+  it('includes MCP server count in output when mcpServers is defined', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'collections', 'demo.collection.yml'),
+      `id: demo
+name: Demo
+mcpServers:
+  server1: {}
+  server2: {}
+items:
+  - path: prompts/foo.prompt.md
+    kind: prompt
+`
+    );
+    const result = await runCommand(['bundle', 'manifest'], {
+      commands: [createBundleManifestCommand({
+        output: 'text',
+        version: '1.0.0',
+        collectionFile: 'collections/demo.collection.yml',
+        outFile: path.join(tmpRoot, 'm.yml')
+      })],
+      context: { cwd: tmpRoot, fs: realFs }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('MCP Servers: 2');
+  });
+
+  it('renders text output with item type breakdown', async () => {
+    const result = await runCommand(['bundle', 'manifest'], {
+      commands: [createBundleManifestCommand({
+        output: 'text',
+        version: '1.0.0',
+        collectionFile: 'collections/demo.collection.yml',
+        outFile: path.join(tmpRoot, 'm.yml')
+      })],
+      context: { cwd: tmpRoot, fs: realFs }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Generated');
+    expect(result.stdout).toContain('total items: 1');
+  });
 });
