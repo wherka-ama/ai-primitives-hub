@@ -84,4 +84,61 @@ describe('bundle build', () => {
     const parsed = JSON.parse(result.stdout) as { errors: { code: string }[] };
     expect(parsed.errors[0].code).toBe('USAGE.MISSING_FLAG');
   });
+
+  it('exits 1 with BUNDLE.INVALID_MANIFEST when collection.id is missing', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'collections', 'no-id.collection.yml'),
+      `name: No ID
+items: []
+`
+    );
+    const result = await runCommand(['bundle', 'build'], {
+      commands: [createBundleBuildCommand({
+        output: 'json',
+        collectionFile: 'collections/no-id.collection.yml',
+        version: '1.0.0',
+        repoSlug: 'test-repo'
+      })],
+      context: { cwd: tmpRoot, fs: realFs }
+    });
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { errors: { code: string }[] };
+    expect(parsed.errors[0].code).toBe('BUNDLE.INVALID_MANIFEST');
+  });
+
+  it('uses GITHUB_REPOSITORY env var as fallback for repo slug', async () => {
+    const result = await runCommand(['bundle', 'build'], {
+      commands: [createBundleBuildCommand({
+        output: 'json',
+        collectionFile: 'collections/demo.collection.yml',
+        version: '1.0.0'
+      })],
+      context: { cwd: tmpRoot, fs: realFs, env: { GITHUB_REPOSITORY: 'owner/repo' } }
+    });
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout) as {
+      data: { bundleId: string };
+    };
+    expect(parsed.data.bundleId).toMatch(/^owner-repo-demo-/);
+  });
+
+  it('respects custom outDir option', async () => {
+    const result = await runCommand(['bundle', 'build'], {
+      commands: [createBundleBuildCommand({
+        output: 'json',
+        collectionFile: 'collections/demo.collection.yml',
+        version: '1.0.0',
+        repoSlug: 'test-repo',
+        outDir: 'custom-output'
+      })],
+      context: { cwd: tmpRoot, fs: realFs }
+    });
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout) as {
+      data: { outDir: string };
+    };
+    expect(parsed.data.outDir).toContain('custom-output');
+    const manifestExists = await fs.stat(path.join(tmpRoot, 'custom-output', 'demo', 'deployment-manifest.yml'));
+    expect(manifestExists.isFile()).toBe(true);
+  });
 });
