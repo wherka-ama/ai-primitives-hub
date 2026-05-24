@@ -74,6 +74,73 @@ describe('SkillsBundleResolver', () => {
     const result = await resolver.resolve({ bundleId: 'test-skill', bundleVersion: 'latest' });
     expect(result).toBeNull();
   });
+
+  it('respects custom ref option', async () => {
+    const resolver = new SkillsBundleResolver({
+      repoSlug: 'test/repo',
+      ref: 'v1.0.0',
+      http: mockHttpClient as any,
+      tokens: mockTokenProvider
+    });
+
+    nock('https://api.github.com')
+      .get('/repos/test/repo/contents/skills/test-skill?ref=v1.0.0')
+      .reply(404);
+
+    await resolver.resolve({ bundleId: 'test-skill', bundleVersion: 'latest' });
+  });
+
+  it('respects custom skillsPath option', async () => {
+    const resolver = new SkillsBundleResolver({
+      repoSlug: 'test/repo',
+      skillsPath: 'custom-skills',
+      http: mockHttpClient as any,
+      tokens: mockTokenProvider
+    });
+
+    nock('https://api.github.com')
+      .get('/repos/test/repo/contents/custom-skills/test-skill')
+      .reply(404);
+
+    await resolver.resolve({ bundleId: 'test-skill', bundleVersion: 'latest' });
+  });
+
+  it('throws on non-404 error from contents API', async () => {
+    const resolver = new SkillsBundleResolver({
+      repoSlug: 'test/repo',
+      http: mockHttpClient as any,
+      tokens: mockTokenProvider
+    });
+
+    nock('https://api.github.com')
+      .get('/repos/test/repo/contents/skills/test-skill')
+      .reply(500);
+
+    await expect(resolver.resolve({ bundleId: 'test-skill', bundleVersion: 'latest' }))
+      .rejects.toThrow(/contents API 500/);
+  });
+
+  it('parses SKILL.md frontmatter for metadata', async () => {
+    const resolver = new SkillsBundleResolver({
+      repoSlug: 'test/repo',
+      http: mockHttpClient as any,
+      tokens: mockTokenProvider
+    });
+
+    const skillContent = '---\nname: Test Skill\ndescription: A test skill\n---\n\n# Skill content';
+    nock('https://api.github.com')
+      .get('/repos/test/repo/contents/skills/test-skill')
+      .reply(200, [
+        { name: 'SKILL.md', type: 'file', path: 'skills/test-skill/SKILL.md', download_url: 'https://example.com/SKILL.md', url: 'https://api.github.com' }
+      ]);
+    nock('https://example.com')
+      .get('/SKILL.md')
+      .reply(200, skillContent);
+
+    const result = await resolver.resolve({ bundleId: 'test-skill', bundleVersion: 'latest' });
+    expect(result).not.toBeNull();
+    expect(result?.ref.bundleVersion).toBe('0.0.0');
+  });
 });
 
 describe('LocalSkillsBundleResolver', () => {
@@ -135,6 +202,24 @@ describe('LocalSkillsBundleResolver', () => {
 
     const result = await resolver.resolve({ bundleId: 'test-skill', bundleVersion: 'latest' });
     expect(result).not.toBeNull();
+  });
+
+  it('parses SKILL.md frontmatter for metadata', async () => {
+    const resolver = new LocalSkillsBundleResolver({
+      rootPath: tmp,
+      fs: realFs
+    });
+
+    const skillDir = path.join(tmp, 'skills', 'test-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, 'SKILL.md'),
+      '---\nname: Local Skill\ndescription: A local skill\n---\n\n# Skill content'
+    );
+
+    const result = await resolver.resolve({ bundleId: 'test-skill', bundleVersion: 'latest' });
+    expect(result).not.toBeNull();
+    expect(result?.ref.bundleVersion).toBe('0.0.0');
   });
 });
 
@@ -201,5 +286,26 @@ describe('LocalAwesomeCopilotBundleResolver', () => {
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).not.toBeNull();
+  });
+
+  it('uses collection metadata when present', async () => {
+    const resolver = new LocalAwesomeCopilotBundleResolver({
+      rootPath: tmp,
+      fs: realFs
+    });
+
+    const collectionsDir = path.join(tmp, 'collections');
+    await fs.mkdir(collectionsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(collectionsDir, 'test.collection.yml'),
+      'id: custom-id\nname: Custom Name\nversion: 2.0.0\nitems:\n  - path: prompts/test.md\n    kind: prompt'
+    );
+    await fs.mkdir(path.join(tmp, 'prompts'), { recursive: true });
+    await fs.writeFile(path.join(tmp, 'prompts', 'test.md'), '# Test Prompt');
+
+    const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
+    expect(result).not.toBeNull();
+    expect(result?.ref.bundleId).toBe('custom-id');
+    expect(result?.ref.bundleVersion).toBe('2.0.0');
   });
 });
