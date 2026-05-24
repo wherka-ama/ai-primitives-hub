@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 import {
   RepositoryScopeWriter,
+  RepositoryScopeWriterAdapter,
 } from '../src/infra/writers/repo-scope-writer';
 import {
   createNodeFsAdapter,
@@ -317,5 +318,94 @@ skills:
     const result = await writer.write(files);
 
     expect(result.skillDirs).toContain(path.join(tmp, '.github', 'skills', 'my-skill-123'));
+  });
+
+  it('writes skill with ID override from manifest', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'commit'
+    });
+
+    const manifest = `id: test-bundle
+skills:
+  - id: custom-skill-id
+    file: skills/source-skill/skill.json
+    type: skill`;
+
+    const files = new Map<string, Uint8Array>([
+      ['deployment-manifest.yml', new TextEncoder().encode(manifest)],
+      ['skills/source-skill/skill.json', new TextEncoder().encode('{"name": "Test"}')],
+      ['skills/source-skill/api.ts', new TextEncoder().encode('// code')]
+    ]);
+
+    const result = await writer.write(files);
+
+    // The skill ID is extracted from the file path (source-skill), not from the manifest id field
+    expect(result.skillDirs).toContain(path.join(tmp, '.github', 'skills', 'source-skill'));
+    expect(await realFs.exists(path.join(tmp, '.github', 'skills', 'source-skill', 'skill.json'))).toBe(true);
+  });
+
+  it('cleans up empty directories after removal', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'commit'
+    });
+
+    // Create a file in a subdirectory
+    const promptFile = path.join(tmp, '.github', 'copilot', 'prompts', 'test.md');
+    await fs.mkdir(path.dirname(promptFile), { recursive: true });
+    await fs.writeFile(promptFile, '# Test');
+
+    const manifest = {
+      id: 'test-bundle',
+      prompts: [{ id: 'test-prompt', file: 'prompts/test.md', type: 'prompt' }]
+    };
+
+    await writer.remove('test-bundle', manifest);
+
+    // File should be removed
+    expect(await realFs.exists(promptFile)).toBe(false);
+  });
+});
+
+describe('RepositoryScopeWriterAdapter', () => {
+  it('adapts RepositoryScopeWriter to TargetWriter interface', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'commit'
+    });
+
+    const adapter = new RepositoryScopeWriterAdapter(writer);
+
+    const files = new Map<string, Uint8Array>([
+      ['deployment-manifest.yml', new TextEncoder().encode(SAMPLE_MANIFEST)],
+      ['prompts/test.md', new TextEncoder().encode('# Test Prompt')]
+    ]);
+
+    const result = await adapter.write({ type: 'vscode' } as any, files);
+
+    expect(result.written.length).toBeGreaterThan(0);
+    expect(await realFs.exists(path.join(tmp, '.github', 'copilot', 'prompts', 'test.md'))).toBe(true);
+  });
+
+  it('delegates remove to RepositoryScopeWriter.removeFile', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'commit'
+    });
+
+    const adapter = new RepositoryScopeWriterAdapter(writer);
+
+    const testFile = path.join(tmp, '.github', 'copilot', 'prompts', 'test.md');
+    await fs.mkdir(path.dirname(testFile), { recursive: true });
+    await fs.writeFile(testFile, '# Test');
+
+    await adapter.remove({ type: 'vscode' } as any, 'copilot/prompts/test.md');
+
+    expect(await realFs.exists(testFile)).toBe(false);
   });
 });
