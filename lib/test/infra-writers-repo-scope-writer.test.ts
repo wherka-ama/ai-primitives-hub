@@ -368,6 +368,43 @@ skills:
     // File should be removed
     expect(await realFs.exists(promptFile)).toBe(false);
   });
+
+  it('handles removal when git/info/exclude does not exist', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'local-only'
+    });
+
+    const manifest = {
+      id: 'test-bundle',
+      prompts: [{ id: 'test-prompt', file: 'prompts/test.md', type: 'prompt' }]
+    };
+
+    // Should not throw even though .git/info/exclude doesn't exist
+    await writer.remove('test-bundle', manifest);
+  });
+
+  it('handles removal when git/info/exclude has no Prompt Registry section', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'local-only'
+    });
+
+    // Create .git/info/exclude without Prompt Registry section
+    const excludePath = path.join(tmp, '.git', 'info', 'exclude');
+    await fs.mkdir(path.dirname(excludePath), { recursive: true });
+    await fs.writeFile(excludePath, 'other/exclude\n');
+
+    const manifest = {
+      id: 'test-bundle',
+      prompts: [{ id: 'test-prompt', file: 'prompts/test.md', type: 'prompt' }]
+    };
+
+    // Should not throw
+    await writer.remove('test-bundle', manifest);
+  });
 });
 
 describe('RepositoryScopeWriterAdapter', () => {
