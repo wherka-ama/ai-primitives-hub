@@ -161,7 +161,7 @@ export class GitHubBundleResolver implements BundleResolver {
    * @param spec Parsed BundleSpec.
    * @returns Installable, or `null` when the bundle is not present.
    */
-  public  async resolve(spec: BundleSpec): Promise<Installable | null> {
+  public async resolve(spec: BundleSpec): Promise<Installable | null> {
     const releases = await this.listReleases();
     if (releases.length === 0) {
       console.error(`[GitHubBundleResolver] No releases found for ${this.opts.repoSlug}`);
@@ -169,7 +169,7 @@ export class GitHubBundleResolver implements BundleResolver {
     }
     const { collection: bundleName } = decomposeBundleId(spec.bundleId, this.opts.repoSlug);
     console.error(`[GitHubBundleResolver] bundleId=${spec.bundleId}, bundleName=${bundleName}, repoSlug=${this.opts.repoSlug}`);
-    console.error(`[GitHubBundleResolver] Available releases: ${releases.map(r => r.tag_name).join(', ')}`);
+    console.error(`[GitHubBundleResolver] Available releases: ${releases.map((r) => r.tag_name).join(', ')}`);
     const wantVersion = spec.bundleVersion;
     const release: GitHubRelease | undefined = wantVersion === undefined || wantVersion === 'latest'
       ? this.findLatestRelease(releases, bundleName)
@@ -181,7 +181,7 @@ export class GitHubBundleResolver implements BundleResolver {
     const asset = this.findAsset(release, spec.bundleId);
     if (asset === undefined) {
       console.error(`[GitHubBundleResolver] No asset found for bundleId=${spec.bundleId} in release ${release.tag_name}`);
-      console.error(`[GitHubBundleResolver] Available assets: ${release.assets.map(a => a.name).join(', ')}`);
+      console.error(`[GitHubBundleResolver] Available assets: ${release.assets.map((a) => a.name).join(', ')}`);
       return null;
     }
     const sourceId = generateSourceId('github', `https://github.com/${this.opts.repoSlug}`);

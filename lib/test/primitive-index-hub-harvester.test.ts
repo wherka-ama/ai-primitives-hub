@@ -484,4 +484,65 @@ items:
     expect(r.done).toBe(3);
     expect(r.primitives).toBeGreaterThanOrEqual(2);
   });
+
+  it('skips all sources in dryRun mode', async () => {
+    const promptBytes = Buffer.from('---\ntitle: Hello\n---\n# Hello\n', 'utf8');
+    const promptSha = computeGitBlobSha(promptBytes);
+    const repos = new Map([
+      ['o/r', {
+        sha: 'fixed-sha',
+        tree: [{ path: 'prompts/a.prompt.md', sha: promptSha, size: promptBytes.length }],
+        blobs: new Map([[promptSha, promptBytes]])
+      }]
+    ]);
+    const fetch = makeFetch(repos);
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(path.join(tmp, 'blobs'));
+
+    const h = new HubHarvester({
+      sources: [spec('src-1', 'o', 'r')],
+      client,
+      cache,
+      progressFile: path.join(tmp, 'progress.jsonl'),
+      concurrency: 1,
+      dryRun: true
+    });
+
+    const r = await h.run();
+    expect(r.done).toBe(0);
+    expect(r.skip).toBe(1);
+    expect(r.primitives).toBe(0);
+  });
+
+  it('handles corrupt snapshot gracefully', async () => {
+    // Write a corrupt snapshot file
+    const snapshotFile = path.join(tmp, 'primitives-snapshot.json');
+    fs.writeFileSync(snapshotFile, '{ invalid json }');
+
+    const promptBytes = Buffer.from('---\ntitle: Hello\n---\n# Hello\n', 'utf8');
+    const promptSha = computeGitBlobSha(promptBytes);
+    const repos = new Map([
+      ['o/r', {
+        sha: 'fixed-sha',
+        tree: [{ path: 'prompts/a.prompt.md', sha: promptSha, size: promptBytes.length }],
+        blobs: new Map([[promptSha, promptBytes]])
+      }]
+    ]);
+    const fetch = makeFetch(repos);
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(path.join(tmp, 'blobs'));
+
+    const h = new HubHarvester({
+      sources: [spec('src-1', 'o', 'r')],
+      client,
+      cache,
+      progressFile: path.join(tmp, 'progress.jsonl'),
+      concurrency: 1
+    });
+
+    const r = await h.run();
+    // Should still succeed despite corrupt snapshot
+    expect(r.done).toBe(1);
+    expect(r.error).toBe(0);
+  });
 });

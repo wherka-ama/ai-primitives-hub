@@ -1458,17 +1458,17 @@ async function fetchFilesForSource( // NOSONAR
     if (isAwesomeCopilot) {
       // Use AwesomeCopilot resolver for awesome-copilot sources
       const { AwesomeCopilotBundleResolver } = await import('../../infra/resolvers/awesome-copilot-resolver');
-      const resolver = new AwesomeCopilotBundleResolver({
+      const acResolver = new AwesomeCopilotBundleResolver({
         repoSlug,
         http,
         tokens,
         collectionsPath: src.collectionsPath
       });
-      const installable = await resolver.resolve({
+      const acInstallable = await acResolver.resolve({
         bundleId: entry.bundleId,
         bundleVersion: entry.bundleVersion
       });
-      if (installable === null || installable.inlineBytes === undefined) {
+      if (acInstallable === null || acInstallable.inlineBytes === undefined) {
         if (verbose) {
           ctx.stdout.write(`[verbose] AwesomeCopilot resolver returned null or no inline bytes for ${entry.bundleId}@${entry.bundleVersion}\n`);
         }
@@ -1477,8 +1477,8 @@ async function fetchFilesForSource( // NOSONAR
       if (verbose) {
         ctx.stdout.write(`[verbose] Using inline bundle from AwesomeCopilot resolver\n`);
       }
-      const files = await new YauzlBundleExtractor().extract(installable.inlineBytes);
-      return files as unknown as Map<string, Buffer>;
+      const acFiles = await new YauzlBundleExtractor().extract(acInstallable.inlineBytes);
+      return acFiles as unknown as Map<string, Buffer>;
     }
 
     // Use GitHub resolver for regular github sources
