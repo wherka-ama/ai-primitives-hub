@@ -1054,9 +1054,11 @@ async function performRemoteInstall(
       fileChecksums: checksums
     };
     let nextLock = upsertEntry(existing, entry);
+    const collectionsPath = opts.sourceConfig?.config?.collectionsPath as string | undefined;
     nextLock = upsertSource(nextLock, installable.ref.sourceId, {
       type: 'github',
-      url: `https://github.com/${repoSlug}`
+      url: `https://github.com/${repoSlug}`,
+      ...(collectionsPath ? { collectionsPath } : {})
     });
     await writeLockfile(lockPath, nextLock, ctx.fs);
 
@@ -1456,7 +1458,12 @@ async function fetchFilesForSource( // NOSONAR
     if (isAwesomeCopilot) {
       // Use AwesomeCopilot resolver for awesome-copilot sources
       const { AwesomeCopilotBundleResolver } = await import('../../infra/resolvers/awesome-copilot-resolver');
-      const resolver = new AwesomeCopilotBundleResolver({ repoSlug, http, tokens });
+      const resolver = new AwesomeCopilotBundleResolver({
+        repoSlug,
+        http,
+        tokens,
+        collectionsPath: src.collectionsPath
+      });
       const installable = await resolver.resolve({
         bundleId: entry.bundleId,
         bundleVersion: entry.bundleVersion

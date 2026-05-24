@@ -64,6 +64,8 @@ export interface LockfileSource {
   url: string;
   /** Optional git branch for git-based sources. */
   branch?: string;
+  /** For awesome-copilot sources: path to collections directory (defaults to "collections"). */
+  collectionsPath?: string;
 }
 
 /** Hub descriptor — mirrors extension's LockfileHubEntry. */
