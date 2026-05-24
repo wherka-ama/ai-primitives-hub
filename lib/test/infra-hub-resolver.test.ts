@@ -22,6 +22,7 @@ import {
   CompositeHubResolver,
   GitHubHubResolver,
   LocalHubResolver,
+  UrlHubResolver,
 } from '../src/infra/resolvers/hub-resolver';
 import {
   createNodeFsAdapter,
@@ -129,6 +130,47 @@ describe('GitHubHubResolver', () => {
     const tokens = { getToken: vi.fn().mockResolvedValue('bad-token') };
     const resolver = new GitHubHubResolver(http, tokens);
     await expect(resolver.resolve(ref)).rejects.toThrow(/Authentication failed/);
+  });
+});
+
+describe('UrlHubResolver', () => {
+  const ref = { type: 'url' as const, location: 'https://example.com/hub-config.yml' };
+
+  it('resolves hub config from a URL', async () => {
+    const http = { fetch: vi.fn().mockResolvedValue({ statusCode: 200, body: new TextEncoder().encode(MINIMAL_HUB_YAML) }) };
+    const tokens = { getToken: vi.fn().mockResolvedValue(null) };
+    const resolver = new UrlHubResolver(http, tokens);
+    const result = await resolver.resolve(ref);
+    expect(result.config.metadata.name).toBe('Test Hub');
+    expect(result.reference).toEqual(ref);
+  });
+
+  it('includes Authorization header when token is available', async () => {
+    const http = { fetch: vi.fn().mockResolvedValue({ statusCode: 200, body: new TextEncoder().encode(MINIMAL_HUB_YAML) }) };
+    const tokens = { getToken: vi.fn().mockResolvedValue('test-token') };
+    const resolver = new UrlHubResolver(http, tokens);
+    await resolver.resolve(ref);
+    expect(http.fetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token'
+        })
+      })
+    );
+  });
+
+  it('throws on 404 error', async () => {
+    const http = { fetch: vi.fn().mockResolvedValue({ statusCode: 404, body: new Uint8Array() }) };
+    const tokens = { getToken: vi.fn().mockResolvedValue(null) };
+    const resolver = new UrlHubResolver(http, tokens);
+    await expect(resolver.resolve(ref)).rejects.toThrow(/URL 404/);
+  });
+
+  it('throws on malformed hub config', async () => {
+    const http = { fetch: vi.fn().mockResolvedValue({ statusCode: 200, body: new TextEncoder().encode('not: valid yaml') }) };
+    const tokens = { getToken: vi.fn().mockResolvedValue(null) };
+    const resolver = new UrlHubResolver(http, tokens);
+    await expect(resolver.resolve(ref)).rejects.toThrow(/malformed/);
   });
 });
 
