@@ -118,11 +118,12 @@ export class HubAddCommand extends BaseHubCommand {
     const mgr = createHubManager({ ctx, http, tokens });
 
     if (!this.refLocation) {
-      return renderError(new RegistryError({
+      renderError(new RegistryError({
         code: 'USAGE.MISSING_FLAG',
         message: 'hub add: --location <ref> is required',
         hint: 'Examples: hub add --type github --location owner/repo --ref main'
       }), ctx);
+      return 1;
     }
 
     const refType = (this.refType ?? 'github') as 'github' | 'local' | 'url';
@@ -171,7 +172,7 @@ export class HubAddCommand extends BaseHubCommand {
 export class HubUseCommand extends BaseHubCommand {
   public static readonly paths = [['hub', 'use']];
   public clear = Option.Boolean('--clear');
-  public hubId = Option.String();
+  public hubId = Option.String({ required: false });
 
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
@@ -189,11 +190,12 @@ export class HubUseCommand extends BaseHubCommand {
     }
 
     if (!this.hubId) {
-      return renderError(new RegistryError({
+      renderError(new RegistryError({
         code: 'USAGE.MISSING_FLAG',
         message: 'hub use: provide a hub id or --clear',
         hint: 'Run `prompt-registry hub list` to see available hubs.'
       }), ctx);
+      return 1;
     }
 
     await mgr.useHub(this.hubId);
@@ -211,7 +213,7 @@ export class HubUseCommand extends BaseHubCommand {
  */
 export class HubRemoveCommand extends BaseHubCommand {
   public static readonly paths = [['hub', 'remove']];
-  public hubId = Option.String();
+  public hubId = Option.String({ required: false });
 
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
@@ -219,11 +221,12 @@ export class HubRemoveCommand extends BaseHubCommand {
     const mgr = createHubManager({ ctx, http, tokens });
 
     if (!this.hubId) {
-      return renderError(new RegistryError({
+      renderError(new RegistryError({
         code: 'USAGE.MISSING_FLAG',
         message: 'hub remove: <hubId> is required',
         hint: 'Run `prompt-registry hub list` to see available hub IDs.'
       }), ctx);
+      return 1;
     }
 
     await mgr.removeHub(this.hubId);
@@ -308,11 +311,12 @@ export class HubSyncCommand extends BaseHubCommand {
     if (!id) {
       const active = await mgr.getActiveHub();
       if (!active) {
-        return renderError(new RegistryError({
+        renderError(new RegistryError({
           code: 'USAGE.MISSING_FLAG',
           message: 'hub sync: no <hubId> given and no active hub',
           hint: 'Run `prompt-registry hub use <id>` or pass the hub id directly.'
         }), ctx);
+        return 1;
       }
       id = active.id;
     }
@@ -340,11 +344,12 @@ export class HubRefreshCommand extends BaseHubCommand {
 
     const active = await mgr.getActiveHub();
     if (!active) {
-      return renderError(new RegistryError({
+      renderError(new RegistryError({
         code: 'HUB.NO_ACTIVE',
         message: 'hub refresh: no active hub',
         hint: 'Run `prompt-registry hub use <id>` first.'
       }), ctx);
+      return 1;
     }
 
     await mgr.syncHub(active.id);

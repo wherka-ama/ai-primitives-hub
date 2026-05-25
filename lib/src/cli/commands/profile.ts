@@ -143,7 +143,15 @@ export class ProfileListCommand extends BaseProfileCommand {
     const built = buildHubMgr(ctx, http, tokens);
     const mgr = built.mgr;
 
-    const hubId = await resolveHubId(mgr, this.hubId);
+    let hubId: string;
+    try {
+      hubId = await resolveHubId(mgr, this.hubId);
+    } catch (err) {
+      if (err instanceof RegistryError) {
+        return failWith(ctx, fmt, 'profile', err);
+      }
+      throw err;
+    }
 
     // Re-load the hub config to pull profiles[].
     const hubs = await mgr.listHubs();
@@ -178,7 +186,7 @@ export class ProfileListCommand extends BaseProfileCommand {
  */
 export class ProfileShowCommand extends BaseProfileCommand {
   public static readonly paths = [['profile', 'show']];
-  public profileId = Option.String();
+  public profileId = Option.String({ required: false });
 
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
@@ -193,7 +201,15 @@ export class ProfileShowCommand extends BaseProfileCommand {
       }));
     }
 
-    const hubId = await resolveHubId(mgr, this.hubId);
+    let hubId: string;
+    try {
+      hubId = await resolveHubId(mgr, this.hubId);
+    } catch (err) {
+      if (err instanceof RegistryError) {
+        return failWith(ctx, fmt, 'profile', err);
+      }
+      throw err;
+    }
 
     const active = await requireActiveHubOrFail(mgr, hubId, 'profile.show', ctx, fmt);
     if (typeof active === 'number') {
@@ -240,7 +256,15 @@ export class ProfileActivateCommand extends BaseProfileCommand {
       }));
     }
 
-    const hubId = await resolveHubId(built.mgr, this.hubId);
+    let hubId: string;
+    try {
+      hubId = await resolveHubId(built.mgr, this.hubId);
+    } catch (err) {
+      if (err instanceof RegistryError) {
+        return failWith(ctx, fmt, 'profile', err);
+      }
+      throw err;
+    }
 
     const active = await requireActiveHubOrFail(built.mgr, hubId, 'profile.activate', ctx, fmt);
     if (typeof active === 'number') {
@@ -419,7 +443,7 @@ export class ProfileCreateCommand extends BaseProfileCommand {
     `
   });
 
-  public profileId = Option.String();
+  public profileId = Option.String({ required: false });
   public name = Option.String('--name');
   public description = Option.String('--description');
   public bundles = Option.String('--bundles');
@@ -519,7 +543,7 @@ export class ProfileEditCommand extends BaseProfileCommand {
     `
   });
 
-  public profileId = Option.String();
+  public profileId = Option.String({ required: false });
   public name = Option.String('--name');
   public description = Option.String('--description');
   public addBundles = Option.String('--add-bundles');
@@ -662,7 +686,7 @@ export class ProfilePublishCommand extends BaseProfileCommand {
     `
   });
 
-  public profileId = Option.String();
+  public profileId = Option.String({ required: false });
   public hubId = Option.String('--hub');
   public profileFile = Option.String('--file');
 
