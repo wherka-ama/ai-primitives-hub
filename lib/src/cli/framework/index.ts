@@ -69,6 +69,15 @@ export {
   isRegistryError,
   renderError,
   failWith,
+  generateTargetHint,
+  readTargetsSafely,
+  throwTargetNotFoundError,
+  resolveTargetName,
+  resolveTarget,
+  validateInputs,
+  getCommandContext,
+  requireActiveHub,
+  requireActiveHubOrFail,
 } from './error';
 export type {
   RunCommandOptions,
@@ -77,3 +86,14 @@ export type {
 export {
   runCommand,
 } from './golden';
+export type {
+  CreateHubManagerOptions,
+} from './hub-manager';
+export {
+  createHubManager,
+  createHttpClientAndTokens,
+} from './hub-manager';
+export {
+  findProjectLockfile,
+  loadTargets,
+} from './target';

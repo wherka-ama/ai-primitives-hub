@@ -14,6 +14,7 @@ import {
   type Context,
   defineCommand,
   formatOutput,
+  getCommandContext,
   Option,
   type OutputFormat,
   RegistryError,
@@ -251,10 +252,7 @@ export class ExplainCommand extends Command {
   public output = Option.String('-o,--output');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     if (!this.code) {
       const err = new RegistryError({

@@ -108,4 +108,35 @@ describe('YauzlBundleExtractor', () => {
     expect(isUnsafeZipPath('a\\b\\c.md')).toBe(false);
     expect(isUnsafeZipPath('..\\b')).toBe(true); // Escapes root
   });
+
+  it('handles empty zip file', async () => {
+    const bytes = await buildZip([]);
+    const ext = new YauzlBundleExtractor();
+    const out = await ext.extract(bytes);
+    expect(out.size).toBe(0);
+  });
+
+  it('handles deeply nested directories', async () => {
+    const bytes = await buildZip([
+      { path: 'a/b/c/d/e/file.md', contents: 'deep' }
+    ]);
+    const ext = new YauzlBundleExtractor();
+    const out = await ext.extract(bytes);
+    expect(out.size).toBe(1);
+    expect(out.has('a/b/c/d/e/file.md')).toBe(true);
+  });
+
+  it('handles files with similar names in different directories', async () => {
+    const bytes = await buildZip([
+      { path: 'a/file.md', contents: 'a' },
+      { path: 'b/file.md', contents: 'b' },
+      { path: 'c/file.md', contents: 'c' }
+    ]);
+    const ext = new YauzlBundleExtractor();
+    const out = await ext.extract(bytes);
+    expect(out.size).toBe(3);
+    expect(new TextDecoder().decode(out.get('a/file.md'))).toBe('a');
+    expect(new TextDecoder().decode(out.get('b/file.md'))).toBe('b');
+    expect(new TextDecoder().decode(out.get('c/file.md'))).toBe('c');
+  });
 });

@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   afterEach,
@@ -11,13 +10,17 @@ import {
 import {
   EtagStore,
 } from '../src/infra/github/etag-store';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 let tmp: string;
+let cleanup: () => void;
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-etag-'));
+  [tmp, cleanup] = createTempDir('pi-etag-');
 });
 afterEach(() => {
-  fs.rmSync(tmp, { recursive: true, force: true });
+  cleanup();
 });
 
 describe('etag-store', () => {

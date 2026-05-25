@@ -11,34 +11,15 @@
  * Converted to clipanion class-based commands with property initializers.
  */
 import * as path from 'node:path';
-import {
-  HubManager,
-  resolveUserConfigPaths,
-} from '../../app/registry';
-import {
-  envTokenProvider,
-  type TokenProvider,
+import type {
+  TokenProvider,
 } from '../../infra/github/token';
-import {
-  NodeHttpClient,
-} from '../../infra/http/node-http-client';
-import {
-  CompositeHubResolver,
-  GitHubHubResolver,
-  LocalHubResolver,
-  UrlHubResolver,
-} from '../../infra/resolvers/hub-resolver';
-import {
-  ActiveHubStore,
-} from '../../infra/stores/active-hub-store';
-import {
-  HubStore,
-} from '../../infra/stores/yaml-hub-store';
 import type {
   HttpClient,
 } from '../../ports/http';
 import {
   Command,
+  createHubManager,
   Option,
 } from '../framework';
 import {
@@ -48,29 +29,6 @@ import {
   RegistryError,
   renderError,
 } from '../framework';
-
-/**
- * Build HubManager instance.
- * @param ctx CLI context.
- * @param http HTTP client (optional test seam).
- * @param tokens Token provider (optional test seam).
- * @returns HubManager instance.
- */
-const buildManager = (ctx: Context, http?: HttpClient, tokens?: TokenProvider): HubManager => {
-  const paths = resolveUserConfigPaths(ctx.env);
-  const httpClient = http ?? new NodeHttpClient();
-  const tokenProvider = tokens ?? envTokenProvider(ctx.env);
-  const resolver = new CompositeHubResolver(
-    new GitHubHubResolver(httpClient, tokenProvider),
-    new LocalHubResolver(ctx.fs),
-    new UrlHubResolver(httpClient, tokenProvider)
-  );
-  return new HubManager(
-    new HubStore(paths.hubs, ctx.fs),
-    new ActiveHubStore(paths.activeHub, ctx.fs),
-    resolver
-  );
-};
 
 /**
  * Context passed to hub command execute methods.
@@ -103,7 +61,7 @@ export class HubListCommand extends BaseHubCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildManager(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
     const hubs = await mgr.listHubs();
     const active = await mgr.getActiveHub();
 
@@ -157,7 +115,7 @@ export class HubAddCommand extends BaseHubCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildManager(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
 
     if (!this.refLocation) {
       return renderError(new RegistryError({
@@ -218,7 +176,7 @@ export class HubUseCommand extends BaseHubCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildManager(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
 
     if (this.clear) {
       await mgr.useHub(null);
@@ -258,7 +216,7 @@ export class HubRemoveCommand extends BaseHubCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildManager(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
 
     if (!this.hubId) {
       return renderError(new RegistryError({
@@ -344,7 +302,7 @@ export class HubSyncCommand extends BaseHubCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildManager(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
 
     let id = this.hubId;
     if (!id) {
@@ -378,7 +336,7 @@ export class HubRefreshCommand extends BaseHubCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildManager(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
 
     const active = await mgr.getActiveHub();
     if (!active) {

@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   afterEach,
@@ -14,6 +13,9 @@ import {
 import {
   harvest,
 } from '../src/infra/harvest/harvester';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 function writeBundle(root: string, id: string): void {
   const dir = path.join(root, id);
@@ -41,11 +43,12 @@ items:
 
 describe('LocalFolderBundleProvider', () => {
   let tmp: string;
+  let cleanup: () => void;
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-local-'));
+    [tmp, cleanup] = createTempDir('pi-local-');
   });
   afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    cleanup();
   });
 
   it('lists bundles, reads manifests, and feeds the harvester', async () => {

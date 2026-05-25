@@ -36,6 +36,7 @@ import {
 import {
   Command,
   failWith,
+  getCommandContext,
   Option,
 } from '../framework';
 import {
@@ -197,10 +198,7 @@ export class DiscoverCommand extends Command {
   public interactive = Option.Boolean('--interactive');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     const fmt = (this.output ?? 'text');
     const indexPath = this.index ?? defaultIndexFile(ctx.env);

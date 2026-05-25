@@ -109,3 +109,37 @@ export function filesFromRecord(record: Record<string, string>): import('../../s
   }
   return map;
 }
+
+/**
+ * Simple mock filesystem for tests.
+ * Provides basic implementations of common filesystem operations.
+ */
+export function createSimpleMockFs(): import('../../src/ports').FileSystem {
+  return {
+    readFile: async () => new Uint8Array(),
+    writeFile: async () => {},
+    exists: async () => false,
+    mkdir: async () => {},
+    readdir: async () => [],
+    rm: async () => {},
+    stat: async () => ({ type: 'file' }),
+    readJson: async () => ({}),
+    writeJson: async () => {},
+    readDir: async () => [],
+    remove: async () => {}
+  };
+}
+
+/**
+ * Create a temporary directory for tests with automatic cleanup.
+ * @param prefix - Directory name prefix (e.g., 'pi-test-')
+ * @returns Tuple of [directory path, cleanup function]
+ */
+export function createTempDir(prefix: string): [string, () => void] {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const cleanup = () => fs.rmSync(tmp, { recursive: true, force: true });
+  return [tmp, cleanup];
+}

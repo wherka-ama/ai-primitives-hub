@@ -9,37 +9,19 @@
  *
  * Converted to clipanion class-based commands with property initializers.
  */
-import {
-  HubManager,
-  resolveUserConfigPaths,
-} from '../../app/registry';
+
 import {
   generateSourceId,
 } from '../../domain/source-id';
-import {
-  envTokenProvider,
-  type TokenProvider,
+import type {
+  TokenProvider,
 } from '../../infra/github/token';
-import {
-  NodeHttpClient,
-} from '../../infra/http/node-http-client';
-import {
-  CompositeHubResolver,
-  GitHubHubResolver,
-  LocalHubResolver,
-  UrlHubResolver,
-} from '../../infra/resolvers/hub-resolver';
-import {
-  ActiveHubStore,
-} from '../../infra/stores/active-hub-store';
-import {
-  HubStore,
-} from '../../infra/stores/yaml-hub-store';
 import type {
   HttpClient,
 } from '../../ports/http';
 import {
   Command,
+  createHubManager,
   Option,
 } from '../framework';
 import {
@@ -49,29 +31,6 @@ import {
   RegistryError,
   renderError,
 } from '../framework';
-
-/**
- * Build HubManager instance.
- * @param ctx CLI context.
- * @param http HTTP client (optional test seam).
- * @param tokens Token provider (optional test seam).
- * @returns HubManager instance.
- */
-const buildMgr = (ctx: Context, http?: HttpClient, tokens?: TokenProvider): HubManager => {
-  const paths = resolveUserConfigPaths(ctx.env);
-  const httpClient = http ?? new NodeHttpClient();
-  const tokenProvider = tokens ?? envTokenProvider(ctx.env);
-  const resolver = new CompositeHubResolver(
-    new GitHubHubResolver(httpClient, tokenProvider),
-    new LocalHubResolver(ctx.fs),
-    new UrlHubResolver(httpClient, tokenProvider)
-  );
-  return new HubManager(
-    new HubStore(paths.hubs, ctx.fs),
-    new ActiveHubStore(paths.activeHub, ctx.fs),
-    resolver
-  );
-};
 
 /**
  * Context passed to source command execute methods.
@@ -108,7 +67,7 @@ export class SourceAddCommand extends BaseSourceCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildMgr(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
 
     if (!this.url) {
       return renderError(new RegistryError({
@@ -142,7 +101,7 @@ export class SourceListCommand extends BaseSourceCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildMgr(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
 
     try {
       const sources = (this.hubId && this.hubId.length > 0)
@@ -177,7 +136,7 @@ export class SourceRemoveCommand extends BaseSourceCommand {
   public async execute() {
     const { ctx, http, tokens } = this.commandContext;
     const fmt = (this.output ?? 'text') as OutputFormat;
-    const mgr = buildMgr(ctx, http, tokens);
+    const mgr = createHubManager({ ctx, http, tokens });
 
     if (!this.sourceId) {
       return renderError(new RegistryError({

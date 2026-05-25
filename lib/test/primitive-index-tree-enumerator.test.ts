@@ -1,5 +1,3 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   describe,
@@ -21,6 +19,9 @@ import {
   isPrimitiveCandidatePath,
   resolveCommitSha,
 } from '../src/infra/harvest/tree-enumerator';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 function mockResponse(init: {
   status?: number;
@@ -111,7 +112,7 @@ describe('tree-enumerator', () => {
   });
 
   it('resolveCommitSha uses EtagStore and replays cached sha on 304', async () => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-enum-etag-'));
+    const [tmp, cleanup] = createTempDir('pi-enum-etag-');
     let calls = 0;
     const fetchImpl: FetchLike = async (req) => {
       calls += 1;
@@ -133,7 +134,7 @@ describe('tree-enumerator', () => {
     expect(sha2).toBe('sha-1');
     expect(calls).toBe(2);
 
-    fs.rmSync(tmp, { recursive: true, force: true });
+    cleanup();
   });
 
   it('supports a custom path prefix filter (for awesome-copilot collectionsPath)', async () => {

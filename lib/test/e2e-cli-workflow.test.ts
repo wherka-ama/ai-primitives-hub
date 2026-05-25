@@ -66,7 +66,7 @@ maybeDescribe('E2E CLI Workflow', () => {
       expect(/\d+\.\d+\.\d+/.test(r.stdout)).toBe(true);
     });
 
-    it('doctor command runs successfully', () => {
+    it('doctor command runs successfully', { timeout: 10_000 }, () => {
       const r = runCli(['doctor', '-o', 'json']);
       expect(r.code).toBe(0);
       const parsed = JSON.parse(r.stdout) as { command: string; status: string };

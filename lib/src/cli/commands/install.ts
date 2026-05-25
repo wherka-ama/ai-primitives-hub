@@ -12,7 +12,6 @@
 import * as path from 'node:path';
 import inquirer from 'inquirer';
 import {
-  HubManager,
   resolveUserConfigPaths,
 } from '../../app/registry';
 import {
@@ -46,12 +45,6 @@ import {
   GitHubBundleResolver,
 } from '../../infra/resolvers/github-resolver';
 import {
-  CompositeHubResolver,
-  GitHubHubResolver,
-  LocalHubResolver,
-  UrlHubResolver,
-} from '../../infra/resolvers/hub-resolver';
-import {
   readLocalBundle,
 } from '../../infra/resolvers/local-resolver';
 import {
@@ -61,7 +54,6 @@ import {
   ActiveHubStore,
 } from '../../infra/stores/active-hub-store';
 import {
-  findLockfile,
   type LockfileEntry,
   type LockfileSource,
   readLockfile,
@@ -74,7 +66,6 @@ import {
 } from '../../infra/stores/target-state-store';
 import {
   readTargets,
-  readTargetsHierarchical,
 } from '../../infra/stores/target-store';
 import {
   HubStore,
@@ -97,8 +88,12 @@ import {
 } from '../../ports/source-resolver';
 import {
   Command,
+  createHubManager,
   failWith,
+  findProjectLockfile,
+  loadTargets,
   Option,
+  requireActiveHubOrFail,
 } from '../framework';
 import {
   type CommandDefinition,
@@ -106,7 +101,11 @@ import {
   defineCommand,
   formatOutput,
   type OutputFormat,
+  readTargetsSafely,
   RegistryError,
+  resolveTarget,
+  resolveTargetName,
+  validateInputs,
 } from '../framework';
 
 /**
@@ -273,7 +272,7 @@ export class InstallCommand extends BaseInstallCommand {
 
     await detectInstallContext(opts, ctx);
 
-    const { noBundle, noLockfile } = validateInstallInputs(opts);
+    const { bundle: noBundle, lockfile: noLockfile } = validateInputs(opts, { flags: ['bundle', 'lockfile'] });
     if (noBundle && noLockfile && !opts.from && !opts.source) {
       return failWith(ctx, fmt, 'install', new RegistryError({
         code: 'USAGE.MISSING_FLAG',
@@ -286,9 +285,9 @@ export class InstallCommand extends BaseInstallCommand {
     }
 
     try {
-      const targetName = await resolveTargetName(opts, ctx);
+      const targetName = await resolveTargetName(opts.target, 'install', ctx, () => readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
       checkAllowTarget(targetName, opts);
-      const target = await resolveTarget(targetName, ctx);
+      const target = await resolveTarget(targetName, 'install', ctx, () => readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
 
       const mode = determineInstallMode(opts);
       if (mode === undefined) {
@@ -311,7 +310,7 @@ export class InstallCommand extends BaseInstallCommand {
  * @returns Installation mode.
  */
 function determineInstallMode(opts: InstallOptions): 'local' | 'lockfile' | 'remote' | 'interactive' | 'list' | undefined {
-  const { noBundle } = validateInstallInputs(opts);
+  const { bundle: noBundle } = validateInputs(opts, { flags: ['bundle', 'lockfile'] });
 
   if (opts.source !== undefined && opts.source.length > 0 && noBundle) {
     return opts.interactive ? 'interactive' : 'list';
@@ -349,14 +348,14 @@ async function autoDetectHubSource(opts: InstallOptions, ctx: Context, userPaths
  * @param ctx CLI context.
  */
 async function detectInstallContext(opts: InstallOptions, ctx: Context): Promise<void> {
-  const { noBundle, noLockfile } = validateInstallInputs(opts);
+  const { bundle: noBundle, lockfile: noLockfile } = validateInputs(opts, { flags: ['bundle', 'lockfile'] });
   const noExplicitSource = !opts.source || opts.source.length === 0;
   const noMode = noBundle && noLockfile && !opts.from && noExplicitSource;
 
   const userPaths = resolveUserConfigPaths(ctx.env);
 
   if (noMode && !opts.interactive) {
-    const found = await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
+    const found = await findProjectLockfile(ctx);
     if (found !== null) {
       opts.lockfile = found;
     }
@@ -371,10 +370,9 @@ async function detectInstallContext(opts: InstallOptions, ctx: Context): Promise
   }
 
   if (!opts.target || opts.target.length === 0) {
-    const targets = await readTargetsHierarchical(
-      { cwd: ctx.cwd(), fs: ctx.fs },
-      userPaths.userTargets
-    ).catch(() => []);
+    const targets = await readTargetsSafely(
+      loadTargets(ctx)
+    );
     if (targets.length === 1) {
       opts.target = targets[0].name;
     }
@@ -456,11 +454,6 @@ const createWriterFactory = (
  * @param opts Install options.
  * @returns Validation result.
  */
-function validateInstallInputs(opts: InstallOptions): { noBundle: boolean; noLockfile: boolean } {
-  const noBundle = opts.bundle === undefined || opts.bundle.length === 0;
-  const noLockfile = opts.lockfile === undefined || opts.lockfile.length === 0;
-  return { noBundle, noLockfile };
-}
 
 /**
  * List bundles from a hub source.
@@ -477,28 +470,12 @@ async function listSourceBundles(
   const hubId = opts.source as string;
 
   try {
-    const userPaths = resolveUserConfigPaths(ctx.env);
-    const httpClient = new NodeHttpClient();
-    const tokenProvider = defaultTokenProvider(ctx.env);
-    const resolver = new CompositeHubResolver(
-      new GitHubHubResolver(httpClient, tokenProvider),
-      new LocalHubResolver(ctx.fs),
-      new UrlHubResolver(httpClient, tokenProvider)
-    );
-    const mgr = new HubManager(
-      new HubStore(userPaths.hubs, ctx.fs),
-      new ActiveHubStore(userPaths.activeHub, ctx.fs),
-      resolver
-    );
+    const mgr = createHubManager({ ctx });
 
     await mgr.syncHub(hubId);
-    const active = await mgr.getActiveHub();
-    if (active?.id !== hubId) {
-      return failWith(ctx, fmt, 'install', new RegistryError({
-        code: 'HUB.NOT_FOUND',
-        message: `install: hub "${hubId}" is not active or not found`,
-        hint: `Run \`prompt-registry hub use ${hubId}\` first.`
-      }));
+    const active = await requireActiveHubOrFail(mgr, hubId, 'install', ctx, fmt);
+    if (typeof active === 'number') {
+      return active;
     }
 
     const bundles = active.config.profiles.flatMap((p: { bundles: { id: string; version: string; source: string }[] }) => p.bundles);
@@ -553,15 +530,11 @@ async function interactiveBundleSelection(
   const hubId = opts.source as string;
 
   try {
-    const mgr = await setupHubManager(ctx);
+    const mgr = createHubManager({ ctx });
     await mgr.syncHub(hubId);
-    const active = await mgr.getActiveHub();
-    if (active?.id !== hubId) {
-      return failWith(ctx, fmt, 'install', new RegistryError({
-        code: 'HUB.NOT_FOUND',
-        message: `install: hub "${hubId}" is not active or not found`,
-        hint: `Run \`prompt-registry hub use ${hubId}\` first.`
-      }));
+    const active = await requireActiveHubOrFail(mgr, hubId, 'install', ctx, fmt);
+    if (typeof active === 'number') {
+      return active;
     }
 
     const sourceMap = buildSourceMap(active.config.sources);
@@ -593,22 +566,6 @@ async function interactiveBundleSelection(
   } catch (err) {
     return failWith(ctx, fmt, 'install', buildInstallError(err));
   }
-}
-
-async function setupHubManager(ctx: Context): Promise<HubManager> {
-  const userPaths = resolveUserConfigPaths(ctx.env);
-  const httpClient = new NodeHttpClient();
-  const tokenProvider = defaultTokenProvider(ctx.env);
-  const resolver = new CompositeHubResolver(
-    new GitHubHubResolver(httpClient, tokenProvider),
-    new LocalHubResolver(ctx.fs),
-    new UrlHubResolver(httpClient, tokenProvider)
-  );
-  return new HubManager(
-    new HubStore(userPaths.hubs, ctx.fs),
-    new ActiveHubStore(userPaths.activeHub, ctx.fs),
-    resolver
-  );
 }
 
 function buildSourceMap(sources: RegistrySource[]): Map<string, RegistrySource> {
@@ -717,29 +674,6 @@ async function installSelectedBundles(
  * @param ctx CLI context.
  * @returns Resolved target name.
  */
-async function resolveTargetName(opts: InstallOptions, ctx: Context): Promise<string> {
-  const targetName = opts.target;
-  if (targetName === undefined || targetName.length === 0) {
-    const stateStore = new TargetStateStore({
-      fs: ctx.fs,
-      statePath: path.join(ctx.cwd(), '.prompt-registry', 'target-state.json')
-    });
-    const lastUsed = await stateStore.getLastUsedTarget();
-    if (lastUsed !== null) {
-      return lastUsed;
-    }
-    const configuredTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs }).catch(() => []);
-    const hint = configuredTargets.length > 1
-      ? `Multiple targets configured: ${configuredTargets.map((t) => t.name).join(', ')}. Specify with --target <name>.`
-      : 'Configure a target with `prompt-registry target add <name> --type <kind>` first.';
-    throw new RegistryError({
-      code: 'USAGE.MISSING_FLAG',
-      message: 'install: --target <name> is required',
-      hint
-    });
-  }
-  return targetName;
-}
 
 /**
  * Check if target is in allowlist.
@@ -769,21 +703,6 @@ function checkAllowTarget(targetName: string, opts: InstallOptions): void {
  * @param ctx CLI context.
  * @returns Target configuration.
  */
-async function resolveTarget(targetName: string, ctx: Context): Promise<Target> {
-  const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
-  const target = targets.find((t) => t.name === targetName);
-  if (target === undefined) {
-    throw new RegistryError({
-      code: 'USAGE.MISSING_FLAG',
-      message: `install: target "${targetName}" is not configured`,
-      hint: targets.length === 0
-        ? 'Run `prompt-registry target add <name> --type <kind>` to add one.'
-        : `Configured targets: ${targets.map((t) => t.name).join(', ')}.`,
-      context: { target: targetName }
-    });
-  }
-  return target;
-}
 
 /**
  * Perform local install from directory.
@@ -1221,7 +1140,7 @@ export const createInstallCommand = (
     category: 'Installation',
     run: async ({ ctx }: { ctx: Context }): Promise<number> => {
       const fmt = opts.output ?? 'text';
-      const { noBundle, noLockfile } = validateInstallInputs(opts);
+      const { bundle: noBundle, lockfile: noLockfile } = validateInputs(opts, { flags: ['bundle', 'lockfile'] });
       if (noBundle && noLockfile) {
         return failWith(ctx, fmt, 'install', new RegistryError({
           code: 'USAGE.MISSING_FLAG',
@@ -1233,9 +1152,9 @@ export const createInstallCommand = (
       }
 
       try {
-        const targetName = await resolveTargetName(opts, ctx);
+        const targetName = await resolveTargetName(opts.target, 'install', ctx, () => readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
         checkAllowTarget(targetName, opts);
-        const target = await resolveTarget(targetName, ctx);
+        const target = await resolveTarget(targetName, 'install', ctx, () => readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
 
         if (opts.from !== undefined && opts.from.length > 0) {
           return await performLocalInstall(opts, target, ctx, fmt);
@@ -1453,7 +1372,7 @@ async function fetchFilesForSource( // NOSONAR
         bundleId: entry.bundleId,
         bundleVersion: entry.bundleVersion
       });
-      if (acInstallable === null || acInstallable.inlineBytes === undefined) {
+      if (acInstallable?.inlineBytes === undefined) {
         if (verbose) {
           ctx.stdout.write(`[verbose] AwesomeCopilot resolver returned null or no inline bytes for ${entry.bundleId}@${entry.bundleVersion}\n`);
         }

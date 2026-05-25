@@ -1,6 +1,3 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import {
   afterEach,
   beforeEach,
@@ -25,13 +22,17 @@ import {
 import {
   GitHubSingleBundleProvider,
 } from '../src/infra/harvest/bundle-providers/github-bundle-provider';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 let tmp: string;
+let cleanup: () => void;
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-ghprov-'));
+  [tmp, cleanup] = createTempDir('pi-ghprov-');
 });
 afterEach(() => {
-  fs.rmSync(tmp, { recursive: true, force: true });
+  cleanup();
 });
 
 function jsonResp(body: unknown, status = 200): Response {

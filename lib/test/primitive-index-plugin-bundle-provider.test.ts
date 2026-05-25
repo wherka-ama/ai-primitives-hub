@@ -1,5 +1,3 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   describe,
@@ -23,6 +21,9 @@ import {
 import {
   AwesomeCopilotPluginBundleProvider,
 } from '../src/infra/harvest/bundle-providers/plugin-bundle-provider';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 function jsonResponse(body: unknown): Response {
   return Response.json(body, {
@@ -97,7 +98,7 @@ describe('plugin-bundle-provider', () => {
       throw new Error(`unexpected URL: ${url}`);
     };
     const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pbp-'));
+    const [tmpDir, cleanup] = createTempDir('pbp-');
     const cache = new BlobCache(path.join(tmpDir, 'blobs'));
 
     const spec: HubSourceSpec = {
@@ -142,7 +143,7 @@ describe('plugin-bundle-provider', () => {
       () => provider.readFile(byId.get('p1')!, 'plugins/p2/prompts/hello.prompt.md')
     ).rejects.toThrow(/not part of plugin/u);
 
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup();
   });
 
   it('surfaces plugin-declared MCP servers via manifest.mcp.items', async () => {
@@ -195,7 +196,7 @@ describe('plugin-bundle-provider', () => {
       throw new Error(`unexpected URL: ${url}`);
     };
     const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch: fakeFetch });
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pbp-mcp-'));
+    const [tmpDir, cleanup] = createTempDir('pbp-mcp-');
     const cache = new BlobCache(path.join(tmpDir, 'blobs'));
     const spec: HubSourceSpec = {
       id: 'mcp-src', name: 'mcp-src', type: 'awesome-copilot-plugin',
@@ -215,7 +216,6 @@ describe('plugin-bundle-provider', () => {
     ).toStrictEqual(
       { type: 'stdio', command: 'npx', args: ['-y', '@upstash/context7'] }
     );
-
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup();
   });
 });

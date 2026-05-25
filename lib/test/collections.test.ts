@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   afterEach,
@@ -9,14 +8,28 @@ import {
   it,
 } from 'vitest';
 import {
+  generateMarkdown,
   listCollectionFiles,
+  loadItemKindsFromSchema,
   readCollection,
   resolveCollectionItemPaths,
+  validateAllCollections,
+  validateCollectionFile,
 } from '../src/app/collection/read-collection';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
-function createTempDir(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+let tempDir: string;
+let cleanup: () => void;
+
+beforeEach(() => {
+  [tempDir, cleanup] = createTempDir('collections-test-');
+});
+
+afterEach(() => {
+  cleanup();
+});
 
 function writeFile(root: string, relativePath: string, content: string): void {
   const fullPath = path.join(root, relativePath);
@@ -24,21 +37,7 @@ function writeFile(root: string, relativePath: string, content: string): void {
   fs.writeFileSync(fullPath, content);
 }
 
-function cleanup(dir: string): void {
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
 describe('Collections Module', () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = createTempDir('collections-test-');
-  });
-
-  afterEach(() => {
-    cleanup(tempDir);
-  });
-
   describe('listCollectionFiles()', () => {
     it('should find .collection.yml files', () => {
       writeFile(tempDir, 'collections/first.collection.yml', 'id: first\nname: First\nitems: []');
@@ -233,6 +232,131 @@ items: []
       expect(paths.includes('skills/my-skill/SKILL.md')).toBe(true);
       expect(paths.includes('skills/my-skill/assets/image.png')).toBe(true);
       expect(paths.includes('prompts/simple.prompt.md')).toBe(true);
+    });
+  });
+
+  describe('loadItemKindsFromSchema()', () => {
+    it('should return fallback kinds when schema is unavailable', () => {
+      const kinds = loadItemKindsFromSchema('/nonexistent/path');
+
+      expect(kinds).toEqual(['prompt', 'instruction', 'agent', 'skill']);
+    });
+
+    it('should return kinds from schema when available', () => {
+      const kinds = loadItemKindsFromSchema();
+
+      expect(Array.isArray(kinds)).toBe(true);
+      expect(kinds.length).toBeGreaterThan(0);
+      expect(kinds).toContain('prompt');
+      expect(kinds).toContain('skill');
+    });
+  });
+
+  describe('validateCollectionFile()', () => {
+    it('should return error when file does not exist', () => {
+      const result = validateCollectionFile(tempDir, 'collections/nonexistent.yml');
+
+      expect(result.ok).toBe(false);
+      expect(result.errors).toContain('collections/nonexistent.yml: Collection file not found');
+    });
+
+    it('should return error for invalid YAML', () => {
+      writeFile(tempDir, 'collections/invalid.yml', 'invalid: [unclosed');
+
+      const result = validateCollectionFile(tempDir, 'collections/invalid.yml');
+
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes('YAML parse error'))).toBe(true);
+    });
+
+    it('should validate collection and check referenced files', () => {
+      writeFile(tempDir, 'collections/valid.yml', `
+id: test
+name: Test
+items:
+  - path: prompts/test.md
+    kind: prompt
+`);
+      writeFile(tempDir, 'prompts/test.md', '# Test');
+
+      const result = validateCollectionFile(tempDir, 'collections/valid.yml');
+
+      expect(result.ok).toBe(true);
+      expect(result.errors).toEqual([]);
+      expect(result.collection).toBeDefined();
+    });
+
+    it('should return error when referenced file does not exist', () => {
+      writeFile(tempDir, 'collections/missing-ref.yml', `
+id: test
+name: Test
+items:
+  - path: prompts/missing.md
+    kind: prompt
+`);
+
+      const result = validateCollectionFile(tempDir, 'collections/missing-ref.yml');
+
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes('referenced file not found'))).toBe(true);
+    });
+  });
+
+  describe('validateAllCollections()', () => {
+    it('should validate multiple collections and detect duplicates', () => {
+      writeFile(tempDir, 'collections/first.yml', `
+id: duplicate-id
+name: First
+items: []
+`);
+      writeFile(tempDir, 'collections/second.yml', `
+id: duplicate-id
+name: Second
+items: []
+`);
+
+      const result = validateAllCollections(tempDir, ['collections/first.yml', 'collections/second.yml']);
+
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes('Duplicate collection ID'))).toBe(true);
+    });
+
+    it('should return ok when all collections are valid', () => {
+      writeFile(tempDir, 'collections/first.yml', `
+id: first
+name: First
+items: []
+`);
+      writeFile(tempDir, 'collections/second.yml', `
+id: second
+name: Second
+items: []
+`);
+
+      const result = validateAllCollections(tempDir, ['collections/first.yml', 'collections/second.yml']);
+
+      expect(result.ok).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+  });
+
+  describe('generateMarkdown()', () => {
+    it('should generate success markdown', () => {
+      const result = { ok: true, errors: [], fileResults: [] };
+      const md = generateMarkdown(result, 2);
+
+      expect(md).toContain('✅');
+      expect(md).toContain('All 2 collection(s) validated successfully!');
+    });
+
+    it('should generate error markdown', () => {
+      const result = { ok: false, errors: ['Error 1', 'Error 2'], fileResults: [] };
+      const md = generateMarkdown(result, 2);
+
+      expect(md).toContain('❌');
+      expect(md).toContain('2 error(s)');
+      expect(md).toContain('Error 1');
+      expect(md).toContain('Error 2');
     });
   });
 });

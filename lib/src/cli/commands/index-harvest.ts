@@ -28,6 +28,7 @@ import {
   defineCommand,
   failWith,
   formatOutput,
+  getCommandContext,
   Option,
   type OutputFormat,
   RegistryError,
@@ -220,10 +221,7 @@ export class IndexHarvestCommand extends Command {
   public output = Option.String('-o,--output');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     const fmt = (this.output ?? 'text') as OutputFormat;
     const noHubConfig = this.noHubConfig === true;

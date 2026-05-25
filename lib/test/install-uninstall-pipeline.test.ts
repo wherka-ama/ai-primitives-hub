@@ -173,4 +173,83 @@ describe('UninstallPipeline', () => {
       expect(results.length).toBe(0);
     });
   });
+
+  describe('plan()', () => {
+    it('should plan uninstall for specific bundle ID', async () => {
+      const pipeline = new UninstallPipeline({
+        fs: mockFs as any,
+        target,
+        lockfile: '/repo/prompt-registry.lock.json',
+        writerFactory: () => mockWriter as any
+      });
+
+      const plan = await pipeline.plan('bundle1');
+
+      expect(plan.bundleId).toBe('bundle1');
+      expect(plan.filesToRemove).toEqual(['prompts/p1.md', 'prompts/p2.md']);
+      expect(plan.lockfileEntry).toBeDefined();
+    });
+
+    it('should return empty files when bundle not found', async () => {
+      const pipeline = new UninstallPipeline({
+        fs: mockFs as any,
+        target,
+        lockfile: '/repo/prompt-registry.lock.json',
+        writerFactory: () => mockWriter as any
+      });
+
+      const plan = await pipeline.plan('nonexistent');
+
+      expect(plan.bundleId).toBe('nonexistent');
+      expect(plan.filesToRemove).toEqual([]);
+      expect(plan.lockfileEntry).toBeNull();
+    });
+  });
+
+  describe('run()', () => {
+    it('should uninstall specific bundle', async () => {
+      const pipeline = new UninstallPipeline({
+        fs: mockFs as any,
+        target,
+        lockfile: '/repo/prompt-registry.lock.json',
+        writerFactory: () => mockWriter as any
+      });
+
+      const result = await pipeline.run('bundle1');
+
+      expect(result.bundleId).toBe('bundle1');
+      expect(result.removed).toEqual(['prompts/p1.md', 'prompts/p2.md']);
+      expect(result.skipped).toEqual([]);
+    });
+
+    it('should return empty result when bundle not found', async () => {
+      const pipeline = new UninstallPipeline({
+        fs: mockFs as any,
+        target,
+        lockfile: '/repo/prompt-registry.lock.json',
+        writerFactory: () => mockWriter as any
+      });
+
+      const result = await pipeline.run('nonexistent');
+
+      expect(result.bundleId).toBe('nonexistent');
+      expect(result.removed).toEqual([]);
+      expect(result.skipped).toEqual([]);
+    });
+
+    it('should update lockfile after uninstall', async () => {
+      const pipeline = new UninstallPipeline({
+        fs: mockFs as any,
+        target,
+        lockfile: '/repo/prompt-registry.lock.json',
+        writerFactory: () => mockWriter as any
+      });
+
+      await pipeline.run('bundle1');
+
+      const updatedLock = JSON.parse(mockFs.files['/repo/prompt-registry.lock.json']);
+      expect(updatedLock.entries.length).toBe(1);
+      expect(updatedLock.entries[0].bundleId).toBe('bundle2');
+    });
+  });
 });

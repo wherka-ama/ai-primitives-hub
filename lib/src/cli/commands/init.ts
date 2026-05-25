@@ -14,7 +14,6 @@
 import * as path from 'node:path';
 import inquirer from 'inquirer';
 import {
-  HubManager,
   resolveUserConfigPaths,
 } from '../../app/registry';
 import {
@@ -25,22 +24,9 @@ import {
 import {
   getEnabledDefaultHubs,
 } from '../../infra/default-hubs';
-import {
-  defaultTokenProvider,
-  type TokenProvider,
+import type {
+  TokenProvider,
 } from '../../infra/github/token';
-import {
-  NodeHttpClient,
-} from '../../infra/http/node-http-client';
-import {
-  CompositeHubResolver,
-  GitHubHubResolver,
-  LocalHubResolver,
-  UrlHubResolver,
-} from '../../infra/resolvers/hub-resolver';
-import {
-  ActiveHubStore,
-} from '../../infra/stores/active-hub-store';
 import {
   writeLockfile,
 } from '../../infra/stores/json-lockfile-store';
@@ -51,9 +37,6 @@ import {
   readTargets,
   writeTargets,
 } from '../../infra/stores/target-store';
-import {
-  HubStore,
-} from '../../infra/stores/yaml-hub-store';
 import type {
   HttpClient,
 } from '../../ports/http';
@@ -61,6 +44,7 @@ import {
   Command,
   type CommandDefinition,
   type Context,
+  createHubManager,
   defineCommand,
   formatOutput,
   Option,
@@ -412,7 +396,7 @@ async function importAndSyncHub(
   hubRefParam: string | undefined,
   opts: InitOptions
 ): Promise<string | null> {
-  const mgr = buildHubManager(ctx, opts.http, opts.tokens);
+  const mgr = createHubManager({ ctx, http: opts.http, tokens: opts.tokens });
   const refType = hubType ?? opts.hubType ?? inferHubType(hubRef);
   const location = refType === 'local' && !path.isAbsolute(hubRef)
     ? path.resolve(ctx.cwd(), hubRef)
@@ -612,29 +596,6 @@ function inferHubType(location: string): HubType {
     return 'url';
   }
   return 'github';
-}
-
-/**
- * Build HubManager with the given seams.
- * @param ctx CLI context.
- * @param http HTTP client seam.
- * @param tokens Token provider seam.
- * @returns HubManager instance.
- */
-function buildHubManager(ctx: Context, http?: HttpClient, tokens?: TokenProvider): HubManager {
-  const paths = resolveUserConfigPaths(ctx.env);
-  const httpClient = http ?? new NodeHttpClient();
-  const tokenProvider = tokens ?? defaultTokenProvider(ctx.env);
-  const resolver = new CompositeHubResolver(
-    new GitHubHubResolver(httpClient, tokenProvider),
-    new LocalHubResolver(ctx.fs),
-    new UrlHubResolver(httpClient, tokenProvider)
-  );
-  return new HubManager(
-    new HubStore(paths.hubs, ctx.fs),
-    new ActiveHubStore(paths.activeHub, ctx.fs),
-    resolver
-  );
 }
 
 /**

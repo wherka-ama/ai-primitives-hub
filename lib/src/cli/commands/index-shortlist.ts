@@ -27,6 +27,7 @@ import {
   defineCommand,
   failWith,
   formatOutput,
+  getCommandContext,
   Option,
   type OutputFormat,
   RegistryError,
@@ -252,10 +253,7 @@ export class IndexShortlistNewCommand extends Command {
   public output = Option.String('-o,--output');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     const fmt = (this.output ?? 'text') as OutputFormat;
     const indexPath = this.index ?? defaultIndexFile(ctx.env);
@@ -306,10 +304,7 @@ export class IndexShortlistAddCommand extends Command {
   public output = Option.String('-o,--output');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     const fmt = (this.output ?? 'text') as OutputFormat;
     const indexPath = this.index ?? defaultIndexFile(ctx.env);
@@ -371,10 +366,7 @@ export class IndexShortlistRemoveCommand extends Command {
   public output = Option.String('-o,--output');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     const fmt = (this.output ?? 'text') as OutputFormat;
     const indexPath = this.index ?? defaultIndexFile(ctx.env);
@@ -434,10 +426,7 @@ export class IndexShortlistListCommand extends Command {
   public output = Option.String('-o,--output');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     const fmt = (this.output ?? 'text') as OutputFormat;
     const indexPath = this.index ?? defaultIndexFile(ctx.env);

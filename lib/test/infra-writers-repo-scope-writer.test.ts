@@ -405,6 +405,52 @@ skills:
     // Should not throw
     await writer.remove('test-bundle', manifest);
   });
+
+  it('handles unknown item types gracefully', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'commit'
+    });
+
+    const manifest = `id: test-bundle
+prompts:
+  - id: test-prompt
+    file: prompts/test.md
+    type: unknown-type`;
+
+    const files = new Map<string, Uint8Array>([
+      ['deployment-manifest.yml', new TextEncoder().encode(manifest)]
+    ]);
+
+    const result = await writer.write(files);
+
+    // Unknown types should be skipped
+    expect(result.written).toEqual([]);
+  });
+
+  it('handles file paths with special characters', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'commit'
+    });
+
+    const manifest = `id: test-bundle
+prompts:
+  - id: test-prompt
+    file: prompts/test-file.md
+    type: prompt`;
+
+    const files = new Map<string, Uint8Array>([
+      ['deployment-manifest.yml', new TextEncoder().encode(manifest)],
+      ['prompts/test-file.md', new TextEncoder().encode('# Test')]
+    ]);
+
+    const result = await writer.write(files);
+
+    expect(result.written.length).toBeGreaterThan(0);
+  });
 });
 
 describe('RepositoryScopeWriterAdapter', () => {
@@ -444,5 +490,18 @@ describe('RepositoryScopeWriterAdapter', () => {
     await adapter.remove({ type: 'vscode' } as any, 'copilot/prompts/test.md');
 
     expect(await realFs.exists(testFile)).toBe(false);
+  });
+
+  it('handles non-existent file removal gracefully', async () => {
+    const writer = new RepositoryScopeWriter({
+      fs: realFs,
+      workspaceRoot: tmp,
+      commitMode: 'commit'
+    });
+
+    const adapter = new RepositoryScopeWriterAdapter(writer);
+
+    // Should not throw when removing a non-existent file
+    await adapter.remove({ type: 'vscode' } as any, 'copilot/prompts/nonexistent.md');
   });
 });

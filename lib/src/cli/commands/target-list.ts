@@ -21,6 +21,7 @@ import {
   type Context,
   defineCommand,
   formatOutput,
+  getCommandContext,
   loadConfig,
   Option,
   type OutputFormat,
@@ -127,10 +128,7 @@ export class TargetListCommand extends Command {
   public output = Option.String('-o,--output');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     const config = await loadConfig({
       cwd: ctx.cwd(),

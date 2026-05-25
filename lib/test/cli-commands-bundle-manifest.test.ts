@@ -180,4 +180,20 @@ items:
     expect(result.stdout).toContain('Generated');
     expect(result.stdout).toContain('total items: 1');
   });
+
+  it('uses latest version when version is latest', async () => {
+    const result = await runCommand(['bundle', 'manifest'], {
+      commands: [createBundleManifestCommand({
+        output: 'json',
+        version: 'latest',
+        collectionFile: 'collections/demo.collection.yml',
+        outFile: path.join(tmpRoot, 'm.yml')
+      })],
+      context: { cwd: tmpRoot, fs: realFs }
+    });
+    expect(result.exitCode).toBe(0);
+    const manifestText = await fs.readFile(path.join(tmpRoot, 'm.yml'), 'utf8');
+    const manifest = yaml.load(manifestText) as { version: string };
+    expect(manifest.version).toBe('latest');
+  });
 });

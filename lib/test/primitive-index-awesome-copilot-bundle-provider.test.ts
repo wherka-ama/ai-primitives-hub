@@ -1,6 +1,3 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import {
   afterEach,
   beforeEach,
@@ -25,13 +22,17 @@ import {
 import {
   AwesomeCopilotBundleProvider,
 } from '../src/infra/harvest/bundle-providers/awesome-copilot-bundle-provider';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 let tmp: string;
+let cleanup: () => void;
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-acprov-'));
+  [tmp, cleanup] = createTempDir('pi-acprov-');
 });
 afterEach(() => {
-  fs.rmSync(tmp, { recursive: true, force: true });
+  cleanup();
 });
 
 function jsonResp(body: unknown, status = 200): Response {
@@ -508,5 +509,47 @@ items: []
 
     expect(refs.length).toBe(1);
     expect(refs[0].bundleId).toBe('valid');
+  });
+
+  it('infers kind from file path when item.kind is missing', async () => {
+    const collectionContent = `id: test
+name: Test
+version: 1.0.0
+items:
+  - path: prompts/hello.prompt.md
+  - path: instructions/guide.instructions.md
+  - path: skills/my-skill/skill.md
+`;
+    const collectionBytes = Buffer.from(collectionContent, 'utf8');
+    const collectionSha = computeGitBlobSha(collectionBytes);
+
+    const fetch = fakeGithubFetch({
+      commitSha: 'sha1',
+      collectionFiles: [
+        { name: 'collections/test.collection.yml', content: collectionContent }
+      ],
+      tree: [
+        { path: 'collections/test.collection.yml', sha: collectionSha, size: collectionBytes.length }
+      ],
+      blobs: new Map([[collectionSha, collectionBytes]])
+    });
+
+    const client = new GitHubClient({ tokens: staticTokenProvider('t'), fetch });
+    const cache = new BlobCache(tmp);
+    const provider = new AwesomeCopilotBundleProvider({
+      spec: makeSpec(),
+      client,
+      cache
+    });
+
+    const refs: Awaited<ReturnType<typeof provider.listBundles> extends AsyncIterable<infer T> ? T : never>[] = [];
+    for await (const r of provider.listBundles()) {
+      refs.push(r);
+    }
+
+    const manifest = await provider.readManifest(refs[0]);
+    expect(manifest.items?.[0].kind).toBe('prompt');
+    expect(manifest.items?.[1].kind).toBe('instruction');
+    expect(manifest.items?.[2].kind).toBe('skill');
   });
 });

@@ -27,21 +27,6 @@ import {
   generateSourceId,
 } from '../../domain/source-id';
 import {
-  envTokenProvider,
-} from '../../infra/github/token';
-import {
-  NodeHttpClient,
-} from '../../infra/http/node-http-client';
-import {
-  CompositeHubResolver,
-  GitHubHubResolver,
-  LocalHubResolver,
-  UrlHubResolver,
-} from '../../infra/resolvers/hub-resolver';
-import {
-  ActiveHubStore,
-} from '../../infra/stores/active-hub-store';
-import {
   readLockfile,
   upsertEntry,
   upsertSource,
@@ -66,8 +51,11 @@ import {
 } from '../../ports/http';
 import {
   Command,
+  createHttpClientAndTokens,
+  createHubManager,
   failWith,
   Option,
+  requireActiveHubOrFail,
 } from '../framework';
 import {
   type Context,
@@ -90,19 +78,10 @@ const buildHubMgr = (ctx: Context, http?: HttpClient, tokens?: TokenProvider): {
   tokens: TokenProvider;
 } => {
   const paths = resolveUserConfigPaths(ctx.env);
-  const httpClient = http ?? new NodeHttpClient();
-  const tokenProvider = tokens ?? envTokenProvider(ctx.env);
-  const resolver = new CompositeHubResolver(
-    new GitHubHubResolver(httpClient, tokenProvider),
-    new LocalHubResolver(ctx.fs),
-    new UrlHubResolver(httpClient, tokenProvider)
-  );
+  const [httpClient, tokenProvider] = createHttpClientAndTokens(http, ctx, tokens);
+  const mgr = createHubManager({ ctx, http: httpClient, tokens: tokenProvider });
   return {
-    mgr: new HubManager(
-      new HubStore(paths.hubs, ctx.fs),
-      new ActiveHubStore(paths.activeHub, ctx.fs),
-      resolver
-    ),
+    mgr,
     activations: new ProfileActivationStore(paths.profileActivations, ctx.fs),
     http: httpClient,
     tokens: tokenProvider
@@ -216,12 +195,9 @@ export class ProfileShowCommand extends BaseProfileCommand {
 
     const hubId = await resolveHubId(mgr, this.hubId);
 
-    const active = await mgr.getActiveHub();
-    if (active?.id !== hubId) {
-      return failWith(ctx, fmt, 'profile', new RegistryError({
-        code: 'USAGE.MISSING_FLAG',
-        message: `profile show: hub "${hubId}" must be active to load profiles (run \`hub use ${hubId}\` first)`
-      }));
+    const active = await requireActiveHubOrFail(mgr, hubId, 'profile.show', ctx, fmt);
+    if (typeof active === 'number') {
+      return active;
     }
     const profile = active.config.profiles.find((p) => p.id === this.profileId);
     if (profile === undefined) {
@@ -266,12 +242,9 @@ export class ProfileActivateCommand extends BaseProfileCommand {
 
     const hubId = await resolveHubId(built.mgr, this.hubId);
 
-    const active = await built.mgr.getActiveHub();
-    if (active?.id !== hubId) {
-      return failWith(ctx, fmt, 'profile', new RegistryError({
-        code: 'USAGE.MISSING_FLAG',
-        message: `profile activate: hub "${hubId}" must be active`
-      }));
+    const active = await requireActiveHubOrFail(built.mgr, hubId, 'profile.activate', ctx, fmt);
+    if (typeof active === 'number') {
+      return active;
     }
     const profile = active.config.profiles.find((p) => p.id === this.profileId);
     if (profile === undefined) {

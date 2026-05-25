@@ -15,6 +15,9 @@ import type {
   RegistrySource,
   Target,
 } from '../src/domain';
+import {
+  createSimpleMockFs,
+} from './helpers/install-test-helpers';
 
 describe('ProfileActivator', () => {
   let mockFs: any;
@@ -23,19 +26,7 @@ describe('ProfileActivator', () => {
   let activator: ProfileActivator;
 
   beforeEach(() => {
-    mockFs = {
-      readFile: async () => new Uint8Array(),
-      writeFile: async () => {},
-      exists: async () => false,
-      mkdir: async () => {},
-      readdir: async () => [],
-      rm: async () => {},
-      stat: async () => ({ type: 'file' }),
-      readJson: async () => ({}),
-      writeJson: async () => {},
-      readDir: async () => [],
-      remove: async () => {}
-    };
+    mockFs = createSimpleMockFs();
 
     mockHttp = {
       fetch: async () => ({ body: new Uint8Array(), status: 200 })
@@ -117,5 +108,75 @@ describe('ProfileActivator', () => {
       sources,
       targets
     })).rejects.toThrow('PROFILE.SOURCE_UNSUPPORTED');
+  });
+
+  it('handles profile with empty bundles list', async () => {
+    const profile: Profile = {
+      id: 'test-profile',
+      name: 'Test Profile',
+      bundles: []
+    };
+
+    const sources: Record<string, RegistrySource> = {};
+    const targets: Target[] = [{ name: 'vscode', type: 'vscode', scope: 'user' } as any];
+
+    const result = await activator.activate({
+      hubId: 'test-hub',
+      profile,
+      sources,
+      targets
+    });
+
+    expect(result.state.syncedBundles).toEqual([]);
+    expect(result.state.profileId).toBe('test-profile');
+  });
+
+  it('handles multiple targets', async () => {
+    const profile: Profile = {
+      id: 'test-profile',
+      name: 'Test Profile',
+      bundles: []
+    };
+
+    const sources: Record<string, RegistrySource> = {};
+    const targets: Target[] = [
+      { name: 'vscode', type: 'vscode', scope: 'user' } as any,
+      { name: 'workspace', type: 'vscode', scope: 'workspace' } as any
+    ];
+
+    const result = await activator.activate({
+      hubId: 'test-hub',
+      profile,
+      sources,
+      targets
+    });
+
+    expect(result.state.syncedTargets.length).toBe(2);
+    expect(result.state.syncedTargets).toContain('vscode');
+    expect(result.state.syncedTargets).toContain('workspace');
+  });
+
+  it('sets correct activation timestamp', async () => {
+    const profile: Profile = {
+      id: 'test-profile',
+      name: 'Test Profile',
+      bundles: []
+    };
+
+    const sources: Record<string, RegistrySource> = {};
+    const targets: Target[] = [{ name: 'vscode', type: 'vscode', scope: 'user' } as any];
+
+    const before = new Date().toISOString();
+    const result = await activator.activate({
+      hubId: 'test-hub',
+      profile,
+      sources,
+      targets
+    });
+    const after = new Date().toISOString();
+
+    expect(result.state.activatedAt).toBeDefined();
+    expect(result.state.activatedAt >= before).toBe(true);
+    expect(result.state.activatedAt <= after).toBe(true);
   });
 });

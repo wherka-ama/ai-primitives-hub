@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   afterEach,
@@ -11,15 +10,19 @@ import {
 import {
   HarvestProgressLog,
 } from '../src/infra/harvest/progress-log';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 let tmp: string;
+let cleanup: () => void;
 
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-progress-'));
+  [tmp, cleanup] = createTempDir('pi-progress-');
 });
 
 afterEach(() => {
-  fs.rmSync(tmp, { recursive: true, force: true });
+  cleanup();
 });
 
 describe('progress-log', () => {

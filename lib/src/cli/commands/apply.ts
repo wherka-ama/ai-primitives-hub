@@ -27,15 +27,6 @@ import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
 import {
-  CompositeHubResolver,
-  GitHubHubResolver,
-  LocalHubResolver,
-  UrlHubResolver,
-} from '../../infra/resolvers/hub-resolver';
-import {
-  ActiveHubStore,
-} from '../../infra/stores/active-hub-store';
-import {
   type Lockfile,
   type LockfileSource,
   readLockfile,
@@ -50,16 +41,15 @@ import {
   readTargets,
 } from '../../infra/stores/target-store';
 import {
-  HubStore,
-} from '../../infra/stores/yaml-hub-store';
-import {
   type CommandDefinition,
   type Context,
+  createHubManager,
   defineCommand,
   failWith,
   formatOutput,
   type OutputFormat,
   RegistryError,
+  requireActiveHub,
 } from '../framework';
 
 /**
@@ -71,28 +61,6 @@ export interface ApplyOptions {
   noSync?: boolean;
   /** Force hub sync even if recently synced. */
   force?: boolean;
-}
-
-/**
- * Build hub manager with dependencies.
- * @param ctx CLI context.
- * @param _opts Apply options.
- * @returns HubManager instance.
- */
-function buildHubManager(ctx: Context, _opts: ApplyOptions): HubManager {
-  const userPaths = resolveUserConfigPaths(ctx.env);
-  const httpClient = new NodeHttpClient();
-  const tokenProvider = envTokenProvider(ctx.env);
-  const resolver = new CompositeHubResolver(
-    new GitHubHubResolver(httpClient, tokenProvider),
-    new LocalHubResolver(ctx.fs),
-    new UrlHubResolver(httpClient, tokenProvider)
-  );
-  return new HubManager(
-    new HubStore(userPaths.hubs, ctx.fs),
-    new ActiveHubStore(userPaths.activeHub, ctx.fs),
-    resolver
-  );
 }
 
 /**
@@ -128,14 +96,7 @@ async function validateHubAndProfile(
   _ctx: Context,
   _fmt: OutputFormat
 ): Promise<Profile> {
-  const active = await mgr.getActiveHub();
-  if (active?.id !== hubId) {
-    throw new RegistryError({
-      code: 'HUB.NOT_FOUND',
-      message: `apply: hub "${hubId}" is not active`,
-      hint: `Run \`prompt-registry hub use ${hubId}\` first.`
-    });
-  }
+  const active = await requireActiveHub(mgr, hubId, 'apply');
 
   const profile = active.config.profiles.find((p) => p.id === profileId);
   if (profile === undefined) {
@@ -220,7 +181,7 @@ export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =
       }
 
       const { hubId, profileId } = lock.useProfile;
-      const mgr = buildHubManager(ctx, opts);
+      const mgr = createHubManager({ ctx });
       await syncHubSafe(mgr, hubId, ctx, opts.noSync);
 
       // Type is validated by validateHubAndProfile
@@ -246,6 +207,7 @@ export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =
       const userPaths = resolveUserConfigPaths(ctx.env);
       const httpClient = new NodeHttpClient();
       const tokenProvider = envTokenProvider(ctx.env);
+      const hubMgr = createHubManager({ ctx, http: httpClient, tokens: tokenProvider });
       const activations = new ProfileActivationStore(userPaths.profileActivations, ctx.fs);
       const prev = await activations.getActive();
       if (prev !== null) {
@@ -253,7 +215,7 @@ export const createApplyCommand = (opts: ApplyOptions = {}): CommandDefinition =
       }
 
       const activator = new ProfileActivator({ fs: ctx.fs, env: ctx.env, http: httpClient, tokens: tokenProvider });
-      const sources = Object.fromEntries((await mgr.listSources(hubId)).map((s) => [s.id, s]));
+      const sources = Object.fromEntries((await hubMgr.listSources(hubId)).map((s) => [s.id, s]));
 
       const out = await activator.activate({ hubId, profile, sources, targets });
       await activations.save(out.state);

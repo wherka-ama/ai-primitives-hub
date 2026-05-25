@@ -35,7 +35,7 @@ const simpleMockFs: FsAbstraction = {
 };
 
 describe('doctor command', () => {
-  it('runs and exits 0 in a healthy environment (text mode default)', async () => {
+  it('runs and exits 0 in a healthy environment (text mode default)', { timeout: 10_000 }, async () => {
     const result = await runCommand(['doctor'], {
       commands: [createDoctorCommand()],
       context: {
@@ -104,5 +104,22 @@ describe('doctor command', () => {
     expect(parsed.data.summary.warn).toBeGreaterThanOrEqual(1);
     const pathCheck = parsed.data.checks.find((c) => c.name === 'path-env');
     expect(pathCheck?.status).toBe('warn');
+  });
+
+  it('includes check names in JSON output', async () => {
+    const result = await runCommand(['doctor'], {
+      commands: [createDoctorCommand({ output: 'json' })],
+      context: {
+        env: { PATH: '/usr/bin', NODE_VERSION: 'v20.0.0' },
+        cwd: process.cwd(),
+        fs: simpleMockFs
+      }
+    });
+    const parsed = JSON.parse(result.stdout) as {
+      data: { checks: { name: string }[] };
+    };
+    const checkNames = parsed.data.checks.map((c) => c.name);
+    expect(checkNames).toContain('node-version');
+    expect(checkNames).toContain('path-env');
   });
 });

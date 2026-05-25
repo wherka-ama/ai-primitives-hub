@@ -12,14 +12,10 @@ import * as path from 'node:path';
 import {
   UninstallPipeline,
 } from '../../app/install/uninstall-pipeline';
-import {
-  resolveUserConfigPaths,
-} from '../../app/registry';
 import type {
   Target,
 } from '../../domain/install';
 import {
-  findLockfile,
   readLockfile,
   removeEntry,
   writeLockfile,
@@ -29,7 +25,6 @@ import {
 } from '../../infra/stores/target-state-store';
 import {
   readTargets,
-  readTargetsHierarchical,
 } from '../../infra/stores/target-store';
 import {
   FileTreeTargetWriter,
@@ -43,6 +38,8 @@ import {
 import {
   Command,
   failWith,
+  findProjectLockfile,
+  loadTargets,
   Option,
 } from '../framework';
 import {
@@ -51,7 +48,11 @@ import {
   defineCommand,
   formatOutput,
   type OutputFormat,
+  readTargetsSafely,
   RegistryError,
+  resolveTarget,
+  resolveTargetName,
+  validateInputs,
 } from '../framework';
 
 /**
@@ -88,20 +89,17 @@ export interface UninstallOptions {
  * @param ctx CLI context.
  */
 async function detectUninstallContext(opts: UninstallOptions, ctx: Context): Promise<void> {
-  const userPaths = resolveUserConfigPaths(ctx.env);
-
   if (!opts.bundle && !opts.lockfile && !opts.all) {
-    const foundLock = await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
+    const foundLock = await findProjectLockfile(ctx);
     if (foundLock !== null) {
       opts.lockfile = foundLock;
     }
   }
 
   if (!opts.target || opts.target.length === 0) {
-    const targets = await readTargetsHierarchical(
-      { cwd: ctx.cwd(), fs: ctx.fs },
-      userPaths.userTargets
-    ).catch(() => []);
+    const targets = await readTargetsSafely(
+      loadTargets(ctx)
+    );
     if (targets.length === 1) {
       opts.target = targets[0].name;
     }
@@ -187,7 +185,7 @@ export class UninstallCommand extends BaseUninstallCommand {
 
     await detectUninstallContext(opts, ctx);
 
-    const { noBundle, noLockfile, noAll } = validateUninstallInputs(opts);
+    const { bundle: noBundle, lockfile: noLockfile, all: noAll } = validateInputs(opts, { flags: ['bundle', 'lockfile', 'all'] });
     if (noBundle && noLockfile && noAll) {
       return failWith(ctx, fmt, 'uninstall', new RegistryError({
         code: 'USAGE.MISSING_FLAG',
@@ -201,9 +199,9 @@ export class UninstallCommand extends BaseUninstallCommand {
     }
 
     try {
-      const targetName = await resolveTargetName(opts, ctx);
+      const targetName = await resolveTargetName(opts.target, 'uninstall', ctx, () => readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
       checkAllowTarget(targetName, opts);
-      const target = await resolveTarget(targetName, ctx);
+      const target = await resolveTarget(targetName, 'uninstall', ctx, () => readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
 
       if (opts.lockfile !== undefined && opts.lockfile.length > 0) {
         return await performLockfileUninstall(opts, target, ctx, fmt);
@@ -262,12 +260,6 @@ const createWriterFactory = (
  * @param opts Uninstall options.
  * @returns Validation result.
  */
-function validateUninstallInputs(opts: UninstallOptions): { noBundle: boolean; noLockfile: boolean; noAll: boolean } {
-  const noBundle = opts.bundle === undefined || opts.bundle.length === 0;
-  const noLockfile = opts.lockfile === undefined || opts.lockfile.length === 0;
-  const noAll = opts.all !== true;
-  return { noBundle, noLockfile, noAll };
-}
 
 /**
  * Resolve target name from options or state.
@@ -275,29 +267,6 @@ function validateUninstallInputs(opts: UninstallOptions): { noBundle: boolean; n
  * @param ctx CLI context.
  * @returns Resolved target name.
  */
-async function resolveTargetName(opts: UninstallOptions, ctx: Context): Promise<string> {
-  const targetName = opts.target;
-  if (targetName === undefined || targetName.length === 0) {
-    const stateStore = new TargetStateStore({
-      fs: ctx.fs,
-      statePath: path.join(ctx.cwd(), '.prompt-registry', 'target-state.json')
-    });
-    const lastUsed = await stateStore.getLastUsedTarget();
-    if (lastUsed !== null) {
-      return lastUsed;
-    }
-    const configuredTargets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs }).catch(() => []);
-    const hint = configuredTargets.length > 1
-      ? `Multiple targets configured: ${configuredTargets.map((t) => t.name).join(', ')}. Specify with --target <name>.`
-      : 'Configure a target with `prompt-registry target add <name> --type <kind>` first.';
-    throw new RegistryError({
-      code: 'USAGE.MISSING_FLAG',
-      message: 'uninstall: --target <name> is required',
-      hint
-    });
-  }
-  return targetName;
-}
 
 /**
  * Resolve target by name.
@@ -305,21 +274,6 @@ async function resolveTargetName(opts: UninstallOptions, ctx: Context): Promise<
  * @param ctx CLI context.
  * @returns Target configuration.
  */
-async function resolveTarget(targetName: string, ctx: Context): Promise<Target> {
-  const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs });
-  const target = targets.find((t) => t.name === targetName);
-  if (target === undefined) {
-    throw new RegistryError({
-      code: 'USAGE.MISSING_FLAG',
-      message: `uninstall: target "${targetName}" is not configured`,
-      hint: targets.length === 0
-        ? 'Run `prompt-registry target add <name> --type <kind>` to add one.'
-        : `Configured targets: ${targets.map((t) => t.name).join(', ')}.`,
-      context: { target: targetName }
-    });
-  }
-  return target;
-}
 
 /**
  * Perform uninstall by bundle ID.
@@ -628,7 +582,7 @@ export const createUninstallCommand = (
     category: 'Installation',
     run: async ({ ctx }: { ctx: Context }): Promise<number> => {
       const fmt = opts.output ?? 'text';
-      const { noBundle, noLockfile, noAll } = validateUninstallInputs(opts);
+      const { bundle: noBundle, lockfile: noLockfile, all: noAll } = validateInputs(opts, { flags: ['bundle', 'lockfile', 'all'] });
       if (noBundle && noLockfile && noAll) {
         return failWith(ctx, fmt, 'uninstall', new RegistryError({
           code: 'USAGE.MISSING_FLAG',
@@ -641,8 +595,8 @@ export const createUninstallCommand = (
       }
 
       try {
-        const targetName = await resolveTargetName(opts, ctx);
-        const target = await resolveTarget(targetName, ctx);
+        const targetName = await resolveTargetName(opts.target, 'uninstall', ctx, () => readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
+        const target = await resolveTarget(targetName, 'uninstall', ctx, () => readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
 
         if (opts.all === true) {
           return await performAllUninstall(opts, target, ctx, fmt);

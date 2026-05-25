@@ -4,7 +4,6 @@
 import * as path from 'node:path';
 import inquirer from 'inquirer';
 import {
-  HubManager,
   resolveUserConfigPaths,
 } from '../../app/registry';
 import {
@@ -33,19 +32,12 @@ import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
 import {
-  CompositeHubResolver,
-  GitHubHubResolver,
-  LocalHubResolver,
-  UrlHubResolver,
-} from '../../infra/resolvers/hub-resolver';
-import {
   SourceDispatcher,
 } from '../../infra/resolvers/resolver-registry';
 import {
   ActiveHubStore,
 } from '../../infra/stores/active-hub-store';
 import {
-  findLockfile,
   type LockfileEntry,
   type LockfileSource,
   readLockfile,
@@ -57,12 +49,6 @@ import {
   TargetStateStore,
 } from '../../infra/stores/target-state-store';
 import {
-  readTargetsHierarchical,
-} from '../../infra/stores/target-store';
-import {
-  HubStore,
-} from '../../infra/stores/yaml-hub-store';
-import {
   FileTreeTargetWriter,
 } from '../../infra/writers/file-tree-writer';
 import type {
@@ -72,11 +58,15 @@ import type {
 import {
   Command,
   type Context,
+  createHubManager,
+  findProjectLockfile,
   formatOutput,
+  loadTargets,
   Option,
   type OutputFormat,
   RegistryError,
   renderError,
+  throwTargetNotFoundError,
 } from '../framework';
 
 /**
@@ -215,11 +205,10 @@ export class UpdateCommand extends BaseUpdateCommand {
 }
 
 async function resolveLockfilePath(ctx: Context, lockfileFlag: string | undefined): Promise<string | null> {
-  const userPaths = resolveUserConfigPaths(ctx.env);
   if (lockfileFlag !== undefined && lockfileFlag.length > 0) {
     return path.isAbsolute(lockfileFlag) ? lockfileFlag : path.join(ctx.cwd(), lockfileFlag);
   }
-  return await findLockfile(ctx.cwd(), ctx.fs, userPaths.userLockfile);
+  return await findProjectLockfile(ctx);
 }
 
 function filterUpdateEntries(entries: LockfileEntry[], sources: Record<string, LockfileSource>, targetFlag: string | undefined): { scopedEntries: LockfileEntry[]; entries: LockfileEntry[] } {
@@ -358,12 +347,7 @@ async function syncActiveHub(ctx: Context, http: HttpClient, tokens: TokenProvid
     if (hubId === null) {
       return;
     }
-    const resolver = new CompositeHubResolver(
-      new GitHubHubResolver(http, tokens),
-      new LocalHubResolver(ctx.fs),
-      new UrlHubResolver(http, tokens)
-    );
-    const mgr = new HubManager(new HubStore(userPaths.hubs, ctx.fs), activeStore, resolver);
+    const mgr = createHubManager({ ctx, http, tokens });
     await mgr.syncHub(hubId);
   } catch {
     // Hub sync failure is non-fatal.
@@ -371,18 +355,14 @@ async function syncActiveHub(ctx: Context, http: HttpClient, tokens: TokenProvid
 }
 
 async function resolveTarget(targetName: string, ctx: Context): Promise<Target> {
-  const userPaths = resolveUserConfigPaths(ctx.env);
-  const targets = await readTargetsHierarchical({ cwd: ctx.cwd(), fs: ctx.fs }, userPaths.userTargets);
+  const targets = await loadTargets(ctx);
   const target = targets.find((t) => t.name === targetName);
   if (target === undefined) {
-    throw new RegistryError({
-      code: 'USAGE.MISSING_FLAG',
-      message: `update: target "${targetName}" is not configured`,
-      hint: `Configured targets: ${targets.map((t) => t.name).join(', ') || '(none)'}`,
-      context: { target: targetName }
-    });
+    throwTargetNotFoundError('update', targetName, targets, (ts) =>
+      `Configured targets: ${ts.map((t) => t.name).join(', ') || '(none)'}`
+    );
   }
-  return target;
+  return target!;
 }
 
 async function applyUpdate(

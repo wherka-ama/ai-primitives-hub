@@ -1,6 +1,3 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import {
   afterEach,
   beforeEach,
@@ -12,15 +9,19 @@ import {
   BlobCache,
   computeGitBlobSha,
 } from '../src/infra/github/blob-cache';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 let tmp: string;
+let cleanup: () => void;
 
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-cache-'));
+  [tmp, cleanup] = createTempDir('pi-cache-');
 });
 
 afterEach(() => {
-  fs.rmSync(tmp, { recursive: true, force: true });
+  cleanup();
 });
 
 describe('blob-cache', () => {

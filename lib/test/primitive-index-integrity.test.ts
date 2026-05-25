@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   afterEach,
@@ -14,13 +13,17 @@ import {
   saveIndexWithIntegrity,
   verifyIndexIntegrity,
 } from '../src/infra/harvest/integrity';
+import {
+  createTempDir,
+} from './helpers/install-test-helpers';
 
 let tmp: string;
+let cleanup: () => void;
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-integ-'));
+  [tmp, cleanup] = createTempDir('pi-integ-');
 });
 afterEach(() => {
-  fs.rmSync(tmp, { recursive: true, force: true });
+  cleanup();
 });
 
 const secret: IntegritySecret = { keyId: 'test', key: 'a-test-secret' };

@@ -18,12 +18,8 @@ import {
   tryLoadIndex,
 } from '../../infra/stores/json-index-store';
 import {
-  findLockfile,
   readLockfile,
 } from '../../infra/stores/json-lockfile-store';
-import {
-  readTargetsHierarchical,
-} from '../../infra/stores/target-store';
 import {
   HubStore,
 } from '../../infra/stores/yaml-hub-store';
@@ -32,7 +28,9 @@ import {
   type CommandDefinition,
   type Context,
   defineCommand,
+  findProjectLockfile,
   formatOutput,
+  loadTargets,
   Option,
   type OutputFormat,
   RegistryError,
@@ -114,11 +112,10 @@ export class StatusCommand extends Command {
  */
 async function runStatus(ctx: Context, fmt: OutputFormat, verbose: boolean): Promise<number> {
   try {
-    const cwd = ctx.cwd();
     const userPaths = resolveUserConfigPaths(ctx.env);
 
     const [targets, hubIds, activeHubId] = await Promise.all([
-      readTargetsHierarchical({ cwd, fs: ctx.fs }, userPaths.userTargets),
+      loadTargets(ctx),
       readHubIds(userPaths.hubs, ctx),
       readActiveHubId(userPaths.activeHub, ctx)
     ]);
@@ -126,7 +123,7 @@ async function runStatus(ctx: Context, fmt: OutputFormat, verbose: boolean): Pro
     const indexPath = defaultIndexFile(ctx.env);
     const indexStats = tryLoadIndex(indexPath);
 
-    const lockPath = await findLockfile(cwd, ctx.fs, userPaths.userLockfile);
+    const lockPath = await findProjectLockfile(ctx);
     const lockfile = lockPath === null ? null : await readLockfile(lockPath, ctx.fs);
 
     let lockfileData: StatusData['lockfile'] = null;

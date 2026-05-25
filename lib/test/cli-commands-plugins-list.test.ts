@@ -88,4 +88,32 @@ describe('plugins list', () => {
     expect(parsed.warnings.length).toBe(1);
     expect(parsed.status).toBe('warning');
   });
+
+  it('outputs text format with plugin names and sources', async () => {
+    await fs.writeFile(path.join(tmpA, 'prompt-registry-test'), '#!/bin/sh\necho test');
+    const result = await runCommand(['plugins', 'list'], {
+      commands: [createPluginsListCommand({ output: 'text' })],
+      context: {
+        cwd: tmpA,
+        fs: realFs,
+        env: { PATH: tmpA }
+      }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('test');
+  });
+
+  it('handles empty PATH gracefully', async () => {
+    const result = await runCommand(['plugins', 'list'], {
+      commands: [createPluginsListCommand({ output: 'json' })],
+      context: {
+        cwd: tmpA,
+        fs: realFs,
+        env: { PATH: '' }
+      }
+    });
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { data: unknown[] };
+    expect(parsed.data).toStrictEqual([]);
+  });
 });

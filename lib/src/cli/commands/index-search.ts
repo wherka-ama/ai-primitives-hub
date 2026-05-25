@@ -11,10 +11,6 @@
  * @module cli/commands/index-search
  */
 import inquirer from 'inquirer';
-import {
-  HubManager,
-  resolveUserConfigPaths,
-} from '../../app/registry';
 import type {
   Target,
 } from '../../domain/install';
@@ -33,29 +29,17 @@ import {
 import {
   NodeHttpClient,
 } from '../../infra/http/node-http-client';
-import {
-  CompositeHubResolver,
-  GitHubHubResolver,
-  LocalHubResolver,
-  UrlHubResolver,
-} from '../../infra/resolvers/hub-resolver';
 import type {
   PrimitiveKind,
   SearchQuery,
   SearchResult,
 } from '../../infra/search/types';
 import {
-  ActiveHubStore,
-} from '../../infra/stores/active-hub-store';
-import {
   loadIndex,
 } from '../../infra/stores/json-index-store';
 import {
   readTargets,
 } from '../../infra/stores/target-store';
-import {
-  HubStore,
-} from '../../infra/stores/yaml-hub-store';
 import type {
   HttpClient,
   TokenProvider,
@@ -64,11 +48,14 @@ import {
   Command,
   type CommandDefinition,
   type Context,
+  createHubManager,
   defineCommand,
   failWith,
   formatOutput,
+  getCommandContext,
   Option,
   type OutputFormat,
+  readTargetsSafely,
   RegistryError,
 } from '../framework';
 import {
@@ -192,10 +179,7 @@ export class IndexSearchCommand extends Command {
   public installTarget = Option.String('--install-target');
 
   public async execute(): Promise<number> {
-    const ctx = (this as any).commandContext?.ctx as Context;
-    if (!ctx) {
-      throw new Error('CommandContext not available');
-    }
+    const ctx = getCommandContext(this);
 
     const fmt = (this.output ?? 'text') as OutputFormat;
     const indexPath = this.index ?? defaultIndexFile(ctx.env);
@@ -332,18 +316,7 @@ async function searchAndInstall(
 ): Promise<number> {
   const http = opts.http ?? new NodeHttpClient();
   const tokens = opts.tokens ?? defaultTokenProvider(ctx.env);
-
-  const userPaths = resolveUserConfigPaths(ctx.env);
-  const resolver = new CompositeHubResolver(
-    new GitHubHubResolver(http, tokens),
-    new LocalHubResolver(ctx.fs),
-    new UrlHubResolver(http, tokens)
-  );
-  const mgr = new HubManager(
-    new HubStore(userPaths.hubs, ctx.fs),
-    new ActiveHubStore(userPaths.activeHub, ctx.fs),
-    resolver
-  );
+  const mgr = createHubManager({ ctx, http, tokens });
   const active = await mgr.getActiveHub();
   if (active === null) {
     ctx.stderr.write('No active hub found. Run `prompt-registry hub use <id>` first.\n');
@@ -362,7 +335,7 @@ async function searchAndInstall(
     return 0;
   }
 
-  const targets = await readTargets({ cwd: ctx.cwd(), fs: ctx.fs }).catch(() => [] as Target[]);
+  const targets = await readTargetsSafely(readTargets({ cwd: ctx.cwd(), fs: ctx.fs }));
   let target: Target | undefined;
   if (opts.installTarget && opts.installTarget.length > 0) {
     target = targets.find((t) => t.name === opts.installTarget);
