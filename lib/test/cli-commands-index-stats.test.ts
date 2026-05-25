@@ -14,6 +14,7 @@ import {
 } from '../src';
 import {
   createIndexStatsCommand,
+  IndexStatsCommand,
 } from '../src/cli/commands/index-stats';
 import {
   runCommand,
@@ -91,6 +92,61 @@ describe('cli `index stats`', () => {
     expect(exitCode).toBe(1);
     const env = JSON.parse(stdout);
     expect(env.status).toBe('error');
+    expect(env.errors[0].code).toBe('INDEX.NOT_FOUND');
+  });
+});
+
+describe('IndexStatsCommand (native class)', () => {
+  beforeEach(async () => {
+    tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'prc-idx-stats2-'));
+    indexFile = path.join(tmpRoot, 'primitive-index.json');
+    const idx = await PrimitiveIndex.buildFrom(
+      new FakeBundleProvider(createFixtureBundles()),
+      { hubId: 'test' }
+    );
+    saveIndex(idx, indexFile);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('shows stats via native class with --index flag', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'stats', '--index', indexFile, '-o', 'json'],
+      {
+        commandClasses: [IndexStatsCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.status).toBe('ok');
+    expect(env.data.primitives).toBeGreaterThanOrEqual(1);
+  });
+
+  it('text output via native class', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'stats', '--index', indexFile],
+      {
+        commandClasses: [IndexStatsCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('primitives:');
+  });
+
+  it('returns INDEX.NOT_FOUND when index missing via native class', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'stats', '--index', path.join(tmpRoot, 'missing.json'), '-o', 'json'],
+      {
+        commandClasses: [IndexStatsCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(1);
+    const env = JSON.parse(stdout);
     expect(env.errors[0].code).toBe('INDEX.NOT_FOUND');
   });
 });

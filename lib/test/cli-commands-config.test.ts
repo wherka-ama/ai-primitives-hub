@@ -9,6 +9,7 @@ import {
   it,
 } from 'vitest';
 import {
+  ConfigGetCommand,
   createConfigGetCommand,
 } from '../src/cli/commands/config-get';
 import {
@@ -247,5 +248,66 @@ describe('config commands', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('=== Paths ===');
     expect(result.stdout).toContain('Config path: /path/to/config');
+  });
+});
+
+describe('ConfigGetCommand (native class)', () => {
+  it('reads a key via native class', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.yml'),
+      'cli:\n  output: yaml\n'
+    );
+    const result = await runCommand(['config', 'get', 'cli.output', '-o', 'json'], {
+      commandClasses: [ConfigGetCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { data: { value: string } };
+    expect(parsed.data.value).toBe('yaml');
+  });
+
+  it('returns undefined for unknown key', async () => {
+    const result = await runCommand(['config', 'get', 'unknown.key', '-o', 'json'], {
+      commandClasses: [ConfigGetCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { data: { value: unknown } };
+    expect(parsed.data.value).toBeUndefined();
+  });
+
+  it('text output shows (unset) for missing key', async () => {
+    const result = await runCommand(['config', 'get', 'no.such.key'], {
+      commandClasses: [ConfigGetCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('(unset)');
+  });
+
+  it('text output shows value for a set key', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.yml'),
+      'cli:\n  output: json\n'
+    );
+    const result = await runCommand(['config', 'get', 'cli.output'], {
+      commandClasses: [ConfigGetCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('json');
+  });
+
+  it('text output dumps object as yaml', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.yml'),
+      'cli:\n  output: json\n'
+    );
+    const result = await runCommand(['config', 'get', 'cli'], {
+      commandClasses: [ConfigGetCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('output');
   });
 });
