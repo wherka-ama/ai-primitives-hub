@@ -5,3 +5,4 @@ eslint-report.json
 sonar-issues*
 .env.test
 
+*.manifest.yml
