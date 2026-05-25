@@ -15,9 +15,11 @@ import {
 } from '../src';
 import {
   createIndexBenchCommand,
+  IndexBenchCommand,
 } from '../src/cli/commands/index-bench';
 import {
   createIndexEvalCommand,
+  IndexEvalCommand,
 } from '../src/cli/commands/index-eval';
 import {
   runCommand,
@@ -293,5 +295,92 @@ describe('cli `index bench`', () => {
     expect(exitCode).toBe(1);
     const env = JSON.parse(stdout);
     expect(env.errors[0].code).toBe('INDEX.BENCH_FAILED');
+  });
+});
+
+describe('IndexEvalCommand (native class)', () => {
+  it('evaluates index via --gold and --index flags', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'eval', '--gold', goldFile, '--index', indexFile, '-o', 'json'],
+      {
+        commandClasses: [IndexEvalCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as { status: string };
+    expect(env.status).toBe('ok');
+  });
+
+  it('exits 1 when --gold flag is missing', async () => {
+    const { exitCode } = await runCommand(
+      ['index', 'eval', '--index', indexFile, '-o', 'json'],
+      {
+        commandClasses: [IndexEvalCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(1);
+  });
+
+  it('exits 1 when index file is missing', async () => {
+    const { exitCode } = await runCommand(
+      ['index', 'eval', '--gold', goldFile, '--index', '/nonexistent-index.json', '-o', 'json'],
+      {
+        commandClasses: [IndexEvalCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(1);
+  });
+
+  it('text output format works', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'eval', '--gold', goldFile, '--index', indexFile],
+      {
+        commandClasses: [IndexEvalCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout.length).toBeGreaterThan(0);
+  });
+});
+
+describe('IndexBenchCommand (native class)', () => {
+  it('benchmarks index via --gold and --index flags', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'bench', '--gold', goldFile, '--index', indexFile, '-o', 'json'],
+      {
+        commandClasses: [IndexBenchCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as { status: string };
+    expect(env.status).toBe('ok');
+  });
+
+  it('exits 1 when --gold flag is missing', async () => {
+    const { exitCode } = await runCommand(
+      ['index', 'bench', '--index', indexFile, '-o', 'json'],
+      {
+        commandClasses: [IndexBenchCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(1);
+  });
+
+  it('text output format works', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'bench', '--gold', goldFile, '--index', indexFile],
+      {
+        commandClasses: [IndexBenchCommand],
+        context: { cwd: tmpRoot, fs: createNodeFsAdapter() }
+      }
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout.length).toBeGreaterThan(0);
   });
 });

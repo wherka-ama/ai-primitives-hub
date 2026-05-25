@@ -5,6 +5,7 @@ import {
 } from 'vitest';
 import {
   createTargetTypesCommand,
+  TargetTypesCommand,
 } from '../src/cli/commands/target-types';
 import {
   runCommand,
@@ -52,5 +53,34 @@ describe('target types command', () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain('copilot-cli');
     expect(stdout).not.toContain('"status"');
+  });
+});
+
+describe('TargetTypesCommand (native class)', () => {
+  it('lists target types in json output', async () => {
+    const { exitCode, stdout } = await runCommand(['target', 'types', '-o', 'json'], {
+      commandClasses: [TargetTypesCommand]
+    });
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as { data: { type: string }[] };
+    expect(Array.isArray(parsed.data)).toBe(true);
+    expect(parsed.data.map((e) => e.type)).toContain('vscode');
+  });
+
+  it('lists target types in text output', async () => {
+    const { exitCode, stdout } = await runCommand(['target', 'types'], {
+      commandClasses: [TargetTypesCommand]
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Supported target types');
+    expect(stdout).toContain('vscode');
+  });
+
+  it('yaml output format works', async () => {
+    const { exitCode, stdout } = await runCommand(['target', 'types', '-o', 'yaml'], {
+      commandClasses: [TargetTypesCommand]
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('status: ok');
   });
 });
