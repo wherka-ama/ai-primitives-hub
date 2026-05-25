@@ -13,9 +13,11 @@ import {
 } from '../src/cli/commands/target-add';
 import {
   createTargetListCommand,
+  TargetListCommand,
 } from '../src/cli/commands/target-list';
 import {
   createTargetRemoveCommand,
+  TargetRemoveCommand,
 } from '../src/cli/commands/target-remove';
 import {
   type FsAbstraction,
@@ -148,6 +150,87 @@ describe('target stubs', () => {
   it('target remove rejects empty name', async () => {
     const result = await runCommand(['target', 'remove'], {
       commands: [createTargetRemoveCommand({ output: 'json', name: '' })]
+    });
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { errors: { code: string }[] };
+    expect(parsed.errors[0].code).toBe('USAGE.MISSING_FLAG');
+  });
+});
+
+describe('TargetListCommand (native class)', () => {
+  it('lists targets in text output', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.yml'),
+      'targets:\n  - name: my-vscode\n    type: vscode\n'
+    );
+    const result = await runCommand(['target', 'list'], {
+      commandClasses: [TargetListCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('my-vscode');
+  });
+
+  it('shows empty message when no targets', async () => {
+    const result = await runCommand(['target', 'list'], {
+      commandClasses: [TargetListCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('No targets');
+  });
+
+  it('json output lists targets array', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.yml'),
+      'targets:\n  - name: t1\n    type: vscode\n'
+    );
+    const result = await runCommand(['target', 'list', '-o', 'json'], {
+      commandClasses: [TargetListCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { data: { name: string }[] };
+    expect(parsed.data[0].name).toBe('t1');
+  });
+});
+
+describe('TargetRemoveCommand (native class)', () => {
+  it('removes a target via native class', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.yml'),
+      'targets:\n  - name: foo\n    type: vscode\n    scope: user\n'
+    );
+    const result = await runCommand(['target', 'remove', 'foo', '-o', 'json'], {
+      commandClasses: [TargetRemoveCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    const written = await fs.readFile(path.join(tmpRoot, 'prompt-registry.yml'), 'utf8');
+    expect(written).not.toContain('foo');
+  });
+
+  it('text output confirms removal', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.yml'),
+      'targets:\n  - name: foo\n    type: vscode\n    scope: user\n'
+    );
+    const result = await runCommand(['target', 'remove', 'foo'], {
+      commandClasses: [TargetRemoveCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('foo');
+  });
+
+  it('returns error for unknown target name', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'prompt-registry.yml'),
+      'targets:\n  - name: bar\n    type: vscode\n    scope: user\n'
+    );
+    const result = await runCommand(['target', 'remove', 'nonexistent', '-o', 'json'], {
+      commandClasses: [TargetRemoveCommand],
+      context: { cwd: tmpRoot, fs: realFs, env: {} }
     });
     expect(result.exitCode).toBe(1);
     const parsed = JSON.parse(result.stdout) as { errors: { code: string }[] };
