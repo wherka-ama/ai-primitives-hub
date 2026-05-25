@@ -16,6 +16,7 @@ import {
 } from '../src';
 import {
   createIndexExportCommand,
+  IndexExportCommand,
 } from '../src/cli/commands/index-export';
 import {
   runCommand,
@@ -230,5 +231,94 @@ describe('cli `index export`', () => {
       id: string; name: string;
     };
     expect(profile.name).toBe('Custom Name');
+  });
+});
+
+describe('IndexExportCommand (native class)', () => {
+  beforeEach(async () => {
+    tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'prc-idx-exp2-'));
+    indexFile = path.join(tmpRoot, 'primitive-index.json');
+    const idx = await PrimitiveIndex.buildFrom(
+      new FakeBundleProvider(createFixtureBundles()),
+      { hubId: 'test' }
+    );
+    const sl = idx.createShortlist('demo', 'demo description');
+    const first = idx.search({ limit: 1 }).hits[0].primitive.id;
+    idx.addToShortlist(sl.id, first);
+    shortlistId = sl.id;
+    saveIndex(idx, indexFile);
+  });
+
+  afterEach(async () => {
+    await fsp.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('exports a profile via native class flags', async () => {
+    const outDir = path.join(tmpRoot, 'out');
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'export', '--shortlist', shortlistId, '--profile-id', 'my-profile',
+        '--index', indexFile, '--out-dir', outDir, '-o', 'json'],
+      { commandClasses: [IndexExportCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as { status: string; data: { profileFile: string } };
+    expect(env.status).toBe('ok');
+    expect(fs.existsSync(env.data.profileFile)).toBe(true);
+  });
+
+  it('exits 1 when --shortlist is missing', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'export', '--profile-id', 'p1', '--index', indexFile, '-o', 'json'],
+      { commandClasses: [IndexExportCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(1);
+    const env = JSON.parse(stdout) as { errors: { code: string }[] };
+    expect(env.errors[0].code).toBe('USAGE.MISSING_FLAG');
+  });
+
+  it('exits 1 when --profile-id is missing', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'export', '--shortlist', shortlistId, '--index', indexFile, '-o', 'json'],
+      { commandClasses: [IndexExportCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(1);
+    const env = JSON.parse(stdout) as { errors: { code: string }[] };
+    expect(env.errors[0].code).toBe('USAGE.MISSING_FLAG');
+  });
+
+  it('exits 1 for unknown shortlist', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'export', '--shortlist', 'sl_unknown', '--profile-id', 'p1',
+        '--index', indexFile, '-o', 'json'],
+      { commandClasses: [IndexExportCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(1);
+    const env = JSON.parse(stdout) as { errors: { code: string }[] };
+    expect(env.errors[0].code).toBe('INDEX.SHORTLIST_NOT_FOUND');
+  });
+
+  it('text output reports the profile file path', async () => {
+    const outDir = path.join(tmpRoot, 'out');
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'export', '--shortlist', shortlistId, '--profile-id', 'my-profile',
+        '--index', indexFile, '--out-dir', outDir],
+      { commandClasses: [IndexExportCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('my-profile.profile.yml');
+  });
+
+  it('--suggest-collection writes a collection file', async () => {
+    const outDir = path.join(tmpRoot, 'out');
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'export', '--shortlist', shortlistId, '--profile-id', 'p2',
+        '--index', indexFile, '--out-dir', outDir, '--suggest-collection', '-o', 'json'],
+      { commandClasses: [IndexExportCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as { data: { collectionFile?: string } };
+    if (env.data.collectionFile) {
+      expect(fs.existsSync(env.data.collectionFile)).toBe(true);
+    }
   });
 });

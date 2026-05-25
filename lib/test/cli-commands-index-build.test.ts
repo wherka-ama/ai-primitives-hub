@@ -11,6 +11,7 @@ import {
 } from 'vitest';
 import {
   createIndexBuildCommand,
+  IndexBuildCommand,
 } from '../src/cli/commands/index-build';
 import {
   runCommand,
@@ -102,5 +103,50 @@ describe('cli `index build`', () => {
     expect(exitCode).toBe(1);
     const env = JSON.parse(stdout);
     expect(env.errors[0].code).toBe('USAGE.MISSING_FLAG');
+  });
+});
+
+describe('IndexBuildCommand (native class)', () => {
+  it('builds index via --root flag', async () => {
+    const outFile = path.join(tmpRoot, 'out.json');
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'build', '--root', tmpRoot, '--out', outFile, '-o', 'json'],
+      { commandClasses: [IndexBuildCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.status).toBe('ok');
+    expect(env.data.stats.primitives).toBeGreaterThanOrEqual(2);
+    expect(fs.existsSync(outFile)).toBe(true);
+  });
+
+  it('text output reports built primitives', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'build', '--root', tmpRoot],
+      { commandClasses: [IndexBuildCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('built');
+    expect(stdout).toContain('primitives');
+  });
+
+  it('exits 1 when --root is missing', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'build', '-o', 'json'],
+      { commandClasses: [IndexBuildCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(1);
+    const env = JSON.parse(stdout);
+    expect(env.errors[0].code).toBe('USAGE.MISSING_FLAG');
+  });
+
+  it('exits 1 with INDEX.BUILD_FAILED on non-existent root', async () => {
+    const { exitCode, stdout } = await runCommand(
+      ['index', 'build', '--root', '/nonexistent/path/12345', '-o', 'json'],
+      { commandClasses: [IndexBuildCommand], context: { cwd: tmpRoot, fs: createNodeFsAdapter() } }
+    );
+    expect(exitCode).toBe(1);
+    const env = JSON.parse(stdout);
+    expect(env.errors[0].code).toBe('INDEX.BUILD_FAILED');
   });
 });
