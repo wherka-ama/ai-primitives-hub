@@ -111,10 +111,10 @@ describe('computePrimitiveId', () => {
 });
 
 describe('hashContent', () => {
-  it('generates SHA-1 hash', () => {
+  it('generates SHA-256 hash', () => {
     const hash = hashContent('test content');
-    expect(hash).toHaveLength(40);
-    expect(hash).toMatch(/^[0-9a-f]{40}$/);
+    expect(hash).toHaveLength(64);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('generates different hashes for different content', () => {

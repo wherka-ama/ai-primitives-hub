@@ -89,7 +89,7 @@ describe('extractFromFile()', () => {
     expect(prim!.tags).toStrictEqual(['iac', 'extra']);
     expect(prim!.bundle).toStrictEqual(ref);
     expect(prim!.id).toBe(computePrimitiveId(ref.sourceId, ref.bundleId, 'prompts/x.prompt.md'));
-    expect(prim!.contentHash.length).toBe(40);
+    expect(prim!.contentHash.length).toBe(64);
   });
 
   it('falls back to first H1 when no frontmatter title', () => {

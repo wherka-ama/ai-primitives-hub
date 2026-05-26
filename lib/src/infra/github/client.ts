@@ -26,6 +26,9 @@
  * @module github/client
  */
 import {
+  randomInt,
+} from 'node:crypto';
+import {
   GitHubApiError,
 } from './errors';
 import type {
@@ -59,7 +62,7 @@ export interface GitHubClientOptions {
   onEvent?: ClientEventHandler;
   /** Test seam for the sleep primitive. Default = setTimeout. */
   sleep?: (ms: number) => Promise<void>;
-  /** Test seam for jitter randomness. Default = Math.random. */
+  /** Test seam for jitter randomness. Default = cryptographically-random float in [0,1). */
   random?: () => number;
 }
 
@@ -123,7 +126,7 @@ export class GitHubClient {
     this.maxSleepMs = opts.maxSleepMs ?? 60_000;
     this.onEvent = opts.onEvent ?? ((): void => undefined);
     this.sleep = opts.sleep ?? defaultSleep;
-    this.random = opts.random ?? Math.random;
+    this.random = opts.random ?? ((): number => randomInt(0, 1_000_000) / 1_000_000);
   }
 
   /**

@@ -198,19 +198,19 @@ export function computePrimitiveId(
   relPath: string
 ): string {
   return crypto
-    .createHash('sha1')
+    .createHash('sha256')
     .update(`${sourceId}|${bundleId}|${relPath}`)
     .digest('hex')
     .slice(0, 16);
 }
 
 /**
- * SHA-1 hash of a content string, used for staleness detection.
+ * SHA-256 hash of a content string, used for staleness detection.
  * @param body - Full file body.
  * @returns Hex digest of the content.
  */
 export function hashContent(body: string): string {
-  return crypto.createHash('sha1').update(body).digest('hex');
+  return crypto.createHash('sha256').update(body).digest('hex');
 }
 
 /**

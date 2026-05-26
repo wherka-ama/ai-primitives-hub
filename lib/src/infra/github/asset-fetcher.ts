@@ -22,6 +22,7 @@
  */
 import {
   createHash,
+  randomInt,
 } from 'node:crypto';
 import type {
   FetchLike,
@@ -95,7 +96,7 @@ export class AssetFetcher {
     this.backoffBaseMs = opts.backoffBaseMs ?? 250;
     this.jitterMs = opts.jitterMs ?? 250;
     this.sleep = opts.sleep ?? defaultSleep;
-    this.random = opts.random ?? Math.random;
+    this.random = opts.random ?? ((): number => randomInt(0, 1_000_000) / 1_000_000);
   }
 
   /**
