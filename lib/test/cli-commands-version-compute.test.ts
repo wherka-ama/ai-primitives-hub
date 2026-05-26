@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 import {
   createVersionComputeCommand,
+  createVersionComputeCommandClass,
   VersionComputeCommand,
 } from '../src/cli/commands/version-compute';
 import {
@@ -152,5 +153,29 @@ describe('VersionComputeCommand (native class)', () => {
     );
     expect(exitCode).toBe(0);
     expect(stdout).toMatch(/\d+\.\d+\.\d+/);
+  });
+
+  it('createVersionComputeCommandClass factory computes version', async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, 'collections', 'delta.collection.yml'),
+      'id: delta\nname: Delta\nversion: 3.0.0\nitems: []\n',
+      'utf8'
+    );
+    const sharedCtx = { cwd: tmpRoot, fs: realFs, env: {} };
+    const { exitCode, stdout } = await runCommand(
+      ['version', 'compute', '--collection-file', 'collections/delta.collection.yml', '-o', 'json'],
+      {
+        commandClasses: [createVersionComputeCommandClass(
+          sharedCtx as unknown as Parameters<typeof createVersionComputeCommandClass>[0],
+          undefined,
+          undefined,
+          () => []
+        )],
+        context: sharedCtx
+      }
+    );
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as { status: string };
+    expect(parsed.status).toBe('ok');
   });
 });

@@ -11,6 +11,7 @@ import {
 import {
   BundleBuildCommand,
   createBundleBuildCommand,
+  createBundleBuildCommandClass,
 } from '../src/cli/commands/bundle-build';
 import {
   type FsAbstraction,
@@ -195,5 +196,19 @@ describe('BundleBuildCommand (native class)', () => {
     expect(exitCode).toBe(0);
     const env = JSON.parse(stdout) as { data: { outDir: string } };
     expect(env.data.outDir).toContain('my-dist');
+  });
+
+  it('createBundleBuildCommandClass factory builds bundle with defaults', async () => {
+    const sharedCtx = { cwd: tmpRoot, fs: realFs, env: { GITHUB_REPOSITORY: 'owner/demo-repo' } };
+    const { exitCode, stdout } = await runCommand(
+      ['bundle', 'build', '--collection-file', 'collections/demo.collection.yml', '--version', '1.0.0', '-o', 'json'],
+      {
+        commandClasses: [createBundleBuildCommandClass(sharedCtx as unknown as Parameters<typeof createBundleBuildCommandClass>[0])],
+        context: sharedCtx
+      }
+    );
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as { status: string };
+    expect(parsed.status).toBe('ok');
   });
 });
