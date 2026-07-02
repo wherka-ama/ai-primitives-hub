@@ -17,6 +17,8 @@ import type {
   Clock,
 } from '../../src/ports/clock';
 import type {
+  DirEntry,
+  FileStat,
   FileSystem,
 } from '../../src/ports/filesystem';
 import type {
@@ -73,6 +75,20 @@ class InMemoryFileSystem implements FileSystem {
   public async readDir(path: string): Promise<string[]> {
     const prefix = path.endsWith('/') ? path : `${path}/`;
     return [...this.files.keys()].filter((p) => p.startsWith(prefix));
+  }
+
+  public async readDirEntries(path: string): Promise<DirEntry[]> {
+    return (await this.readDir(path)).map((name) => ({ name, isDirectory: false }));
+  }
+
+  public async stat(path: string): Promise<FileStat> {
+    const contents = await this.readFile(path);
+    return {
+      isDirectory: false,
+      isFile: true,
+      size: contents.length,
+      mtimeMs: 0
+    };
   }
 
   public async remove(path: string): Promise<void> {
