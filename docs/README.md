@@ -39,6 +39,7 @@ Marketplace and registry for Copilot prompt bundles in VS Code.
   - [MCP Integration](contributor-guide/architecture/mcp-integration.md)
   - [Scaffolding](contributor-guide/architecture/scaffolding.md)
   - [Validation](contributor-guide/architecture/validation.md)
+  - [Architecture Decision Records](contributor-guide/architecture/adr/adr-index.md)
 - **[Core Flows](contributor-guide/core-flows.md)** — Key system flows
 - **[Testing](contributor-guide/testing.md)** — Testing strategy
 - **[Testing SSH Remote](contributor-guide/testing-ssh-remote.md)** — SSH testing

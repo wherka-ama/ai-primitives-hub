@@ -41,6 +41,7 @@ docs/
 | Commands or settings | `reference/commands.md`, `reference/settings.md` |
 | Bundle/collection schemas | `author-guide/collection-schema.md`, `reference/hub-schema.md` |
 | Testing strategy | `contributor-guide/testing.md` |
+| Past architecture decisions (framework/library choices, naming/branding calls) | `contributor-guide/architecture/adr/adr-index.md` |
 
 ## Updating Documentation
 
@@ -77,6 +78,7 @@ Update documentation when:
 | Development process | `contributor-guide/` (appropriate file) |
 | API or schema changes | `reference/` (appropriate file) |
 | Installation/scope architecture | `contributor-guide/architecture/installation-flow.md` |
+| Major/reversing architecture decision | New file in `contributor-guide/architecture/adr/`, linked from `adr-index.md` |
 
 ## Key Files
 

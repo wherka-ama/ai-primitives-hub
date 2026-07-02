@@ -52,6 +52,17 @@ const sidebars: SidebarsConfig = {
             { type: "doc", id: "contributor-guide/architecture/mcp-integration", label: "MCP Integration" },
             { type: "doc", id: "contributor-guide/architecture/scaffolding", label: "Scaffolding" },
             { type: "doc", id: "contributor-guide/architecture/validation", label: "Validation" },
+            {
+              type: "category",
+              label: "Architecture Decision Records",
+              items: [
+                { type: "doc", id: "contributor-guide/architecture/adr/adr-index", label: "Overview" },
+                { type: "doc", id: "contributor-guide/architecture/adr/ports-and-adapters-for-cli-and-extension", label: "0001: Ports & Adapters for CLI and Extension" },
+                { type: "doc", id: "contributor-guide/architecture/adr/clipanion-cli-framework-with-pinned-rc", label: "0002: Clipanion CLI Framework, RC Pin Accepted" },
+                { type: "doc", id: "contributor-guide/architecture/adr/primitive-index-search-and-multi-target-in-scope", label: "0003: Index/Search and Multi-Target In Scope" },
+                { type: "doc", id: "contributor-guide/architecture/adr/cli-only-rebrand-keep-lockfile-and-extension-identity-stable", label: "0004: CLI-Only Rebrand" },
+              ],
+            },
           ],
         },
         { type: "doc", id: "contributor-guide/core-flows", label: "Core Flows" },
