@@ -8,6 +8,7 @@
  * adapters/ (Phase 3a).
  */
 export * from './adapters';
+export * from './http';
 
 /**
  * Phase 1 scaffolding marker, kept until `app`/`cli` each have real code
