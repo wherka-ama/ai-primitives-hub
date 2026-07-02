@@ -22,12 +22,14 @@ import type {
   Bundle,
   FileSystem,
   RegistrySource,
-  SourceAdapter,
   SourceMetadata,
   ValidationResult,
 } from '@ai-primitives-hub/core';
 import archiver from 'archiver';
 import * as yaml from 'js-yaml';
+import {
+  BaseSourceAdapter,
+} from './base-source-adapter';
 
 interface LocalManifest {
   id: string;
@@ -49,13 +51,14 @@ interface LocalManifest {
 const MANIFEST_FILE_NAME = 'deployment-manifest.yml';
 const SIZE_UNITS = ['B', 'KB', 'MB', 'GB'];
 
-export class LocalAdapter implements SourceAdapter {
+export class LocalAdapter extends BaseSourceAdapter {
   public readonly type = 'local';
 
   public constructor(
-    public readonly source: RegistrySource,
+    source: RegistrySource,
     private readonly fs: FileSystem
   ) {
+    super(source);
     if (!LocalAdapter.isValidLocalUrl(source.url)) {
       throw new Error(`Invalid local path: ${source.url}`);
     }
