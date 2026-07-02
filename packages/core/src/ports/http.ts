@@ -38,3 +38,19 @@ export interface HttpRequest {
 export interface HttpClient {
   fetch(request: HttpRequest): Promise<HttpResponse>;
 }
+
+/**
+ * Resolves a bearer token for an authenticated request, e.g. to GitHub's
+ * API. Deliberately parameterless: a concrete provider closes over
+ * whatever source/context it needs (an explicit `RegistrySource.token`, a
+ * `gh` CLI lookup, a VS Code authentication session, ...) so callers never
+ * need to know which strategy is in play, and infra never needs to depend
+ * on delivery-specific auth mechanisms (e.g. the `vscode` module).
+ *
+ * Called once per request rather than cached by the caller, so a provider
+ * backed by a session that can expire/rotate stays correct without infra
+ * needing its own retry-on-401 logic.
+ */
+export interface TokenProvider {
+  getToken(): Promise<string | undefined>;
+}

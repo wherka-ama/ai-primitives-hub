@@ -106,6 +106,10 @@ class StaticGitHubApi implements GitHubApi {
   public async getText(pathOrUrl: string): Promise<string> {
     return String(this.jsonByPath[pathOrUrl]);
   }
+
+  public async download(pathOrUrl: string): Promise<Uint8Array> {
+    return new TextEncoder().encode(String(this.jsonByPath[pathOrUrl]));
+  }
 }
 
 class StaticHttpClient implements HttpClient {
