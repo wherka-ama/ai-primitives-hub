@@ -8,6 +8,7 @@
  * clock. Landing incrementally, one bounded context per commit.
  */
 export * from './domain';
+export * from './ports';
 
 /**
  * Phase 1 scaffolding marker, kept until `infra`/`app`/`cli` each have real
