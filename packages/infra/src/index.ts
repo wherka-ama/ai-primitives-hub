@@ -1,16 +1,19 @@
 /**
- * The `@ai-primitives-hub/infra` package — placeholder entry point.
+ * The `@ai-primitives-hub/infra` package.
  *
- * Adapters, harvest, search, and per-target writers land here across
- * Phase 3 of the migration plan (see
- * .tmp/ai-primitives-hub-next-migration-plan.md §7.4). Planned module
- * boundaries: adapters/, harvest/, search/, writers/, stores/, scaffolding/,
- * fs/, http/.
- *
- * This placeholder exists only to prove the package/build/test wiring
- * (TypeScript project references, pnpm workspace resolution, Vitest)
- * end-to-end before any real adapter code is written. Replace it as
- * Phase 3 lands.
+ * Adapters, harvest, search, and per-target writers, per the migration
+ * plan (.tmp/ai-primitives-hub-next-migration-plan.md §7.4). Planned
+ * module boundaries: adapters/, harvest/, search/, writers/, stores/,
+ * scaffolding/, fs/, http/. Landing incrementally, starting with
+ * adapters/ (Phase 3a).
+ */
+export * from './adapters';
+
+/**
+ * Phase 1 scaffolding marker, kept until `app`/`cli` each have real code
+ * of their own to depend on instead of this placeholder re-export chain
+ * (see those packages' `src/index.ts`) — removed once Phase 3 fills in
+ * every planned infra module.
  */
 export {
   CORE_PACKAGE_READY as INFRA_PACKAGE_READY,

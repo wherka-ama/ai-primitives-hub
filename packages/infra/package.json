@@ -27,9 +27,13 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ai-primitives-hub/core": "workspace:*"
+    "@ai-primitives-hub/core": "workspace:*",
+    "archiver": "^7.0.1",
+    "js-yaml": "^4.1.1"
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^4.1.7",
     "typescript": "^5.9.3",
