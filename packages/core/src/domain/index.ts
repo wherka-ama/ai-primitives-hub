@@ -11,3 +11,4 @@ export * from './install/target';
 export * from './registry/types';
 export * from './hub/types';
 export * from './hub/validate';
+export * from './primitive/types';
