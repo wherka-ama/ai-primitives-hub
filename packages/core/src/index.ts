@@ -1,15 +1,18 @@
 /**
- * The `@ai-primitives-hub/core` package — placeholder entry point.
+ * The `@ai-primitives-hub/core` package.
  *
- * Domain types and port interfaces land here across Phase 2 of the
- * migration plan (see .tmp/ai-primitives-hub-next-migration-plan.md §7.3):
- * bundle/collection, source, install/target (full TargetType union),
- * hub/profile/registry, primitive/index, and port interfaces for
- * filesystem, HTTP, GitHub API, clock.
- *
- * This placeholder exists only to prove the package/build/test wiring
- * (TypeScript project references, pnpm workspace resolution, Vitest)
- * end-to-end before any real domain code is written. Replace it as Phase 2
- * lands.
+ * Domain types and port interfaces, per the migration plan
+ * (.tmp/ai-primitives-hub-next-migration-plan.md §7.3): bundle/collection,
+ * source, install/target (full TargetType union), hub/profile/registry,
+ * primitive/index, and port interfaces for filesystem, HTTP, GitHub API,
+ * clock. Landing incrementally, one bounded context per commit.
+ */
+export * from './domain';
+
+/**
+ * Phase 1 scaffolding marker, kept until `infra`/`app`/`cli` each have real
+ * code of their own to depend on instead of this placeholder re-export
+ * chain (see those packages' `src/index.ts`) — removed in Phase 5 once
+ * `cli` no longer needs it.
  */
 export const CORE_PACKAGE_READY = true;
