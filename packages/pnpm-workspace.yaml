@@ -1,0 +1,16 @@
+# Nested pnpm workspace, deliberately scoped to packages/ ONLY.
+#
+# This is intentionally isolated from the repository root, which remains an
+# npm-managed project (root package.json + package-lock.json, npm workspaces
+# for lib/ and github-actions/*). Running `pnpm install` from this directory
+# never touches the root node_modules/ or package-lock.json — the two
+# package managers coexist without conflict.
+#
+# apps/vscode-extension and lib join this workspace later (Phase 6 of
+# .tmp/ai-primitives-hub-next-migration-plan.md) once the extension is
+# relocated and the whole repo can move to pnpm in one deliberate, reviewed
+# step, rather than risking the existing npm-managed build today.
+packages:
+  - '*'
+
+engineStrict: true

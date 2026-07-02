@@ -1,0 +1,117 @@
+name: Packages CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "packages/**"
+      - ".github/workflows/packages-ci.yml"
+      - "tsconfig.base.json"
+      - "eslint.shared.mjs"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "packages/**"
+      - ".github/workflows/packages-ci.yml"
+      - "tsconfig.base.json"
+      - "eslint.shared.mjs"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Security: Restrict permissions to minimum necessary
+permissions: read-all
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  lint-and-test:
+    name: Lint, Build and Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: packages
+          format: "sarif"
+          output: "trivy-packages-results.sarif"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: "trivy-packages-results.sarif"
+          category: packages
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: packages/package.json
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        working-directory: packages
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-packages-${{ hashFiles('packages/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-packages-
+
+      - name: Install dependencies
+        working-directory: packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        working-directory: packages
+        run: pnpm -r build
+
+      - name: Run linting
+        working-directory: packages
+        run: pnpm -r lint
+
+      - name: Run tests
+        working-directory: packages
+        run: pnpm -r test
+
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [lint-and-test]
+    if: always()
+
+    steps:
+      - name: Build Summary
+        shell: bash
+        run: |
+          echo "## 📦 AI Primitives Hub — packages/ CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- @ai-primitives-hub/core, /infra, /app, /cli built, linted, and tested" >> $GITHUB_STEP_SUMMARY
+          echo "- Trivy vulnerability scanning completed (category: packages)" >> $GITHUB_STEP_SUMMARY

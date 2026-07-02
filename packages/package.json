@@ -1,0 +1,21 @@
+{
+  "name": "ai-primitives-hub-packages",
+  "private": true,
+  "description": "Nested pnpm workspace root for @ai-primitives-hub/{core,infra,app,cli}. See README.md for why this is a separate workspace from the repository root.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "watch": "pnpm -r --parallel watch",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage"
+  }
+}
