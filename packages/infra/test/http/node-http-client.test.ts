@@ -21,8 +21,21 @@ import {
 describe('NodeHttpClient', () => {
   let server: http.Server;
   let baseUrl: string;
+  let crossOriginServer: http.Server;
+  let crossOriginUrl: string;
+  let crossOriginReceivedAuth: string | undefined;
 
   beforeEach(async () => {
+    crossOriginReceivedAuth = undefined;
+    crossOriginServer = http.createServer((req, res) => {
+      crossOriginReceivedAuth = req.headers.authorization;
+      res.writeHead(200);
+      res.end('cross-origin-target');
+    });
+    await new Promise<void>((resolve) => crossOriginServer.listen(0, '127.0.0.1', resolve));
+    const crossOriginPort = (crossOriginServer.address() as AddressInfo).port;
+    crossOriginUrl = `http://127.0.0.1:${crossOriginPort}/`;
+
     server = http.createServer((req, res) => {
       if (req.url === '/redirect-once') {
         res.writeHead(302, { Location: '/target' });
@@ -44,6 +57,16 @@ describe('NodeHttpClient', () => {
         res.end();
         return;
       }
+      if (req.url === '/redirect-cross-origin') {
+        res.writeHead(302, { Location: crossOriginUrl });
+        res.end();
+        return;
+      }
+      if (req.url === '/redirect-same-origin') {
+        res.writeHead(302, { Location: '/echo-header' });
+        res.end();
+        return;
+      }
       if (req.url === '/not-found') {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('nope');
@@ -61,6 +84,9 @@ describe('NodeHttpClient', () => {
   afterEach(async () => {
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
+    });
+    await new Promise<void>((resolve, reject) => {
+      crossOriginServer.close((err) => (err ? reject(err) : resolve()));
     });
   });
 
@@ -99,5 +125,23 @@ describe('NodeHttpClient', () => {
 
   it('rejects when the server is unreachable', async () => {
     await expect(new NodeHttpClient().fetch({ url: 'http://127.0.0.1:1' })).rejects.toThrow('failed');
+  });
+
+  it('strips Authorization before following a cross-origin redirect', async () => {
+    const response = await new NodeHttpClient().fetch({
+      url: `${baseUrl}/redirect-cross-origin`,
+      headers: { Authorization: 'token super-secret' }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(crossOriginReceivedAuth).toBeUndefined();
+  });
+
+  it('keeps Authorization across a same-origin redirect', async () => {
+    const response = await new NodeHttpClient().fetch({
+      url: `${baseUrl}/redirect-same-origin`,
+      headers: { Authorization: 'token same-origin' }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['x-echo']).toBe('token same-origin');
   });
 });

@@ -32,7 +32,12 @@ export class NodeHttpClient implements HttpClient {
         throw new Error(`Maximum redirect count exceeded fetching ${request.url}`);
       }
       const nextUrl = new URL(response.headers.location, url).toString();
-      return this.fetchFollowingRedirects(request, nextUrl, redirectsRemaining - 1);
+      // Strip credentials before following a cross-origin redirect (e.g. a
+      // GitHub release asset redirecting to a pre-signed S3/Azure URL) -
+      // matches fetch()/browser behavior. Same-origin redirects keep every
+      // header, including Authorization, unchanged.
+      const nextRequest = isSameOrigin(url, nextUrl) ? request : stripCredentialHeaders(request);
+      return this.fetchFollowingRedirects(nextRequest, nextUrl, redirectsRemaining - 1);
     }
 
     return response;
@@ -74,6 +79,27 @@ export class NodeHttpClient implements HttpClient {
   public async fetch(request: HttpRequest): Promise<HttpResponse> {
     return this.fetchFollowingRedirects(request, request.url, request.maxRedirects ?? DEFAULT_MAX_REDIRECTS);
   }
+}
+
+function isSameOrigin(a: string, b: string): boolean {
+  const urlA = new URL(a);
+  const urlB = new URL(b);
+  return urlA.protocol === urlB.protocol && urlA.host === urlB.host;
+}
+
+const CREDENTIAL_HEADER_NAMES = new Set(['authorization', 'cookie', 'proxy-authorization']);
+
+function stripCredentialHeaders(request: HttpRequest): HttpRequest {
+  if (!request.headers) {
+    return request;
+  }
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(request.headers)) {
+    if (!CREDENTIAL_HEADER_NAMES.has(name.toLowerCase())) {
+      headers[name] = value;
+    }
+  }
+  return { ...request, headers };
 }
 
 function flattenHeaders(headers: http.IncomingHttpHeaders): Record<string, string> {
