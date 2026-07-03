@@ -10,8 +10,11 @@
 export * from './adapters';
 export * from './auth';
 export * from './clock';
+export * from './harvest';
 export * from './http';
 export * from './process';
+export * from './search';
+export * from './stores';
 
 /**
  * Phase 1 scaffolding marker, kept until `app`/`cli` each have real code
