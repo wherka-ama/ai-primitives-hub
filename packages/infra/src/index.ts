@@ -13,8 +13,10 @@ export * from './clock';
 export * from './harvest';
 export * from './http';
 export * from './process';
+export * from './resolvers';
 export * from './search';
 export * from './stores';
+export * from './writers';
 
 /**
  * Phase 1 scaffolding marker, kept until `app`/`cli` each have real code

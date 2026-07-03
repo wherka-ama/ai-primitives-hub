@@ -73,6 +73,9 @@ export class InMemoryFileSystem implements FileSystem {
   }
 
   public async readDirEntries(path: string): Promise<DirEntry[]> {
+    if (this.files.has(path)) {
+      throw new Error(`ENOTDIR: not a directory: ${path}`);
+    }
     const prefix = path.endsWith('/') ? path : `${path}/`;
     const names = new Map<string, boolean>();
 
@@ -108,7 +111,16 @@ export class InMemoryFileSystem implements FileSystem {
     throw new Error(`ENOENT: no such file or directory: ${path}`);
   }
 
-  public async remove(path: string): Promise<void> {
+  public async remove(path: string, opts?: { recursive?: boolean }): Promise<void> {
+    if (opts?.recursive === true) {
+      const prefix = path.endsWith('/') ? path : `${path}/`;
+      for (const key of this.files.keys()) {
+        if (key === path || key.startsWith(prefix)) {
+          this.files.delete(key);
+        }
+      }
+      return;
+    }
     this.files.delete(path);
   }
 }
