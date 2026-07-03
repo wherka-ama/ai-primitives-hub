@@ -5,16 +5,24 @@
  * a `Primitive` is a single harvested, searchable unit inside a bundle —
  * one prompt, one instruction file, one agent, etc. Needed by both
  * `infra/search` (Phase 3) and `app/discovery` (Phase 4) per migration plan
- * §8 decision 4. Adapted from the reference branch's design, flattened
- * (no `BundleRef` nesting) since nothing in Phase 2 needs that structure
- * yet — `sourceId`/`bundleId`/`bundleVersion` are plain fields until
- * Phase 3's harvest subsystem shows a real need for something richer.
+ * §8 decision 4.
  *
- * `tags`, `kind`, and `sourceId` together are the facets a search/browse
- * UI filters on — there is no separate "facets" bag; faceting is just
- * grouping/filtering by these existing fields.
+ * Nests `bundle: BundleRef` rather than flat `sourceId`/`bundleId`/
+ * `bundleVersion` fields — matches the reference branch's shape. Phase 2
+ * originally flattened these fields (no prior need for `BundleRef`); now
+ * that Phase 3b's harvest subsystem (`infra/harvest/extractor.ts`) is the
+ * first real producer, adopted the richer nested shape since it carries
+ * `sourceType`/`installed` too and nothing outside this module consumed
+ * the flat fields in the interim, so this is a safe, non-breaking change.
+ *
+ * `tags`, `kind`, and `bundle.sourceId` together are the facets a
+ * search/browse UI filters on — there is no separate "facets" bag;
+ * faceting is just grouping/filtering by these existing fields.
  * @module domain/primitive/types
  */
+import type {
+  BundleRef,
+} from '../bundle/types';
 
 export const PRIMITIVE_KINDS = [
   'prompt',
@@ -41,17 +49,16 @@ export function isPrimitiveKind(value: unknown): value is PrimitiveKind {
  * A single harvested, searchable primitive.
  */
 export interface Primitive {
-  /** Stable identifier, typically derived from `bundleId` + `path`. */
+  /** Stable identifier, typically derived from `bundle.bundleId` + `path`. */
   id: string;
+  /** The bundle this primitive was harvested from. */
+  bundle: BundleRef;
   kind: PrimitiveKind;
   title: string;
   description: string;
   /** Path relative to the bundle root. */
   path: string;
   tags: string[];
-  sourceId: string;
-  bundleId: string;
-  bundleVersion: string;
   authors?: string[];
   /** Glob the primitive applies to, for instruction-like kinds. */
   applyTo?: string;
