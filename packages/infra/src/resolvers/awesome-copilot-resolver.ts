@@ -11,15 +11,19 @@
  *
  * Local clones use `LocalAwesomeCopilotBundleResolver` from the
  * companion file; same parser, different IO.
+ *
+ * Talks to `raw.githubusercontent.com` through the shared `GitHubApi`
+ * port (same as `github-resolver.ts` and `adapters/github-adapter.ts`)
+ * rather than a raw `HttpClient` + `TokenProvider` — see
+ * `github-resolver.ts`'s module doc for why that consolidation happened.
  * @module resolvers/awesome-copilot-resolver
  */
 import {
   type BundleResolver,
   type BundleSpec,
   generateSourceId,
-  type HttpClient,
+  type GitHubApi,
   type Installable,
-  type TokenProvider,
 } from '@ai-primitives-hub/core';
 import * as yaml from 'js-yaml';
 import {
@@ -49,8 +53,7 @@ export interface AwesomeCopilotResolverOptions {
   branch?: string;
   /** Collections directory (`collections` if not given). */
   collectionsPath?: string;
-  http: HttpClient;
-  tokens: TokenProvider;
+  githubApi: GitHubApi;
 }
 
 /**
@@ -71,24 +74,18 @@ export class AwesomeCopilotBundleResolver implements BundleResolver {
   }
 
   /**
-   * Fetch text; return null on 404.
+   * Fetch text via the shared `GitHubApi`; return null on 404.
    * @param url
    */
   private async fetchText(url: string): Promise<string | null> {
-    const host = new URL(url).hostname;
-    const token = await this.opts.tokens.getToken(host);
-    const headers: Record<string, string> = { Accept: 'application/octet-stream, text/plain, */*' };
-    if (token !== undefined) {
-      headers.Authorization = `Bearer ${token}`;
+    try {
+      return await this.opts.githubApi.getText(url);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return null;
+      }
+      throw error;
     }
-    const res = await this.opts.http.fetch({ url, headers });
-    if (res.statusCode === 404) {
-      return null;
-    }
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new Error(`raw fetch ${String(res.statusCode)} for ${url}`);
-    }
-    return new TextDecoder().decode(res.body);
   }
 
   /**

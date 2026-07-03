@@ -1,11 +1,14 @@
 /**
  * Shared test helper — a route-table `HttpClient` double.
  *
- * Reused across resolver tests that depend directly on `core`'s
- * `HttpClient` port (rather than the richer `GitHubApi` port — see
- * `resolvers/*.ts`'s module docs for why these stay on the lower-level
- * port). Matches `test/AGENTS.md`'s "mandatory helper reuse" principle,
- * applied to this package's own Vitest suites.
+ * Used by `http/github-api-client.test.ts` to exercise `GitHubApiClient`
+ * itself (the one place that legitimately needs to drive the raw
+ * `HttpClient` port directly). The `resolvers/*.ts` GitHub-backed
+ * resolvers depend on the higher-level `GitHubApi` port instead — see
+ * `resolvers/github-resolver.ts`'s module doc — so their tests use
+ * `fake-github-api.ts`/`recording-github-api.ts`, not this helper.
+ * Matches `test/AGENTS.md`'s "mandatory helper reuse" principle, applied
+ * to this package's own Vitest suites.
  * @module test/helpers/fake-http-client
  */
 import type {

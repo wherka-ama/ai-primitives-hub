@@ -17,18 +17,20 @@
  * - apm, local-apm
  * - awesome-copilot-plugin, local-awesome-copilot-plugin
  *
- * Known duplication (deferred consolidation): overlaps with
- * `RepositoryAdapterFactory`/`adapters/*` source-type dispatch — see
- * `resolvers/github-resolver.ts`'s module doc.
+ * Overlap with `RepositoryAdapterFactory`/`adapters/*` source-type
+ * dispatch is intentional and stays (list-all-bundles vs resolve-one-spec
+ * are different consumer needs — see `github-resolver.ts`'s module doc).
+ * What *was* consolidated: every GitHub-backed resolver constructed here
+ * now shares the one `GitHubApi` instance passed in, instead of each
+ * resolver rebuilding its own raw-HTTP auth/error handling.
  * @module resolvers/resolver-registry
  */
 
 import type {
   BundleResolver,
   FileSystem,
-  HttpClient,
+  GitHubApi,
   RegistrySource,
-  TokenProvider,
 } from '@ai-primitives-hub/core';
 import {
   AwesomeCopilotBundleResolver,
@@ -43,10 +45,8 @@ import {
 } from './skills-resolver';
 
 export interface SourceDispatcherOptions {
-  /** HTTP client for network requests. */
-  http: HttpClient;
-  /** Token provider for authenticated requests. */
-  tokens: TokenProvider;
+  /** Shared GitHub API client, reused across every GitHub-backed resolver. */
+  githubApi: GitHubApi;
   /** Filesystem abstraction for local sources. */
   fs: FileSystem;
 }
@@ -55,13 +55,11 @@ export interface SourceDispatcherOptions {
  * Dispatcher that selects the appropriate resolver based on source type.
  */
 export class SourceDispatcher {
-  private readonly http: HttpClient;
-  private readonly tokens: TokenProvider;
+  private readonly githubApi: GitHubApi;
   private readonly fs: FileSystem;
 
   public constructor(opts: SourceDispatcherOptions) {
-    this.http = opts.http;
-    this.tokens = opts.tokens;
+    this.githubApi = opts.githubApi;
     this.fs = opts.fs;
   }
 
@@ -87,8 +85,7 @@ export class SourceDispatcher {
       case 'github': {
         return new GitHubBundleResolver({
           repoSlug: this.repoSlug(source.url),
-          http: this.http,
-          tokens: this.tokens
+          githubApi: this.githubApi
         });
       }
       case 'awesome-copilot': {
@@ -97,16 +94,14 @@ export class SourceDispatcher {
           repoSlug: this.repoSlug(source.url),
           branch: config.branch,
           collectionsPath: config.collectionsPath,
-          http: this.http,
-          tokens: this.tokens
+          githubApi: this.githubApi
         });
       }
       case 'skills': {
         return new SkillsBundleResolver({
           repoSlug: this.repoSlug(source.url),
           ref: (source as { ref?: string }).ref,
-          http: this.http,
-          tokens: this.tokens
+          githubApi: this.githubApi
         });
       }
       case 'local-skills': {

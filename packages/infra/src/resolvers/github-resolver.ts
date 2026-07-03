@@ -6,24 +6,34 @@
  * VS Code extension. Produces an `Installable` whose `downloadUrl`
  * points at the release asset that `BundleDownloader` will fetch.
  *
- * Uses a `TokenProvider` rather than reading env directly.
+ * The `SourceAdapter` (`adapters/github-adapter.ts`) vs `BundleResolver`
+ * (this file) split is intentional and stays: `GitHubAdapter` lists every
+ * bundle in a source for marketplace browsing, this resolver looks up a
+ * single `BundleSpec` for CLI `install <spec>` — different call shapes for
+ * different consumers, not the same responsibility twice.
  *
- * Known duplication (deferred consolidation): this resolver overlaps
- * significantly with `adapters/github-adapter.ts`'s
- * `fetchBundles`+`getDownloadUrl` — both do GitHub-releases-based
- * bundle resolution. Kept separate for now since `GitHubAdapter`
- * lists all bundles (marketplace browsing) while this resolves a
- * single `BundleSpec` (CLI `install <spec>`). See migration plan
- * notes for the planned consolidation.
+ * What *was* duplicated (now fixed): this resolver used to talk to GitHub
+ * via a raw `HttpClient` + `TokenProvider`, reimplementing auth headers and
+ * error handling that `core`'s `GitHubApi` port + `infra`'s
+ * `GitHubApiClient` already provide — with none of that client's retry/
+ * backoff/rate-limit handling. Now takes a `GitHubApi` directly, same as
+ * `GitHubAdapter`, so both share one hardened GitHub transport.
+ *
+ * Dropped in that move: automatic repo-slug update on a GitHub redirect
+ * (e.g. a renamed repository) that the old raw-`HttpClient` path derived
+ * from the response's `finalUrl`. The redirect itself is still followed
+ * (data comes back correctly either way) — only the *display* slug used
+ * for bundle-ID decomposition/`sourceId` could stay stale for a renamed
+ * repo. This was untested and `GitHubAdapter` never had it either; not
+ * worth keeping a resolver-only special case for.
  * @module resolvers/github-resolver
  */
 import {
   type BundleResolver,
   type BundleSpec,
   generateSourceId,
-  type HttpClient,
+  type GitHubApi,
   type Installable,
-  type TokenProvider,
 } from '@ai-primitives-hub/core';
 
 /**
@@ -47,12 +57,12 @@ export interface GitHubResolverOptions {
   repoSlug: string;
   /** Asset filename within each release; defaults to `bundle.zip`. */
   assetName?: string;
-  /** API base URL; override for GHES. Defaults to `https://api.github.com`. */
-  apiBase?: string;
-  /** Required HttpClient for the network calls. */
-  http: HttpClient;
-  /** Required TokenProvider for auth headers. */
-  tokens: TokenProvider;
+  /**
+   * GitHub API client. Configure its own `baseUrl` for GHES — the resolver
+   * always calls relative paths (`/repos/...`) so it inherits whatever base
+   * the caller configured.
+   */
+  githubApi: GitHubApi;
 }
 
 /**
@@ -167,24 +177,18 @@ export class GitHubBundleResolver implements BundleResolver {
   public async resolve(spec: BundleSpec): Promise<Installable | null> {
     const releases = await this.listReleases();
     if (releases.length === 0) {
-      console.error(`[GitHubBundleResolver] No releases found for ${this.opts.repoSlug}`);
       return null;
     }
     const { collection: bundleName } = decomposeBundleId(spec.bundleId, this.opts.repoSlug);
-    console.error(`[GitHubBundleResolver] bundleId=${spec.bundleId}, bundleName=${bundleName}, repoSlug=${this.opts.repoSlug}`);
-    console.error(`[GitHubBundleResolver] Available releases: ${releases.map((r) => r.tag_name).join(', ')}`);
     const wantVersion = spec.bundleVersion;
     const release: GitHubRelease | undefined = wantVersion === undefined || wantVersion === 'latest'
       ? this.findLatestRelease(releases, bundleName)
       : this.findSpecificRelease(releases, bundleName, wantVersion);
     if (release === undefined) {
-      console.error(`[GitHubBundleResolver] No release found for bundleName=${bundleName}, version=${wantVersion}`);
       return null;
     }
     const asset = this.findAsset(release, spec.bundleId);
     if (asset === undefined) {
-      console.error(`[GitHubBundleResolver] No asset found for bundleId=${spec.bundleId} in release ${release.tag_name}`);
-      console.error(`[GitHubBundleResolver] Available assets: ${release.assets.map((a) => a.name).join(', ')}`);
       return null;
     }
     const sourceId = generateSourceId('github', `https://github.com/${this.opts.repoSlug}`);
@@ -213,62 +217,30 @@ export class GitHubBundleResolver implements BundleResolver {
   }
 
   /**
-   * GET /repos/{owner}/{repo}/releases. Cached per resolver instance.
-   * Handles GitHub repository redirects (e.g., renames) by following
-   * the redirect and updating the repoSlug to the final resolved name.
+   * GET /repos/{owner}/{repo}/releases via the injected `GitHubApi`.
+   * Cached per resolver instance. A 404 (repo not found/inaccessible) is
+   * treated as an empty release list rather than a thrown error, so
+   * `resolve()` can return `null` instead of surfacing a raw HTTP error.
    * @returns Releases array (newest first per GitHub default ordering).
    */
   private async listReleases(): Promise<GitHubRelease[]> {
     if (this.cachedReleases !== null) {
       return this.cachedReleases;
     }
-    const url = `${this.apiBase()}/repos/${this.opts.repoSlug}/releases`;
-    const headers = await this.authHeaders();
-    headers.Accept = 'application/vnd.github+json';
-    headers['X-GitHub-Api-Version'] = '2022-11-28';
-    const res = await this.opts.http.fetch({ url, headers });
-    if (res.statusCode === 404) {
-      this.cachedReleases = [];
-      return [];
-    }
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new Error(
-        `GitHub API ${String(res.statusCode)} for ${url}; body: ${truncate(decode(res.body), 200)}`
-      );
-    }
-    // If the request was redirected, update the repoSlug to match the final repository name
-    // This handles repository renames (e.g., "collect" -> "collection")
-    if (res.finalUrl && res.finalUrl !== url) {
-      const match = /\/repos\/([^/]+\/[^/]+)\/releases/.exec(res.finalUrl);
-      const finalRepoSlug = match?.[1];
-      if (finalRepoSlug && finalRepoSlug !== this.opts.repoSlug) {
-        // Update the repoSlug to the final resolved name
-        (this.opts as any).repoSlug = finalRepoSlug;
+    let releases: GitHubRelease[];
+    try {
+      releases = await this.opts.githubApi.getJson<GitHubRelease[]>(`/repos/${this.opts.repoSlug}/releases`);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        this.cachedReleases = [];
+        return [];
       }
+      throw error;
     }
-    const text = decode(res.body);
-    const parsed = JSON.parse(text) as GitHubRelease[];
-    this.cachedReleases = parsed;
-    return parsed;
-  }
-
-  /** Build the Authorization header set, deferring to the token provider. */
-  private async authHeaders(): Promise<Record<string, string>> {
-    const host = new URL(this.apiBase()).hostname;
-    const token = await this.opts.tokens.getToken(host);
-    return token === undefined ? {} : { Authorization: `Bearer ${token}` };
-  }
-
-  /** Resolve the API base for this resolver. */
-  private apiBase(): string {
-    return this.opts.apiBase ?? 'https://api.github.com';
+    this.cachedReleases = releases;
+    return releases;
   }
 }
-
-const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
-
-const truncate = (s: string, n: number): string =>
-  s.length > n ? `${s.slice(0, n)}…` : s;
 
 /**
  * Extract the semver portion from a release tag, handling all

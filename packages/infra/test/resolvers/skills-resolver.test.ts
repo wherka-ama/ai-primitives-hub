@@ -17,42 +17,33 @@ import {
   SkillsBundleResolver,
 } from '../../src/resolvers/skills-resolver';
 import {
-  FakeHttpClient,
-} from '../helpers/fake-http-client';
+  FakeGitHubApi,
+} from '../helpers/fake-github-api';
 import {
   InMemoryFileSystem,
 } from '../helpers/in-memory-filesystem';
-
-const mockTokenProvider = {
-  getToken: async (): Promise<string | undefined> => undefined
-};
+import {
+  RecordingGitHubApi,
+} from '../helpers/recording-github-api';
 
 describe('SkillsBundleResolver', () => {
-  const CONTENTS_URL = 'https://api.github.com/repos/anthropics/skills/contents/skills/my-skill';
+  const CONTENTS_PATH = '/repos/anthropics/skills/contents/skills/my-skill';
 
   it('returns null when the skill directory does not exist', async () => {
-    const http = new FakeHttpClient().addRoute({ url: CONTENTS_URL, status: 404 });
-    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', http, tokens: mockTokenProvider });
+    // Nothing seeded -> FakeGitHubApi.getJson throws a 404-shaped error.
+    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', githubApi: new FakeGitHubApi() });
 
     const result = await resolver.resolve({ bundleId: 'my-skill' });
     expect(result).toBeNull();
   });
 
   it('builds a zip from every file in the skill directory', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: CONTENTS_URL,
-        status: 200,
-        body: JSON.stringify([
-          { name: 'SKILL.md', path: 'skills/my-skill/SKILL.md', type: 'file', download_url: 'https://raw/SKILL.md', url: 'https://api/skill' }
-        ])
-      })
-      .addRoute({
-        url: 'https://raw/SKILL.md',
-        status: 200,
-        body: '---\nname: My Skill\ndescription: Does things\n---\n# My Skill'
-      });
-    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', http, tokens: mockTokenProvider });
+    const githubApi = new FakeGitHubApi()
+      .seedJson(CONTENTS_PATH, [
+        { name: 'SKILL.md', path: 'skills/my-skill/SKILL.md', type: 'file', download_url: 'https://raw/SKILL.md', url: 'https://api/skill' }
+      ])
+      .seedBytes('https://raw/SKILL.md', new TextEncoder().encode('---\nname: My Skill\ndescription: Does things\n---\n# My Skill'));
+    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'my-skill', bundleVersion: '1.2.3' });
     expect(result).not.toBeNull();
@@ -62,63 +53,47 @@ describe('SkillsBundleResolver', () => {
   });
 
   it('recurses into subdirectories', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: CONTENTS_URL,
-        status: 200,
-        body: JSON.stringify([
-          { name: 'sub', path: 'skills/my-skill/sub', type: 'dir', url: 'https://api/sub' }
-        ])
-      })
-      .addRoute({
-        url: 'https://api.github.com/repos/anthropics/skills/contents/skills/my-skill/sub',
-        status: 200,
-        body: JSON.stringify([
-          { name: 'file.md', path: 'skills/my-skill/sub/file.md', type: 'file', download_url: 'https://raw/file.md', url: 'https://api/file' }
-        ])
-      })
-      .addRoute({ url: 'https://raw/file.md', status: 200, body: 'content' });
-    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', http, tokens: mockTokenProvider });
+    const githubApi = new FakeGitHubApi()
+      .seedJson(CONTENTS_PATH, [
+        { name: 'sub', path: 'skills/my-skill/sub', type: 'dir', url: 'https://api/sub' }
+      ])
+      .seedJson('/repos/anthropics/skills/contents/skills/my-skill/sub', [
+        { name: 'file.md', path: 'skills/my-skill/sub/file.md', type: 'file', download_url: 'https://raw/file.md', url: 'https://api/file' }
+      ])
+      .seedBytes('https://raw/file.md', new TextEncoder().encode('content'));
+    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'my-skill' });
     expect(result).not.toBeNull();
   });
 
   it('defaults name/description when SKILL.md is absent', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: CONTENTS_URL,
-        status: 200,
-        body: JSON.stringify([
-          { name: 'notes.md', path: 'skills/my-skill/notes.md', type: 'file', download_url: 'https://raw/notes.md', url: 'https://api/notes' }
-        ])
-      })
-      .addRoute({ url: 'https://raw/notes.md', status: 200, body: 'content' });
-    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', http, tokens: mockTokenProvider });
+    const githubApi = new FakeGitHubApi()
+      .seedJson(CONTENTS_PATH, [
+        { name: 'notes.md', path: 'skills/my-skill/notes.md', type: 'file', download_url: 'https://raw/notes.md', url: 'https://api/notes' }
+      ])
+      .seedBytes('https://raw/notes.md', new TextEncoder().encode('content'));
+    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'my-skill' });
     expect(result).not.toBeNull();
     expect(result?.ref.bundleVersion).toBe('0.0.0');
   });
 
-  it('sends an Authorization header when a token is available', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: CONTENTS_URL,
-        status: 200,
-        body: JSON.stringify([
-          { name: 'SKILL.md', path: 'skills/my-skill/SKILL.md', type: 'file', download_url: 'https://raw/SKILL.md', url: 'https://api/skill' }
-        ])
-      })
-      .addRoute({ url: 'https://raw/SKILL.md', status: 200, body: '# Skill' });
-    const resolver = new SkillsBundleResolver({
-      repoSlug: 'anthropics/skills',
-      http,
-      tokens: { getToken: async (): Promise<string | undefined> => 'tok' }
-    });
+  it('calls the contents endpoint through the shared GitHubApi', async () => {
+    const inner = new FakeGitHubApi()
+      .seedJson(CONTENTS_PATH, [
+        { name: 'SKILL.md', path: 'skills/my-skill/SKILL.md', type: 'file', download_url: 'https://raw/SKILL.md', url: 'https://api/skill' }
+      ])
+      .seedBytes('https://raw/SKILL.md', new TextEncoder().encode('# Skill'));
+    const githubApi = new RecordingGitHubApi(inner);
+    const resolver = new SkillsBundleResolver({ repoSlug: 'anthropics/skills', githubApi });
 
     await resolver.resolve({ bundleId: 'my-skill' });
-    expect(http.calls[0].headers?.Authorization).toBe('Bearer tok');
+    expect(githubApi.calls).toEqual([
+      { method: 'getJson', pathOrUrl: CONTENTS_PATH },
+      { method: 'download', pathOrUrl: 'https://raw/SKILL.md' }
+    ]);
   });
 });
 

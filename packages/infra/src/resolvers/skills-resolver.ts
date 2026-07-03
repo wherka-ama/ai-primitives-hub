@@ -16,6 +16,12 @@
  *     awesome-copilot repo. Reuses AwesomeCopilotBundleResolver's
  *     parser, but with fs IO. Lives here to keep all "local-*"
  *     adapters in a single file.
+ *
+ * `SkillsBundleResolver` talks to the GitHub Contents API + raw file
+ * downloads through the shared `GitHubApi` port rather than a raw
+ * `HttpClient` + `TokenProvider` — see `github-resolver.ts`'s module doc
+ * for why that consolidation happened. The two `Local*` resolvers below
+ * are unaffected (they only ever used `FileSystem`, never HTTP).
  * @module resolvers/skills-resolver
  */
 import * as path from 'node:path';
@@ -23,9 +29,8 @@ import type {
   BundleResolver,
   BundleSpec,
   FileSystem,
-  HttpClient,
+  GitHubApi,
   Installable,
-  TokenProvider,
 } from '@ai-primitives-hub/core';
 import {
   generateSourceId,
@@ -61,8 +66,7 @@ export interface SkillsResolverOptions {
   ref?: string;
   /** Skills directory inside the repo (default `skills`). */
   skillsPath?: string;
-  http: HttpClient;
-  tokens: TokenProvider;
+  githubApi: GitHubApi;
 }
 
 /**
@@ -74,55 +78,39 @@ export class SkillsBundleResolver implements BundleResolver {
   public constructor(private readonly opts: SkillsResolverOptions) {}
 
   /**
-   * GET /repos/.../contents/<path> — returns null on 404.
+   * GET /repos/.../contents/<path> via the shared `GitHubApi` — returns
+   * null on 404.
    * @param p
    */
   private async fetchContents(p: string): Promise<ContentsEntry[] | null> {
     const refPart = this.opts.ref !== undefined && this.opts.ref.length > 0
       ? `?ref=${encodeURIComponent(this.opts.ref)}`
       : '';
-    const url = `https://api.github.com/repos/${this.opts.repoSlug}/contents/${p}${refPart}`;
-    const token = await this.opts.tokens.getToken('api.github.com');
-
-    const headers: Record<string, string> = {
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28'
-    };
-
-    if (token !== undefined) {
-      headers.Authorization = `Bearer ${token}`;
+    const url = `/repos/${this.opts.repoSlug}/contents/${p}${refPart}`;
+    try {
+      const parsed = await this.opts.githubApi.getJson<ContentsEntry[] | ContentsEntry>(url);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return null;
+      }
+      throw error;
     }
-    const res = await this.opts.http.fetch({ url, headers });
-    if (res.statusCode === 404) {
-      return null;
-    }
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new Error(`contents API ${String(res.statusCode)} for ${url}`);
-    }
-    const text = new TextDecoder().decode(res.body);
-    const parsed = JSON.parse(text) as ContentsEntry[] | ContentsEntry;
-    return Array.isArray(parsed) ? parsed : [parsed];
   }
 
   /**
-   * GET a raw download URL; returns null on 404.
+   * GET a raw download URL via the shared `GitHubApi`; returns null on 404.
    * @param url
    */
   private async fetchBytes(url: string): Promise<Uint8Array | null> {
-    const host = new URL(url).hostname;
-    const token = await this.opts.tokens.getToken(host);
-    const headers: Record<string, string> = { Accept: 'application/octet-stream' };
-    if (token !== undefined) {
-      headers.Authorization = `Bearer ${token}`;
+    try {
+      return await this.opts.githubApi.download(url);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return null;
+      }
+      throw error;
     }
-    const res = await this.opts.http.fetch({ url, headers });
-    if (res.statusCode === 404) {
-      return null;
-    }
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new Error(`download ${String(res.statusCode)} for ${url}`);
-    }
-    return res.body;
   }
 
   /**

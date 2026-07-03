@@ -7,78 +7,42 @@ import {
   AwesomeCopilotBundleResolver,
 } from '../../src/resolvers/awesome-copilot-resolver';
 import {
-  FakeHttpClient,
-} from '../helpers/fake-http-client';
+  FakeGitHubApi,
+} from '../helpers/fake-github-api';
 
-const mockTokenProvider = {
-  getToken: async (): Promise<string | undefined> => undefined
-};
+const COLLECTION_URL = 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml';
+const PROMPT_URL = 'https://raw.githubusercontent.com/test/repo/main/prompts/test.md';
 
 describe('AwesomeCopilotBundleResolver', () => {
   it('returns null when collection file not found', async () => {
-    const http = new FakeHttpClient().addRoute({
-      url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-      status: 404
-    });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: mockTokenProvider
-    });
+    // Nothing seeded -> FakeGitHubApi.getText throws a 404-shaped error.
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', githubApi: new FakeGitHubApi() });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).toBeNull();
   });
 
   it('returns null when collection has no items', async () => {
-    const http = new FakeHttpClient().addRoute({
-      url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-      status: 200,
-      body: 'id: test\nname: Test\nitems: []'
-    });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = new FakeGitHubApi().seedText(COLLECTION_URL, 'id: test\nname: Test\nitems: []');
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).toBeNull();
   });
 
   it('returns null when collection YAML is invalid', async () => {
-    const http = new FakeHttpClient().addRoute({
-      url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-      status: 200,
-      body: 'invalid: yaml: [unclosed'
-    });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = new FakeGitHubApi().seedText(COLLECTION_URL, 'invalid: yaml: [unclosed');
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).toBeNull();
   });
 
   it('builds zip bundle with collection items', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-        status: 200,
-        body: 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt'
-      })
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/prompts/test.md',
-        status: 200,
-        body: '# Test Prompt'
-      });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = new FakeGitHubApi()
+      .seedText(COLLECTION_URL, 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt')
+      .seedText(PROMPT_URL, '# Test Prompt');
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).not.toBeNull();
@@ -91,26 +55,11 @@ describe('AwesomeCopilotBundleResolver', () => {
   });
 
   it('skips missing items', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-        status: 200,
-        body: 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt\n  - path: prompts/missing.md\n    kind: prompt'
-      })
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/prompts/test.md',
-        status: 200,
-        body: '# Test Prompt'
-      })
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/prompts/missing.md',
-        status: 404
-      });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = new FakeGitHubApi()
+      .seedText(COLLECTION_URL, 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt\n  - path: prompts/missing.md\n    kind: prompt')
+      .seedText(PROMPT_URL, '# Test Prompt');
+    // prompts/missing.md intentionally not seeded -> treated as 404 -> skipped.
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).not.toBeNull();
@@ -121,90 +70,40 @@ describe('AwesomeCopilotBundleResolver', () => {
   });
 
   it('uses custom branch', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/develop/collections/test.collection.yml',
-        status: 200,
-        body: 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt'
-      })
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/develop/prompts/test.md',
-        status: 200,
-        body: '# Test Prompt'
-      });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      branch: 'develop',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = new FakeGitHubApi()
+      .seedText('https://raw.githubusercontent.com/test/repo/develop/collections/test.collection.yml', 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt')
+      .seedText('https://raw.githubusercontent.com/test/repo/develop/prompts/test.md', '# Test Prompt');
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', branch: 'develop', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).not.toBeNull();
   });
 
   it('uses custom collections path', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/custom-collections/test.collection.yml',
-        status: 200,
-        body: 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt'
-      })
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/prompts/test.md',
-        status: 200,
-        body: '# Test Prompt'
-      });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      collectionsPath: 'custom-collections',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = new FakeGitHubApi()
+      .seedText('https://raw.githubusercontent.com/test/repo/main/custom-collections/test.collection.yml', 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt')
+      .seedText(PROMPT_URL, '# Test Prompt');
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', collectionsPath: 'custom-collections', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).not.toBeNull();
   });
 
   it('quotes manifest name with special characters', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-        status: 200,
-        body: 'id: test\nname: Test\'s Collection\nitems:\n  - path: prompts/test.md\n    kind: prompt'
-      })
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/prompts/test.md',
-        status: 200,
-        body: '# Test Prompt'
-      });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = new FakeGitHubApi()
+      .seedText(COLLECTION_URL, 'id: test\nname: Test\'s Collection\nitems:\n  - path: prompts/test.md\n    kind: prompt')
+      .seedText(PROMPT_URL, '# Test Prompt');
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).not.toBeNull();
   });
 
   it('uses collection id when present', async () => {
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-        status: 200,
-        body: 'id: custom-id\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt'
-      })
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/prompts/test.md',
-        status: 200,
-        body: '# Test Prompt'
-      });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = new FakeGitHubApi()
+      .seedText(COLLECTION_URL, 'id: custom-id\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt')
+      .seedText(PROMPT_URL, '# Test Prompt');
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', githubApi });
 
     const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
     expect(result).not.toBeNull();
@@ -212,46 +111,14 @@ describe('AwesomeCopilotBundleResolver', () => {
   });
 
   it('throws on HTTP errors other than 404', async () => {
-    const http = new FakeHttpClient().addRoute({
-      url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-      status: 500
-    });
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: mockTokenProvider
-    });
+    const githubApi = {
+      getText: async (): Promise<never> => {
+        throw new Error('GitHub API error: 500 (url)');
+      }
+    };
+    const resolver = new AwesomeCopilotBundleResolver({ repoSlug: 'test/repo', githubApi: githubApi as never });
 
     await expect(resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' }))
-      .rejects.toThrow('raw fetch 500');
-  });
-
-  it('uses token from token provider', async () => {
-    const tokenProvider = {
-      getToken: async (): Promise<string | undefined> => 'test-token'
-    };
-    const http = new FakeHttpClient()
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/collections/test.collection.yml',
-        status: 200,
-        body: 'id: test\nname: Test\nitems:\n  - path: prompts/test.md\n    kind: prompt'
-      })
-      .addRoute({
-        url: 'https://raw.githubusercontent.com/test/repo/main/prompts/test.md',
-        status: 200,
-        body: '# Test Prompt'
-      });
-
-    const resolver = new AwesomeCopilotBundleResolver({
-      repoSlug: 'test/repo',
-      http,
-      tokens: tokenProvider
-    });
-
-    const result = await resolver.resolve({ bundleId: 'test', bundleVersion: 'latest' });
-    expect(result).not.toBeNull();
-    for (const call of http.calls) {
-      expect(call.headers?.Authorization).toBe('Bearer test-token');
-    }
+      .rejects.toThrow('GitHub API error: 500');
   });
 });
