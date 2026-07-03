@@ -1007,8 +1007,7 @@ export class MarketplaceViewProvider implements vscode.WebviewViewProvider {
     );
 
     // Generate CSP
-    // Removed unsafe-inline ( instructed by copilot. To be reviewed )
-    const cspSource = `default-src 'none'; img-src https: ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';`;
+    const cspSource = `default-src 'none'; img-src https: ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
 
     // Load HTML template
     const htmlPath = vscode.Uri.joinPath(
@@ -1065,15 +1064,13 @@ export class MarketplaceViewProvider implements vscode.WebviewViewProvider {
             </div>
         </div>`;
 
-    const detailsSection = bundle.readme
-      ? `
-    <div class="section">
+    const detailsSection = `
+    <div class="section" id="readme-section"${!bundle.readme ? ' style="display:none"' : ''}>
         <h2>README</h2>
         <div class="details-content">
-            ${this.getMarkdownRender(bundle.readme)}
+            ${bundle.readme ? this.getMarkdownRender(bundle.readme) : ''}
         </div>
-    </div>`
-      : '';
+    </div>`;
 
     const installedInfoRows = isInstalled
       ? `

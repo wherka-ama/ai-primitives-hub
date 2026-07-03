@@ -554,10 +554,6 @@ export class GitHubAdapter extends RepositoryAdapter {
       return null;
     }
 
-    const readmeAsset = release.assets.find((a) =>
-      a.name.toLowerCase() === 'readme.md'
-    );
-
     // Fetch deployment manifest with caching
     let manifest: any = null;
     try {
@@ -566,6 +562,13 @@ export class GitHubAdapter extends RepositoryAdapter {
       this.logger.warn(`Failed to fetch manifest for ${release.tag_name}: ${manifestError}`);
       // Continue without manifest data - use fallback values
     }
+
+    // Locate the README release asset by the filename recorded in the manifest.
+    // GitHub names each release asset after its file basename, and collections
+    // can declare any README path, so we cannot guess a fixed filename.
+    const readmeAsset = manifest?.readme
+      ? release.assets.find((a) => a.name === manifest.readme)
+      : undefined;
 
     // Create bundle metadata
     const bundleId = generateGitHubBundleId(

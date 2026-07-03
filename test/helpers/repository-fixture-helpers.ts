@@ -101,6 +101,7 @@ export interface DeploymentManifestData {
   environments: string[];
   dependencies: string[];
   license: string;
+  readme?: string;
 }
 
 // Constants for asset ID generation
@@ -278,6 +279,10 @@ export function setupReleaseMocks(
   // Mock individual release assets
   releases.forEach((r, index) => {
     const manifest = createDeploymentManifest(config, r.version, r.content);
+    // Record the readme asset name in the manifest so the adapter can locate it.
+    if (r.readme) {
+      manifest.readme = 'README.md';
+    }
     const bundleZip = createBundleZip(config, r.version, r.content);
 
     // Mock manifest asset download
