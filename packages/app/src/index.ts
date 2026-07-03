@@ -1,18 +1,25 @@
 /**
- * The `@ai-primitives-hub/app` package — placeholder entry point.
+ * The `@ai-primitives-hub/app` package.
  *
  * Use-case orchestration (install/uninstall, registry, discovery/search,
- * multi-target transforms) lands here across Phase 4 of the migration plan
- * (see .tmp/ai-primitives-hub-next-migration-plan.md §7.5). Planned module
+ * multi-target transforms) per Phase 4 of the migration plan (see
+ * .tmp/ai-primitives-hub-next-migration-plan.md §7.5). Planned module
  * boundaries: install/, registry/, discovery/, search/, transform/
  * (transform/transformers/ for per-target content transforms). Also serves
  * as the public SDK surface (§8 decision 2) until a standalone
  * `@ai-primitives-hub/sdk` package has a real consumer.
  *
- * This placeholder exists only to prove the package/build/test wiring
- * (TypeScript project references, pnpm workspace resolution, Vitest)
- * end-to-end before any real orchestration code is written. Replace it as
- * Phase 4 lands.
+ * Landing incrementally: install/ (+ its writers/ and stores/ support
+ * modules) is the first real module family to land.
+ */
+export * from './install';
+export * from './writers';
+export * from './stores';
+
+/**
+ * Phase 1 scaffolding marker, kept until `cli` has real code of its own
+ * to depend on instead of this placeholder re-export chain (see that
+ * package's `src/index.ts`) — removed once Phase 5 lands.
  */
 export {
   INFRA_PACKAGE_READY as APP_PACKAGE_READY,
