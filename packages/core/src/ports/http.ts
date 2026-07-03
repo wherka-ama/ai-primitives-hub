@@ -41,16 +41,21 @@ export interface HttpClient {
 
 /**
  * Resolves a bearer token for an authenticated request, e.g. to GitHub's
- * API. Deliberately parameterless: a concrete provider closes over
- * whatever source/context it needs (an explicit `RegistrySource.token`, a
- * `gh` CLI lookup, a VS Code authentication session, ...) so callers never
- * need to know which strategy is in play, and infra never needs to depend
- * on delivery-specific auth mechanisms (e.g. the `vscode` module).
+ * API. Host-aware (`host` is the target request's hostname): the harvest
+ * subsystem (Phase 3b) can walk many distinct sources/hosts in a single
+ * run, and a provider must be able to refuse to hand a host-specific
+ * credential (e.g. a GitHub token) to an unrelated host — a redirect
+ * target, a different Enterprise instance, a caller-supplied URL that
+ * turns out not to be GitHub at all. A concrete provider still closes
+ * over whatever source/context it needs (an explicit `RegistrySource.token`,
+ * a `gh` CLI lookup, a VS Code authentication session, ...) so callers
+ * never need to know which strategy is in play, and infra never needs to
+ * depend on delivery-specific auth mechanisms (e.g. the `vscode` module).
  *
  * Called once per request rather than cached by the caller, so a provider
  * backed by a session that can expire/rotate stays correct without infra
  * needing its own retry-on-401 logic.
  */
 export interface TokenProvider {
-  getToken(): Promise<string | undefined>;
+  getToken(host: string): Promise<string | undefined>;
 }

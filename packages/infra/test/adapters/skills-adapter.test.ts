@@ -1,6 +1,7 @@
 import * as crypto from 'node:crypto';
 import type {
   Bundle,
+  EtaggedResult,
   GitHubApi,
   RegistrySource,
 } from '@ai-primitives-hub/core';
@@ -37,6 +38,10 @@ class FailingGitHubApi implements GitHubApi {
 
   public download(pathOrUrl: string): Promise<Uint8Array> {
     return pathOrUrl === this.failPath ? Promise.reject(this.error) : this.inner.download(pathOrUrl);
+  }
+
+  public getJsonWithEtag<T>(pathOrUrl: string, etag?: string): Promise<EtaggedResult<T>> {
+    return pathOrUrl === this.failPath ? Promise.reject(this.error) : this.inner.getJsonWithEtag<T>(pathOrUrl, etag);
   }
 }
 

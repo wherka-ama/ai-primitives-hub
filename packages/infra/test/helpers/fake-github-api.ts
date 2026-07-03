@@ -5,6 +5,7 @@
  * `skills-adapter.test.ts` — both consume the same `GitHubApi` port.
  */
 import type {
+  EtaggedResult,
   GitHubApi,
 } from '@ai-primitives-hub/core';
 
@@ -12,9 +13,21 @@ export class FakeGitHubApi implements GitHubApi {
   private readonly jsonByPath = new Map<string, unknown>();
   private readonly textByPath = new Map<string, string>();
   private readonly bytesByPath = new Map<string, Uint8Array>();
+  private readonly etagByPath = new Map<string, string>();
 
-  public seedJson(pathOrUrl: string, value: unknown): this {
+  /**
+   * Seed a JSON response, optionally tagged with an ETag so
+   * `getJsonWithEtag` can simulate a 304 when the caller passes the same
+   * etag back in.
+   * @param pathOrUrl
+   * @param value
+   * @param etag
+   */
+  public seedJson(pathOrUrl: string, value: unknown, etag?: string): this {
     this.jsonByPath.set(pathOrUrl, value);
+    if (etag !== undefined) {
+      this.etagByPath.set(pathOrUrl, etag);
+    }
     return this;
   }
 
@@ -49,5 +62,13 @@ export class FakeGitHubApi implements GitHubApi {
       throw new Error(`GitHub API error: 404 - not seeded: ${pathOrUrl}`);
     }
     return bytes;
+  }
+
+  public async getJsonWithEtag<T>(pathOrUrl: string, etag?: string): Promise<EtaggedResult<T>> {
+    const current = this.etagByPath.get(pathOrUrl);
+    if (etag !== undefined && current !== undefined && etag === current) {
+      return { status: 'notModified' };
+    }
+    return { status: 'ok', value: await this.getJson<T>(pathOrUrl), etag: current };
   }
 }

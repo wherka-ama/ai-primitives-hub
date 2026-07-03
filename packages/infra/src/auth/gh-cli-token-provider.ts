@@ -10,6 +10,11 @@
  * directly); a VS Code session-backed provider belongs in
  * `apps/vscode-extension` (Phase 4/6), since only that delivery context
  * may import `vscode`.
+ *
+ * Host-aware since `TokenProvider` (Phase 3b) is: skips the `gh` shell-out
+ * entirely for a non-GitHub host, both to stay cheap when called against
+ * arbitrary URLs and to avoid ever handing a GitHub token to an unrelated
+ * host.
  * @module auth/gh-cli-token-provider
  */
 import {
@@ -21,13 +26,19 @@ import {
 import type {
   TokenProvider,
 } from '@ai-primitives-hub/core';
+import {
+  isGitHubHost,
+} from '../http/github-host';
 
 export type ExecFn = (command: string) => Promise<{ stdout: string }>;
 
 export class GhCliTokenProvider implements TokenProvider {
   public constructor(private readonly execFn: ExecFn = promisify(exec)) {}
 
-  public async getToken(): Promise<string | undefined> {
+  public async getToken(host: string): Promise<string | undefined> {
+    if (!isGitHubHost(host)) {
+      return undefined;
+    }
     try {
       const { stdout } = await this.execFn('gh auth token');
       const token = stdout.trim();

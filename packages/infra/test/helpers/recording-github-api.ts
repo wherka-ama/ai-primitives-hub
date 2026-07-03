@@ -6,10 +6,11 @@
  * (manifest caching, concurrency batching) rather than just return values.
  */
 import type {
+  EtaggedResult,
   GitHubApi,
 } from '@ai-primitives-hub/core';
 
-type GitHubApiMethod = 'getJson' | 'getText' | 'download';
+type GitHubApiMethod = 'getJson' | 'getText' | 'download' | 'getJsonWithEtag';
 
 export interface RecordedGitHubApiCall {
   method: GitHubApiMethod;
@@ -34,6 +35,11 @@ export class RecordingGitHubApi implements GitHubApi {
   public download(pathOrUrl: string): Promise<Uint8Array> {
     this.calls.push({ method: 'download', pathOrUrl });
     return this.inner.download(pathOrUrl);
+  }
+
+  public getJsonWithEtag<T>(pathOrUrl: string, etag?: string): Promise<EtaggedResult<T>> {
+    this.calls.push({ method: 'getJsonWithEtag', pathOrUrl });
+    return this.inner.getJsonWithEtag(pathOrUrl, etag);
   }
 
   public countOf(method: GitHubApiMethod): number {

@@ -3,4 +3,5 @@
  * @module http
  */
 export * from './github-api-client';
+export * from './github-host';
 export * from './node-http-client';
