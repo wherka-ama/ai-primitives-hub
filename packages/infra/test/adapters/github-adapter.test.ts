@@ -1,5 +1,4 @@
 import type {
-  GitHubApi,
   RegistrySource,
 } from '@ai-primitives-hub/core';
 import {
@@ -13,26 +12,9 @@ import {
 import {
   FakeGitHubApi,
 } from '../helpers/fake-github-api';
-
-/** Delegates to a `FakeGitHubApi` while counting `getText` calls. */
-class GetTextCallCountingGitHubApi implements GitHubApi {
-  public getTextCallCount = 0;
-
-  public constructor(private readonly inner: GitHubApi) {}
-
-  public getJson<T>(pathOrUrl: string): Promise<T> {
-    return this.inner.getJson(pathOrUrl);
-  }
-
-  public getText(pathOrUrl: string): Promise<string> {
-    this.getTextCallCount += 1;
-    return this.inner.getText(pathOrUrl);
-  }
-
-  public download(pathOrUrl: string): Promise<Uint8Array> {
-    return this.inner.download(pathOrUrl);
-  }
-}
+import {
+  RecordingGitHubApi,
+} from '../helpers/recording-github-api';
 
 function makeSource(overrides: Partial<RegistrySource> = {}): RegistrySource {
   return {
@@ -229,13 +211,13 @@ describe('GitHubAdapter', () => {
 
     it('caches a manifest across repeated fetchBundles() calls instead of re-downloading it', async () => {
       const api = new FakeGitHubApi().seedJson(RELEASES_PATH, [makeRelease()]).seedText(MANIFEST_ASSET_URL, MANIFEST_YAML);
-      const countingApi = new GetTextCallCountingGitHubApi(api);
+      const recordingApi = new RecordingGitHubApi(api);
 
-      const adapter = new GitHubAdapter(makeSource(), countingApi);
+      const adapter = new GitHubAdapter(makeSource(), recordingApi);
       await adapter.fetchBundles();
       await adapter.fetchBundles();
 
-      expect(countingApi.getTextCallCount).toBe(1);
+      expect(recordingApi.countOf('getText')).toBe(1);
     });
 
     it('wraps a releases-list failure with a descriptive error', async () => {

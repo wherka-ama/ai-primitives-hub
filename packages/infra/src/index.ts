@@ -9,6 +9,7 @@
  */
 export * from './adapters';
 export * from './auth';
+export * from './clock';
 export * from './http';
 
 /**
