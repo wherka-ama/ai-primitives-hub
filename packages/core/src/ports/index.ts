@@ -7,3 +7,4 @@ export * from './clock';
 export * from './filesystem';
 export * from './http';
 export * from './github-api';
+export * from './process-runner';

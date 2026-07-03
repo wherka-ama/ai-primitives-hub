@@ -11,6 +11,7 @@ export * from './adapters';
 export * from './auth';
 export * from './clock';
 export * from './http';
+export * from './process';
 
 /**
  * Phase 1 scaffolding marker, kept until `app`/`cli` each have real code
