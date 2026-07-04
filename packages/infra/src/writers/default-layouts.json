@@ -19,6 +19,7 @@
           "prompts/": ".github/prompts/",
           "chatmodes/": ".github/chatmodes/",
           "instructions/": ".github/instructions/",
+          "agents/": ".github/agents/",
           "skills/": ".github/skills/",
           "hooks/": ".github/hooks/",
           "plugins/": ".github/plugins/"
@@ -45,6 +46,7 @@
           "prompts/": ".github/prompts/",
           "chatmodes/": ".github/chatmodes/",
           "instructions/": ".github/instructions/",
+          "agents/": ".github/agents/",
           "skills/": ".github/skills/",
           "hooks/": ".github/hooks/",
           "plugins/": ".github/plugins/"

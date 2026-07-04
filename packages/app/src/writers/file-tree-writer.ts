@@ -23,6 +23,7 @@
  */
 import * as path from 'node:path';
 import type {
+  CopilotFileType,
   ExtractedFiles,
   KindRoutes,
   LayoutConfigLoader,
@@ -31,6 +32,12 @@ import type {
   TargetLayout,
   TargetWriter,
   TargetWriteResult,
+} from '@ai-primitives-hub/core';
+import {
+  determineFileType,
+  getSkillName,
+  getTargetFileName,
+  normalizePromptId,
 } from '@ai-primitives-hub/core';
 import {
   defaultLayouts as builtInLayouts,
@@ -54,6 +61,41 @@ export interface WriterFs {
   remove(p: string): Promise<void>;
   exists(p: string): Promise<boolean>;
 }
+
+/**
+ * A manifest-driven placement instruction: "this bundle-relative source
+ * file/directory is primitive `id` of Copilot type `type`". Used by
+ * `FileTreeTargetWriter.writeManifestItems` for targets/scopes (e.g. the
+ * VS Code extension's user/repository scopes) whose real on-disk
+ * convention renames every file to `{id}.{type-extension}` rather than
+ * preserving the bundle's own directory layout — see migration plan
+ * §7.5 item 2 for why this is a separate mode from `write()`'s
+ * prefix-preserving routing.
+ */
+export interface ManifestPlacementItem {
+  /** Manifest item id; used to compute the renamed on-disk file name. */
+  id: string;
+  /** Bundle-relative source path (looked up in the `ExtractedFiles` map). */
+  file: string;
+  /** Copilot file type; auto-detected from `file`/`tags` when omitted. */
+  type?: CopilotFileType;
+  tags?: string[];
+}
+
+/**
+ * Maps a `CopilotFileType` to the `default-layouts.json` kindRoutes key
+ * whose *value* (the output subdirectory) applies to it. Deliberately
+ * routes `chatmode` through the same key as `prompt`, matching the VS
+ * Code Copilot convention (and the extension's own
+ * `REPOSITORY_DIRECTORIES` table) that chatmodes ship alongside prompts.
+ */
+const KIND_TO_ROUTE_KEY: Record<CopilotFileType, string> = {
+  prompt: 'prompts/',
+  instructions: 'instructions/',
+  chatmode: 'prompts/',
+  agent: 'agents/',
+  skill: 'skills/'
+};
 
 /**
  * Result of a remove operation.
@@ -138,6 +180,7 @@ export interface FileTreeTargetWriterOptions {
  * Generic writer that routes bundle files into a target tree using
  * the layout returned by resolveLayout(target).
  */
+/* eslint-disable @typescript-eslint/member-ordering -- public API kept above helpers. */
 export class FileTreeTargetWriter implements TargetWriter {
   /**
    * Construct a FileTreeTargetWriter.
@@ -206,6 +249,124 @@ export class FileTreeTargetWriter implements TargetWriter {
       written.push(outPath);
     }
     return { written, skipped };
+  }
+
+  /**
+   * Write bundle files into the target using manifest-driven, ID-based
+   * renaming rather than `write()`'s prefix-preserving routing.
+   *
+   * For each item: the Copilot file type (explicit or auto-detected from
+   * `file`/`tags`) selects the output subdirectory via
+   * {@link KIND_TO_ROUTE_KEY} + the layout's `kindRoutes`, and the output
+   * file name is `{id}.{type-extension}` (via `core`'s `getTargetFileName`)
+   * rather than the source file's own name. Skill items are the exception:
+   * every bundle file under the skill's `skills/<sourceId>/` prefix is
+   * copied, preserving its relative path, into
+   * `{baseDir}/{skillsRoute}/{normalizedId}/`.
+   * @param target - Target chosen via `--target <name>`.
+   * @param files - Extracted bundle files.
+   * @param items - Manifest-derived placement instructions.
+   * @returns TargetWriteResult.
+   */
+  public async writeManifestItems(
+    target: Target,
+    files: ExtractedFiles,
+    items: readonly ManifestPlacementItem[]
+  ): Promise<TargetWriteResult> {
+    const layout = resolveLayout(target);
+    const baseDir = expandPath(layout.baseDir, this.opts.env);
+    const allowed = target.allowedKinds === undefined ? null : new Set(target.allowedKinds);
+    const written: string[] = [];
+    const skipped: string[] = [];
+
+    for (const item of items) {
+      const type = item.type ?? determineFileType(item.file, item.tags);
+      const routeKey = KIND_TO_ROUTE_KEY[type];
+      // `allowedKinds` is keyed on the same vocabulary as `write()`'s
+      // `routeToKind` (plural route-key names, e.g. "skills"/"prompts"),
+      // not on the singular `CopilotFileType` domain vocabulary.
+      if (allowed !== null && !allowed.has(routeToKind(routeKey))) {
+        skipped.push(item.file);
+        continue;
+      }
+      const outPrefix = layout.kindRoutes[routeKey];
+      if (outPrefix === undefined) {
+        // Target's layout has no route for this kind at all.
+        skipped.push(item.file);
+        continue;
+      }
+
+      if (type === 'skill') {
+        const wroteAny = await this.writeSkillItem(baseDir, outPrefix, item, files, written);
+        if (!wroteAny) {
+          skipped.push(item.file);
+        }
+        continue;
+      }
+
+      const bytes = files.get(item.file);
+      if (bytes === undefined) {
+        skipped.push(item.file);
+        continue;
+      }
+      const outPath = path.join(baseDir, outPrefix, getTargetFileName(item.id, type));
+      let content = new TextDecoder().decode(bytes);
+      if (this.opts.transformer !== undefined) {
+        try {
+          const result = this.opts.transformer.transform({ target, filePath: item.file, content });
+          content = result.content;
+        } catch {
+          // Fail-safe: on transformation error, use original content
+        }
+      }
+      await this.opts.fs.mkdir(path.dirname(outPath), { recursive: true });
+      await this.opts.fs.writeFile(outPath, content);
+      written.push(outPath);
+    }
+
+    return { written, skipped };
+  }
+
+  /**
+   * Copy every bundle file under a skill's `skills/<sourceId>/` prefix
+   * into `{baseDir}/{outPrefix}/{normalizedId}/`, preserving each file's
+   * relative path under the skill root.
+   * @param baseDir - Expanded target base directory.
+   * @param outPrefix - Layout output subdirectory for the `skill` kind.
+   * @param item - Skill placement item (its `file` points at the skill's
+   *   manifest file, e.g. `skills/my-skill/SKILL.md`).
+   * @param files - Extracted bundle files.
+   * @param written - Accumulator for written absolute paths.
+   * @returns true if at least one file was written.
+   */
+  private async writeSkillItem(
+    baseDir: string,
+    outPrefix: string,
+    item: ManifestPlacementItem,
+    files: ExtractedFiles,
+    written: string[]
+  ): Promise<boolean> {
+    const sourceSkillId = getSkillName(item.file);
+    if (sourceSkillId === null) {
+      return false;
+    }
+    const targetSkillId = normalizePromptId(item.id);
+    const sourcePrefix = `skills/${sourceSkillId}/`;
+    let wroteAny = false;
+
+    for (const [bundlePath, bytes] of files) {
+      if (!bundlePath.startsWith(sourcePrefix)) {
+        continue;
+      }
+      const tail = bundlePath.slice(sourcePrefix.length);
+      const outPath = path.join(baseDir, outPrefix, targetSkillId, tail);
+      await this.opts.fs.mkdir(path.dirname(outPath), { recursive: true });
+      await this.opts.fs.writeFile(outPath, new TextDecoder().decode(bytes));
+      written.push(outPath);
+      wroteAny = true;
+    }
+
+    return wroteAny;
   }
 
   /**

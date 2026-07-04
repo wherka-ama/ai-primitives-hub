@@ -21,6 +21,9 @@ import {
   expect,
   it,
 } from 'vitest';
+import type {
+  ManifestPlacementItem,
+} from '../../src/writers/file-tree-writer';
 import {
   expandPath,
   FileTreeTargetWriter,
@@ -183,5 +186,169 @@ describe('FileTreeTargetWriter', () => {
     const writer = new FileTreeTargetWriter({ fs, env: {} });
 
     await expect(writer.remove(target, 'unrouted/thing.bin')).resolves.not.toThrow();
+  });
+});
+
+describe('FileTreeTargetWriter.writeManifestItems', () => {
+  const repoTarget: Target = { name: 'test', type: 'vscode', scope: 'repository', rootPath: '/ws' };
+
+  it('renames a prompt to {id}.prompt.md under the resolved prompts route', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const files = new Map<string, Uint8Array>([
+      ['some-source-name.md', new TextEncoder().encode('# Hello')]
+    ]);
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-prompt', file: 'some-source-name.md', type: 'prompt' }
+    ];
+
+    const result = await writer.writeManifestItems(repoTarget, files, items);
+
+    expect(result.written).toEqual(['/ws/.github/prompts/my-prompt.prompt.md']);
+    expect(result.skipped).toEqual([]);
+    expect(await fs.readFile('/ws/.github/prompts/my-prompt.prompt.md')).toBe('# Hello');
+  });
+
+  it('auto-detects the file type from tags when type is omitted', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const files = new Map<string, Uint8Array>([
+      ['guidance.md', new TextEncoder().encode('# Guidance')]
+    ]);
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-instructions', file: 'guidance.md', tags: ['instructions'] }
+    ];
+
+    const result = await writer.writeManifestItems(repoTarget, files, items);
+
+    expect(result.written).toEqual(['/ws/.github/instructions/my-instructions.instructions.md']);
+  });
+
+  it('routes chatmode items alongside prompts', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const files = new Map<string, Uint8Array>([
+      ['mode.md', new TextEncoder().encode('# Mode')]
+    ]);
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-mode', file: 'mode.md', type: 'chatmode' }
+    ];
+
+    const result = await writer.writeManifestItems(repoTarget, files, items);
+
+    expect(result.written).toEqual(['/ws/.github/prompts/my-mode.chatmode.md']);
+  });
+
+  it('routes agent items to the agents/ directory', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const files = new Map<string, Uint8Array>([
+      ['agent-source.md', new TextEncoder().encode('# Agent')]
+    ]);
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-agent', file: 'agent-source.md', type: 'agent' }
+    ];
+
+    const result = await writer.writeManifestItems(repoTarget, files, items);
+
+    expect(result.written).toEqual(['/ws/.github/agents/my-agent.agent.md']);
+  });
+
+  it('skips items whose kind is excluded by target.allowedKinds', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const restrictedTarget: Target = { ...repoTarget, allowedKinds: ['skills'] };
+    const files = new Map<string, Uint8Array>([
+      ['some-source-name.md', new TextEncoder().encode('# Hello')]
+    ]);
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-prompt', file: 'some-source-name.md', type: 'prompt' }
+    ];
+
+    const result = await writer.writeManifestItems(restrictedTarget, files, items);
+
+    expect(result.written).toEqual([]);
+    expect(result.skipped).toEqual(['some-source-name.md']);
+  });
+
+  it('skips items whose kind has no route in the resolved layout', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const windsurfTarget: Target = { name: 'test', type: 'windsurf', scope: 'repository', rootPath: '/ws' };
+    const files = new Map<string, Uint8Array>([
+      ['agent-source.md', new TextEncoder().encode('# Agent')]
+    ]);
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-agent', file: 'agent-source.md', type: 'agent' }
+    ];
+
+    const result = await writer.writeManifestItems(windsurfTarget, files, items);
+
+    expect(result.written).toEqual([]);
+    expect(result.skipped).toEqual(['agent-source.md']);
+  });
+
+  it('skips an item whose source file is missing from the extracted files map', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-prompt', file: 'missing.md', type: 'prompt' }
+    ];
+
+    const result = await writer.writeManifestItems(repoTarget, new Map(), items);
+
+    expect(result.written).toEqual([]);
+    expect(result.skipped).toEqual(['missing.md']);
+  });
+
+  it('applies a resource transformer to renamed file content', async () => {
+    const fs = new InMemoryFileSystem();
+    const transformer: ResourceTransformer = {
+      transform: (ctx) => ({ content: `${ctx.content}\n<!-- transformed -->`, modified: true })
+    };
+    const writer = new FileTreeTargetWriter({ fs, env: {}, transformer });
+    const files = new Map<string, Uint8Array>([
+      ['some-source-name.md', new TextEncoder().encode('# Hello')]
+    ]);
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-prompt', file: 'some-source-name.md', type: 'prompt' }
+    ];
+
+    await writer.writeManifestItems(repoTarget, files, items);
+
+    expect(await fs.readFile('/ws/.github/prompts/my-prompt.prompt.md')).toBe('# Hello\n<!-- transformed -->');
+  });
+
+  it('copies an entire skill directory into {id}/, renaming the directory but preserving relative paths', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const files = new Map<string, Uint8Array>([
+      ['skills/source-skill/SKILL.md', new TextEncoder().encode('# Skill')],
+      ['skills/source-skill/scripts/run.sh', new TextEncoder().encode('#!/bin/sh')]
+    ]);
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-skill', file: 'skills/source-skill/SKILL.md', type: 'skill' }
+    ];
+
+    const result = await writer.writeManifestItems(repoTarget, files, items);
+
+    expect(result.written).toContain('/ws/.github/skills/my-skill/SKILL.md');
+    expect(result.written).toContain('/ws/.github/skills/my-skill/scripts/run.sh');
+    expect(result.skipped).toEqual([]);
+    expect(await fs.readFile('/ws/.github/skills/my-skill/SKILL.md')).toBe('# Skill');
+    expect(await fs.readFile('/ws/.github/skills/my-skill/scripts/run.sh')).toBe('#!/bin/sh');
+  });
+
+  it('skips a skill item when no bundle files match its source skill directory', async () => {
+    const fs = new InMemoryFileSystem();
+    const writer = new FileTreeTargetWriter({ fs, env: {} });
+    const items: ManifestPlacementItem[] = [
+      { id: 'my-skill', file: 'skills/missing-skill/SKILL.md', type: 'skill' }
+    ];
+
+    const result = await writer.writeManifestItems(repoTarget, new Map(), items);
+
+    expect(result.written).toEqual([]);
+    expect(result.skipped).toEqual(['skills/missing-skill/SKILL.md']);
   });
 });
