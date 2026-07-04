@@ -3,6 +3,13 @@
  * Orchestrates all registry operations including sources, bundles, profiles, and installations
  */
 
+import {
+  detectBundleUpdates,
+  listInstalledBundles as listInstalledBundlesCore,
+} from '@ai-primitives-hub/app';
+import type {
+  LogEvent,
+} from '@ai-primitives-hub/app';
 import * as vscode from 'vscode';
 import {
   ApmAdapter,
@@ -1044,6 +1051,33 @@ export class RegistryManager {
   }
 
   /**
+   * Forward a generic `@ai-primitives-hub/app` log event to this
+   * extension's `Logger`. Shared by thin delegators to `app`'s registry
+   * orchestration functions (e.g. `checkUpdates`).
+   * @param event
+   */
+  private forwardLogEvent(event: LogEvent): void {
+    switch (event.level) {
+      case 'debug': {
+        this.logger.debug(event.message, event.error);
+        break;
+      }
+      case 'info': {
+        this.logger.info(event.message);
+        break;
+      }
+      case 'warn': {
+        this.logger.warn(event.message, event.error);
+        break;
+      }
+      case 'error': {
+        this.logger.error(event.message, event.error);
+        break;
+      }
+    }
+  }
+
+  /**
    * Set HubManager instance for hub integration
    * @param hubManager
    */
@@ -1739,7 +1773,9 @@ export class RegistryManager {
   /**
    * List installed bundles
    *
-   * Queries the appropriate source based on scope:
+   * Thin delegator to `@ai-primitives-hub/app`'s `listInstalledBundles`
+   * (migration plan §7.5, Phase 4 item 3, slice 2) — queries the
+   * appropriate source based on scope:
    * - 'repository': Query LockfileManager only
    * - 'user' or 'workspace': Query RegistryStorage only
    * - undefined (no scope): Combine results from both sources
@@ -1750,80 +1786,47 @@ export class RegistryManager {
    * @param scope
    */
   public async listInstalledBundles(scope?: InstallationScope): Promise<InstalledBundle[]> {
-    const bundles: InstalledBundle[] = [];
-
-    // Query user/workspace bundles from RegistryStorage
-    if (scope !== 'repository') {
-      const storageBundles = await this.storage.getInstalledBundles(scope);
-      bundles.push(...storageBundles);
-    }
-
-    // Query repository bundles from LockfileManager
-    if (scope === 'repository' || scope === undefined) {
-      const workspaceRoot = getWorkspaceRoot();
-      if (workspaceRoot) {
+    const bundles = await listInstalledBundlesCore(scope, {
+      getInstalledBundles: (s) => this.storage.getInstalledBundles(s),
+      getRepositoryInstalledBundles: async () => {
+        const workspaceRoot = getWorkspaceRoot();
+        if (!workspaceRoot) {
+          return [];
+        }
         try {
           const lockfileManager = LockfileManager.getInstance(workspaceRoot);
-          const repoBundles = await lockfileManager.getInstalledBundles();
-          bundles.push(...repoBundles);
+          return await lockfileManager.getInstalledBundles();
         } catch (error) {
           this.logger.warn('Failed to query repository bundles from lockfile:', error instanceof Error ? error : undefined);
-          // Continue without repository bundles on error
+          return [];
         }
       }
-    }
-
-    return bundles;
+    });
+    // `core`'s `DeploymentManifest.mcpServers` is intentionally looser
+    // (`Record<string, unknown>`) than this extension's `McpServersManifest`
+    // pending a dedicated `domain/mcp` module (see that field's JSDoc in
+    // `packages/core/src/domain/collection/types.ts`) — the data itself is
+    // always this extension's own shape, since it only ever flows through
+    // `RegistryStorage`/`LockfileManager` above and back out.
+    return bundles as InstalledBundle[];
   }
 
   /**
    * Check for bundle updates
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `detectBundleUpdates`
+   * (migration plan §7.5, Phase 4 item 3, slice 2).
    */
   public async checkUpdates(): Promise<BundleUpdate[]> {
-    this.logger.info('Checking for bundle updates');
-
-    const installed = await this.storage.getInstalledBundles();
-    const updates: BundleUpdate[] = [];
-
-    for (const bundle of installed) {
-      try {
-        // Try to get bundle details, handling versioned IDs that may not exist in consolidated list
-        let latest: Bundle;
-        try {
-          latest = await this.getBundleDetails(bundle.bundleId);
-        } catch (error) {
-          // If versioned ID not found, try extracting identity for GitHub bundles
-          const sources = await this.storage.getSources();
-          // Try both scopes to find the installed bundle
-          let installedBundle = await this.storage.getInstalledBundle(bundle.bundleId, 'user');
-          if (!installedBundle) {
-            installedBundle = await this.storage.getInstalledBundle(bundle.bundleId, 'workspace');
-          }
-          const source = sources.find((s) => s.id === installedBundle?.sourceId);
-
-          if (source?.type === 'github') {
-            const identity = VersionManager.extractBundleIdentity(bundle.bundleId, 'github');
-            this.logger.debug(`Versioned bundle '${bundle.bundleId}' not found, trying identity '${identity}'`);
-            latest = await this.getBundleDetails(identity);
-          } else {
-            throw error; // Re-throw if not a GitHub bundle
-          }
-        }
-
-        if (latest.version !== bundle.version) {
-          updates.push({
-            bundleId: bundle.bundleId,
-            currentVersion: bundle.version,
-            latestVersion: latest.version
-          });
-        }
-      } catch (error) {
-        this.logger.error(`Failed to check update for '${bundle.bundleId}'`, error as Error);
-      }
-    }
-
-    this.logger.info(`Found ${updates.length} bundle updates`);
-    return updates;
+    return detectBundleUpdates(
+      {
+        getInstalledBundles: (scope) => this.storage.getInstalledBundles(scope),
+        getBundleDetails: (bundleId) => this.getBundleDetails(bundleId),
+        listSources: () => this.storage.getSources(),
+        getInstalledBundle: (bundleId, scope) => this.storage.getInstalledBundle(bundleId, scope)
+      },
+      (event) => this.forwardLogEvent(event)
+    );
   }
 
   /**
