@@ -24,16 +24,18 @@ import * as path from 'node:path';
 import {
   promisify,
 } from 'node:util';
+import {
+  determineFileType,
+  getTargetFileName,
+} from '@ai-primitives-hub/core';
+import type {
+  CopilotFileType,
+} from '@ai-primitives-hub/core';
 import * as yaml from 'js-yaml';
 import * as vscode from 'vscode';
 import {
   DeploymentManifest,
 } from '../types/registry';
-import {
-  CopilotFileType,
-  determineFileType,
-  getTargetFileName,
-} from '../utils/copilot-file-type-utils';
 import {
   Logger,
 } from '../utils/logger';
@@ -826,4 +828,4 @@ export class UserScopeService implements IScopeService {
 }
 
 // Re-export CopilotFileType for convenience
-export { CopilotFileType } from '../utils/copilot-file-type-utils';
+export type { CopilotFileType } from '@ai-primitives-hub/core';
