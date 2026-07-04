@@ -4,6 +4,8 @@
  */
 export * from './bundle/types';
 export * from './bundle/id';
+export * from './bundle/version';
+export * from './bundle/identity-matcher';
 export * from './collection/types';
 export * from './collection/manifest-validator';
 export * from './errors';

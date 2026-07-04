@@ -64,6 +64,9 @@ importers:
       js-yaml:
         specifier: ^4.1.1
         version: 4.3.0
+      semver:
+        specifier: ^7.5.4
+        version: 7.8.5
     devDependencies:
       '@types/js-yaml':
         specifier: ^4.0.9
@@ -71,6 +74,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.0
+      '@types/semver':
+        specifier: ^7.5.6
+        version: 7.7.1
       '@vitest/coverage-v8':
         specifier: ^4.1.7
         version: 4.1.9(vitest@4.1.9)
@@ -365,6 +371,9 @@ packages:
 
   '@types/readdir-glob@1.1.5':
     resolution: {integrity: sha512-raiuEPUYqXu+nvtY2Pe8s8FEmZ3x5yAH4VkLdihcPdalvsHltomrRC9BzuStrJ9yk06470hS0Crw0f1pXqD+Hg==}
+
+  '@types/semver@7.7.1':
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@vitest/coverage-v8@4.1.9':
     resolution: {integrity: sha512-G9/lgqibheLVBDRuya45EbsEXTYcWoSG+TLg7i2axuzx0Eq62eXn+aWXyaVdV5vKvFSWd6ywcX8hA7la9Pvu8g==}
@@ -1466,6 +1475,8 @@ snapshots:
   '@types/readdir-glob@1.1.5':
     dependencies:
       '@types/node': 22.20.0
+
+  '@types/semver@7.7.1': {}
 
   '@vitest/coverage-v8@4.1.9(vitest@4.1.9)':
     dependencies:
