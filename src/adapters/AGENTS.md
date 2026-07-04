@@ -42,6 +42,8 @@ Resolved in order:
 3. GitHub CLI (`gh auth token`)
 4. No auth (public repos only)
 
+Each of `github-adapter.ts`/`awesome-copilot-adapter.ts`/`apm-adapter.ts`/`skills-adapter.ts` still hand-rolls this exact chain inline today. `@ai-primitives-hub/core`'s `TokenProvider` port (`getToken(host): Promise<string | undefined>`) plus `@ai-primitives-hub/infra`'s `GhCliTokenProvider`/`StaticTokenProvider`/`CompositeTokenProvider` and this extension's own `vscode-session-token-provider.ts` (`VsCodeSessionTokenProvider`, wrapping step 2 - only the extension host may import `vscode`) now exist as the reusable building blocks for collapsing all four copies onto one `CompositeTokenProvider([explicit, vsCodeSession, ghCli])` chain, but no adapter has been switched over yet - that's part of the larger adapter-unification cutover (migration plan §7.5, Phase 4 item 3).
+
 ## Existing Adapters
 
 | File | Type |
