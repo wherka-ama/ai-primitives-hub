@@ -73,6 +73,20 @@ describe('LocalSkillsAdapter', () => {
     });
   });
 
+  describe('getSkillSourcePath / getSkillName', () => {
+    it('resolves the on-disk skill directory by extracting the id from the bundle id', () => {
+      const adapter = makeAdapter();
+      const bundle = { id: 'local-skills-skills-root-my-skill' } as never;
+      expect(adapter.getSkillSourcePath(bundle)).toBe('/skills-root/skills/my-skill');
+    });
+
+    it('extracts the skill name/id from the bundle id', () => {
+      const adapter = makeAdapter();
+      const bundle = { id: 'local-skills-skills-root-my-skill' } as never;
+      expect(adapter.getSkillName(bundle)).toBe('my-skill');
+    });
+  });
+
   describe('fetchBundles', () => {
     it('discovers a skill directory containing a SKILL.md', async () => {
       const fs = new InMemoryFileSystem();

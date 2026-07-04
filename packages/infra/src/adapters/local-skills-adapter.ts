@@ -21,10 +21,10 @@
  * Deliberate deviations from `main`:
  * - Dropped the unused `parsedSkillMd`/`raw`/markdown-`content` fields
  *   on `SkillItem`, same as the remote `SkillsAdapter`.
- * - Not ported: `getSkillSourcePath`/`getSkillName`, two helper methods
- *   `main`'s `BundleInstaller` uses to symlink a locally-developed skill
- *   instead of copying it. Revisit once the installer itself is ported
- *   and actually needs them.
+ * - `getSkillSourcePath`/`getSkillName` (ported below) reuse the
+ *   already-factored private `skillIdFromBundleId` instead of each
+ *   re-deriving the source-name prefix inline, unlike `main`'s three
+ *   separate copies of the same `bundle.id.replace(...)` logic.
  * @module adapters/local-skills-adapter
  */
 import * as crypto from 'node:crypto';
@@ -369,5 +369,23 @@ export class LocalSkillsAdapter extends BaseSourceAdapter {
     }
 
     return { valid: true, errors: [], warnings, bundlesFound };
+  }
+
+  /**
+   * Get the original source path for a skill, for symlink creation.
+   * Used by an installer to symlink a locally-developed skill instead
+   * of copying it.
+   * @param bundle
+   */
+  public getSkillSourcePath(bundle: Bundle): string {
+    return path.join(this.getLocalPath(), 'skills', this.skillIdFromBundleId(bundle.id));
+  }
+
+  /**
+   * Get the skill name/ID from a bundle ID.
+   * @param bundle
+   */
+  public getSkillName(bundle: Bundle): string {
+    return this.skillIdFromBundleId(bundle.id);
   }
 }
