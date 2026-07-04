@@ -8,13 +8,27 @@
 extension services (`BundleInstaller`'s bundle download/staging cache,
 `UserScopeService`'s bundle-manifest lookup for unsync, `PromptLoader`,
 `ApmRuntimeManager`) resolve their on-disk root directly from
-`vscode.ExtensionContext.globalStorageUri.fsPath` (small key/value data, e.g.
-update preferences, uses `context.globalState` instead). `RegistryStorage`
-specifically owns: the registry config file (sources, profiles, settings),
-source/bundle caches, and installed-bundle records for `user`/`workspace`
-scope. `HubManager`, `UpdateChecker`/`AutoUpdateService`, and `RegistryManager`
-— all still pending strangler-fig extraction (migration plan §7.5, Phase 4
-item 2) — sit directly on top of `RegistryStorage`.
+`vscode.ExtensionContext.globalStorageUri.fsPath`. `RegistryStorage`'s
+constructor takes the **full** `vscode.ExtensionContext` and internally uses
+*two* VS Code-specific substrates: `context.globalStorageUri.fsPath` for the
+registry config file (sources, profiles, settings), source/bundle caches, and
+installed-bundle records for `user`/`workspace` scope; and
+`context.globalState` for small key/value data (bundle update preferences).
+`RegistryManager` (constructs `RegistryStorage` directly), `BundleInstaller`
+(ditto), and `UpdateChecker`/`AutoUpdateService` (take a `RegistryStorage`
+instance via constructor injection) — all still pending strangler-fig
+extraction (migration plan §7.5, Phase 4 item 2) — depend on this concrete,
+`vscode`-coupled class.
+
+**Verified not affected, despite an initial assumption otherwise:**
+`HubManager` depends on `HubStorage` (`src/storage/hub-storage.ts`), a
+*separate* class from `RegistryStorage`. `HubStorage`'s constructor already
+takes a plain `storagePath: string` — it has zero `vscode` import at all; the
+extension's composition root (`extension.ts`, `commands/hub-profile-commands.ts`)
+is the only place that happens to pass `context.globalStorageUri.fsPath` in.
+This is already exactly the target pattern (plain-string injection, same as
+`app/install/*`'s `Target.rootPath`) — confirmed by direct inspection while
+starting `HubManager`'s own strangler-fig slice, no port work needed there.
 
 `packages/infra` already independently established the right pattern for
 CLI-side state, twice, coincidentally without being unified into one port:
@@ -34,7 +48,7 @@ services Phase 4 has not yet migrated.
 
 The `packages/cli` package has, and must keep, zero dependency on the
 `vscode` module. Without an explicit decision here, the path of least
-resistance when extracting `HubManager`/`RegistryManager`/`UpdateChecker`
+resistance when extracting `RegistryManager`/`UpdateChecker`/`AutoUpdateService`
 into `app` would be to port their *logic* but leave them taking a concrete,
 `vscode`-coupled storage object — silently recreating the "two parallel
 domains" problem ADR-0001 exists to fix, one layer deeper (storage instead
@@ -63,19 +77,25 @@ of business logic).
    silent, undiscoverable migration for existing installs. This mirrors the
    precedent ADR-0004 already set — don't relocate/rename identifiers real
    users' data already depends on.
-4. When `HubManager`, `UpdateChecker`/`AutoUpdateService`, and
-   `RegistryManager` are extracted (migration plan §7.5, Phase 4 item 2,
-   remaining sub-items), their `app`-layer use-cases depend on the
-   `AppStorage` **port**, not on `RegistryStorage`/`vscode.ExtensionContext`
-   directly — the same pattern `install-bundle.ts` already uses for
-   `BundleDownloader`/`BundleExtractor`/`TargetWriter`.
-5. `LockfileManager` is explicitly **out of scope** for this decision: its
-   storage (`<repo-root>/prompt-registry.lock.json`) is already
-   workspace-relative and portable (constructor takes a plain
-   `repositoryPath: string`), and never touches `globalStorageUri`. Likewise
-   `app/install/*` is already agnostic via `Target.rootPath` + injected
-   ports. Both were verified while investigating this decision and need no
-   change.
+4. When `UpdateChecker`/`AutoUpdateService` and `RegistryManager` are
+   extracted (migration plan §7.5, Phase 4 item 2, remaining sub-items),
+   their `app`-layer use-cases depend on the `AppStorage` **port**, not on
+   `RegistryStorage`/`vscode.ExtensionContext` directly — the same pattern
+   `install-bundle.ts` already uses for
+   `BundleDownloader`/`BundleExtractor`/`TargetWriter`. In practice this
+   means `RegistryStorage` itself is refactored to depend on the injected
+   port for its own path/state resolution, while remaining the single
+   facade `UpdateChecker`/`AutoUpdateService`/`RegistryManager` depend on —
+   so those three need no constructor/signature changes of their own.
+5. `LockfileManager` and `HubManager`/`HubStorage` are explicitly **out of
+   scope** for this decision: `LockfileManager`'s storage
+   (`<repo-root>/prompt-registry.lock.json`) is already workspace-relative
+   and portable (constructor takes a plain `repositoryPath: string`), and
+   `HubStorage`'s constructor already takes a plain `storagePath: string`
+   with zero `vscode` dependency (see Context above). Likewise `app/install/*`
+   is already agnostic via `Target.rootPath` + injected ports. All three were
+   verified by direct inspection while investigating this decision and need
+   no change.
 
 ## Consequences
 
@@ -87,9 +107,9 @@ of business logic).
 - **Positive:** consolidates two ad hoc XDG resolvers into one coherent,
   fully-tested storage port, and closes a latent inconsistency
   (`XDG_DATA_HOME` was not respected anywhere) before it spreads further.
-- **Negative:** the `HubManager`/`RegistryManager`/`UpdateChecker` extraction
-  grows by one small, dedicated sub-step (defining the port + its two
-  adapters) — accepted, since deferring it would mean redoing the extraction
-  once this gap was noticed anyway.
-- **Explicitly unaffected:** `LockfileManager` and `app/install/*` — already
+- **Negative:** the `RegistryManager`/`UpdateChecker`/`AutoUpdateService`
+  extraction grows by one small, dedicated sub-step (defining the port + its
+  two adapters, applied inside `RegistryStorage`) — accepted, since deferring
+  it would mean redoing the extraction once this gap was noticed anyway.
+- **Explicitly unaffected:** `LockfileManager`, `HubManager`/`HubStorage`, and `app/install/*` — already
   portable/agnostic, confirmed by direct inspection while drafting this ADR.

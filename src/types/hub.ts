@@ -4,9 +4,19 @@
  */
 
 import {
+  hasPathTraversal,
+  sanitizeHubId as sanitizeHubIdCore,
+  validateHubReference as validateHubReferenceCore,
+} from '@ai-primitives-hub/core';
+import {
   Profile,
   RegistrySource,
 } from './registry';
+
+export {
+  hasPathTraversal,
+  isValidProtocol,
+} from '@ai-primitives-hub/core';
 
 /**
  * Reference to a hub location (GitHub, local, or URL)
@@ -189,50 +199,7 @@ export interface ValidationResult {
  * @throws {Error} if validation fails
  */
 export function validateHubReference(ref: HubReference): void {
-  // Check location exists
-  if (ref.location === null || ref.location === undefined) {
-    throw new Error('Location is required');
-  }
-
-  // Check location not empty
-  if (ref.location === '') {
-    throw new Error('Location cannot be empty');
-  }
-
-  // Validate based on type
-  switch (ref.type) {
-    case 'github': {
-      // Validate GitHub format: owner/repo
-      if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ref.location)) {
-        throw new Error('Invalid GitHub repository format. Expected: owner/repo');
-      }
-      break;
-    }
-
-    case 'local': {
-      // Check for path traversal
-      if (hasPathTraversal(ref.location)) {
-        throw new Error('Path traversal detected in local path');
-      }
-      break;
-    }
-
-    case 'url': {
-      // Validate URL and protocol
-      try {
-        const url = new URL(ref.location);
-        if (!isValidProtocol(url.protocol)) {
-          throw new Error('Only HTTPS URLs are allowed for security');
-        }
-      } catch (error) {
-        if (error instanceof TypeError) {
-          throw new Error('Invalid URL format');
-        }
-        throw error;
-      }
-      break;
-    }
-  }
+  validateHubReferenceCore(ref);
 }
 
 /**
@@ -347,58 +314,7 @@ export function validateHubConfig(config: any): ValidationResult {
  * @throws {Error} if ID is invalid
  */
 export function sanitizeHubId(hubId: string): void {
-  // Check not empty
-  if (!hubId || hubId === '') {
-    throw new Error('Invalid hub ID: cannot be empty');
-  }
-
-  // Check length
-  if (hubId.length > 255) {
-    throw new Error('Invalid hub ID: too long (max 255 characters)');
-  }
-
-  // Check for path traversal
-  if (hubId.includes('..') || hubId.includes('/') || hubId.includes('\\')) {
-    throw new Error('Invalid hub ID: path traversal detected');
-  }
-
-  // Validate format (alphanumeric, dash, underscore only)
-  if (!/^[a-zA-Z0-9_-]+$/.test(hubId)) {
-    throw new Error('Invalid hub ID: only alphanumeric characters, dash, and underscore allowed');
-  }
-}
-
-/**
- * Check if a protocol is valid (HTTPS only)
- * @param protocol Protocol to check (e.g., "https:")
- * @returns True if protocol is allowed
- */
-export function isValidProtocol(protocol: string): boolean {
-  return protocol === 'https:';
-}
-
-/**
- * Check if a path contains traversal attempts
- * @param path Path to check
- * @returns True if path traversal detected
- */
-export function hasPathTraversal(path: string): boolean {
-  if (!path) {
-    return false;
-  }
-
-  // Check for literal ..
-  if (path.includes('..')) {
-    return true;
-  }
-
-  // Check for URL-encoded ..
-  const decoded = decodeURIComponent(path);
-  if (decoded.includes('..')) {
-    return true;
-  }
-
-  return false;
+  sanitizeHubIdCore(hubId);
 }
 
 /**
