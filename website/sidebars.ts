@@ -61,6 +61,7 @@ const sidebars: SidebarsConfig = {
                 { type: "doc", id: "contributor-guide/architecture/adr/clipanion-cli-framework-with-pinned-rc", label: "0002: Clipanion CLI Framework, RC Pin Accepted" },
                 { type: "doc", id: "contributor-guide/architecture/adr/primitive-index-search-and-multi-target-in-scope", label: "0003: Index/Search and Multi-Target In Scope" },
                 { type: "doc", id: "contributor-guide/architecture/adr/cli-only-rebrand-keep-lockfile-and-extension-identity-stable", label: "0004: CLI-Only Rebrand" },
+                { type: "doc", id: "contributor-guide/architecture/adr/universal-xdg-based-app-storage", label: "0005: Universal, XDG-Based App Storage" },
               ],
             },
           ],
