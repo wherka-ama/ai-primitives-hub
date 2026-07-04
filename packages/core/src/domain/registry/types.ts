@@ -83,3 +83,18 @@ export interface SearchQuery {
   /** If true, only return already-cached bundles without hitting the network. */
   cacheOnly?: boolean;
 }
+
+/**
+ * A `BundleUpdate` enriched with display/preference metadata, ready for a
+ * UI (or CLI) to render or act on. Mirrors the production shape at
+ * `src/services/update-cache.ts`.
+ */
+export interface UpdateCheckResult {
+  bundleId: string;
+  currentVersion: string;
+  latestVersion: string;
+  releaseNotes?: string;
+  releaseDate: string;
+  downloadUrl: string;
+  autoUpdateEnabled: boolean;
+}

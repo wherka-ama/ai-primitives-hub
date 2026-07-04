@@ -15,3 +15,6 @@ export * from './layout-config-loader';
 export * from './resource-transformer';
 export * from './source-resolver';
 export * from './bundle-downloader';
+export * from './registry-operations';
+export * from './update-store';
+export * from './update-notifier';

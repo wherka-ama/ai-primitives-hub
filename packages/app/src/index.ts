@@ -15,6 +15,7 @@
 export * from './install';
 export * from './writers';
 export * from './stores';
+export * from './update';
 
 /**
  * Phase 1 scaffolding marker, kept until `cli` has real code of its own
