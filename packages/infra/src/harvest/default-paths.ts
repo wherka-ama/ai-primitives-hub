@@ -20,8 +20,10 @@
  * @module harvest/default-paths
  */
 
-import * as os from 'node:os';
 import * as path from 'node:path';
+import {
+  xdgCacheDir,
+} from '../storage/xdg-base-dirs';
 
 /* eslint-disable @typescript-eslint/naming-convention -- env var names are
    SHOUTING_SNAKE_CASE by OS convention; we mirror them verbatim. */
@@ -31,22 +33,18 @@ export interface DefaultPathEnv {
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
-const APP_SUBDIR = 'ai-primitives-hub';
-
 /**
  * The user-level cache directory for all ai-primitives-hub CLI tools. The
  * primitive-index CLI places its working state (blob cache, progress log,
  * serialised index) under this directory.
+ *
+ * Thin wrapper around the shared `xdgCacheDir` resolver (ADR-0005
+ * decision 2) — kept as its own named export/signature since callers
+ * throughout `harvest/*` already depend on it.
  * @param env
  */
 export function defaultCacheDir(env: DefaultPathEnv = process.env): string {
-  if (env.AI_PRIMITIVES_HUB_CACHE) {
-    return env.AI_PRIMITIVES_HUB_CACHE;
-  }
-  if (env.XDG_CACHE_HOME) {
-    return path.join(env.XDG_CACHE_HOME, APP_SUBDIR);
-  }
-  return path.join(os.homedir(), '.cache', APP_SUBDIR);
+  return xdgCacheDir(env);
 }
 
 /**

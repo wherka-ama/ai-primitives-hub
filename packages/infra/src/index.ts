@@ -16,6 +16,7 @@ export * from './http';
 export * from './process';
 export * from './resolvers';
 export * from './search';
+export * from './storage';
 export * from './stores';
 export * from './writers';
 

@@ -3,6 +3,7 @@
  * @module ports
  */
 export * from './source-adapter';
+export * from './app-storage';
 export * from './clock';
 export * from './filesystem';
 export * from './http';

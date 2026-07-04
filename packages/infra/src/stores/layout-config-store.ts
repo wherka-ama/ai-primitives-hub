@@ -12,7 +12,6 @@
  * Conforms to the LayoutConfigLoader port.
  * @module stores/layout-config-store
  */
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   validateTargetLayoutsConfig,
@@ -24,6 +23,9 @@ import type {
 import {
   load as parseYaml,
 } from 'js-yaml';
+import {
+  xdgConfigDir,
+} from '../storage/xdg-base-dirs';
 import builtInLayouts from '../writers/default-layouts.json';
 
 /** File name used for user and project override files. */
@@ -55,12 +57,14 @@ export interface LayoutConfigLoaderOptions {
 /**
  * Resolves the user-level config directory.
  * Respects `$XDG_CONFIG_HOME` per the XDG Base Directory spec.
+ *
+ * Thin wrapper around the shared `xdgConfigDir` resolver (ADR-0005
+ * decision 2) — kept as its own named export/signature since callers
+ * throughout this module already depend on it.
  * @param env
  */
 export function resolveUserConfigDir(env: Record<string, string | undefined> = process.env): string {
-  const xdg = env.XDG_CONFIG_HOME;
-  const base = xdg ?? path.join(os.homedir(), '.config');
-  return path.join(base, 'ai-primitives-hub');
+  return xdgConfigDir(env);
 }
 
 /**
