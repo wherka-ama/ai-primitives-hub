@@ -19,6 +19,7 @@ import type {
   BundleUpdate,
 } from '../domain/bundle/types';
 import type {
+  InstallationScope,
   InstalledBundle,
 } from '../domain/install/types';
 import type {
@@ -52,4 +53,25 @@ export interface SourceOperations {
 export interface UpdateRegistryReader extends SourceOperations {
   getBundleDetails(bundleId: string): Promise<Bundle>;
   checkUpdates(): Promise<BundleUpdate[]>;
+}
+
+/**
+ * The read-only registry surface needed to detect raw version
+ * differences between each installed bundle and its source: resolve a
+ * bundle's latest details, list sources for cross-referencing, and read
+ * installation records (a single scope, or across scopes).
+ *
+ * Deliberately NOT `extends UpdateRegistryReader`/`SourceOperations`:
+ * `UpdateRegistryReader.checkUpdates` is exactly the method this port's
+ * consumer (`app`'s `detectBundleUpdates`) computes, so requiring it
+ * here would be self-referential, and raw update-detection never calls
+ * `syncSource`. The overlap with `getBundleDetails`/`listSources` is
+ * intentional, narrow, per-consumer duplication (interface segregation)
+ * rather than inheritance.
+ */
+export interface UpdateDetectionReader {
+  getBundleDetails(bundleId: string): Promise<Bundle>;
+  listSources(): Promise<RegistrySource[]>;
+  getInstalledBundles(scope?: InstallationScope): Promise<InstalledBundle[]>;
+  getInstalledBundle(bundleId: string, scope: InstallationScope): Promise<InstalledBundle | undefined>;
 }

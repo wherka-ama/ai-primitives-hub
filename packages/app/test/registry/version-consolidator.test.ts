@@ -16,12 +16,12 @@ import {
   expect,
   it,
 } from 'vitest';
-import type {
-  LogEvent,
-} from '../../src/update';
 import {
   VersionConsolidator,
 } from '../../src/registry';
+import type {
+  LogEvent,
+} from '../../src/update';
 
 function makeBundle(id: string, sourceId: string, version: string, overrides: Partial<Bundle> = {}): Bundle {
   return {
@@ -165,7 +165,7 @@ describe('VersionConsolidator', () => {
       const versions = consolidator.getAllVersions('owner-repo');
 
       expect(versions).toHaveLength(2);
-      expect(versions.map((v) => v.version).sort()).toEqual(['1.0.0', '2.0.0']);
+      expect(versions.map((v) => v.version).toSorted()).toEqual(['1.0.0', '2.0.0']);
     });
 
     it('returns an empty array for an unknown identity', () => {
