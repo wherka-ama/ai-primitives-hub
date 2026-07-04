@@ -7,6 +7,8 @@
  *
  *   - manifest exists at the bundle root
  *   - has `id`, `version`, `name`
+ *   - `id` matches the expected bundle id (exact or suffix-tolerant,
+ *     see {@link isManifestIdMatch})
  *   - `version` matches `bundleSpec.bundleVersion` (unless 'latest')
  *
  * Returns the parsed manifest on success; throws classed Errors on
@@ -19,6 +21,9 @@ import {
 import type {
   ExtractedFiles,
 } from '../../ports/bundle-extractor';
+import {
+  isManifestIdMatch,
+} from '../bundle/id';
 
 export const MANIFEST_FILENAME = 'deployment-manifest.yml';
 
@@ -108,7 +113,7 @@ export const validateManifest = (
   }
   const id = m.id as string;
   const version = m.version as string;
-  if (opts.expectedId !== undefined && id !== opts.expectedId) {
+  if (opts.expectedId !== undefined && !isManifestIdMatch(id, version, opts.expectedId)) {
     throw new ManifestValidationError(
       `manifest id "${id}" does not match expected "${opts.expectedId}"`,
       'BUNDLE.ID_MISMATCH'

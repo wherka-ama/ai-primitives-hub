@@ -791,6 +791,9 @@
     "webpack-cli": "^5.0.1"
   },
   "dependencies": {
+    "@ai-primitives-hub/app": "file:packages/app",
+    "@ai-primitives-hub/core": "file:packages/core",
+    "@ai-primitives-hub/infra": "file:packages/infra",
     "@elastic/elasticsearch": "^9.3.4",
     "@prompt-registry/collection-scripts": "workspace:^",
     "adm-zip": "^0.5.16",

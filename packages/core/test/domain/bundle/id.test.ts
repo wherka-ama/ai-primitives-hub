@@ -6,6 +6,7 @@ import {
 import {
   generateBundleId,
   generateGitHubReleaseBundleId,
+  isManifestIdMatch,
 } from '../../../src/domain/bundle/id';
 
 describe('generateBundleId', () => {
@@ -49,5 +50,31 @@ describe('generateGitHubReleaseBundleId', () => {
     expect(generateGitHubReleaseBundleId('owner', 'repo', '1.2.3', 'my-collection')).toBe(
       'owner-repo-my-collection-1.2.3'
     );
+  });
+});
+
+describe('isManifestIdMatch', () => {
+  it('matches a suffix pattern with a v prefix on the version', () => {
+    expect(isManifestIdMatch('test2', '1.0.2', 'owner-repo-test2-v1.0.2')).toBe(true);
+  });
+
+  it('matches a suffix pattern without a v prefix on the version', () => {
+    expect(isManifestIdMatch('test2', '1.0.2', 'owner-repo-test2-1.0.2')).toBe(true);
+  });
+
+  it('matches when the manifest id already equals the full bundle id', () => {
+    expect(isManifestIdMatch('owner-repo-collection-v1.0.0', '1.0.0', 'owner-repo-collection-v1.0.0')).toBe(true);
+  });
+
+  it('matches a suffix pattern for a repo slug containing a dot', () => {
+    expect(isManifestIdMatch(
+      'test2',
+      '1.0.2',
+      'amadeus-airlines-solutions-genai.spec-driven-agents-test2-1.0.2'
+    )).toBe(true);
+  });
+
+  it('rejects a manifest id that is unrelated to the bundle id', () => {
+    expect(isManifestIdMatch('completely-different', '1.0.0', 'owner-repo-test2-v1.0.0')).toBe(false);
   });
 });

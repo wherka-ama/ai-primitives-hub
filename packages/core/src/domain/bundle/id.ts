@@ -52,3 +52,27 @@ export function generateGitHubReleaseBundleId(
   const cleanVersion = manifestVersion ?? tagName.replace(/^v/, '');
   return manifestId ? `${owner}-${repo}-${manifestId}-${cleanVersion}` : `${owner}-${repo}-${tagName}`;
 }
+
+/**
+ * Check whether a manifest's declared id/version match a bundle id.
+ *
+ * For GitHub-sourced collection bundles, the manifest may declare just
+ * the collection id (e.g. `my-collection`) while the bundle id is the
+ * full computed id produced by {@link generateGitHubReleaseBundleId}
+ * (e.g. `owner-repo-my-collection-1.0.0` or `owner-repo-my-collection-v1.0.0`).
+ * This accepts an exact match as well as both suffix forms, with or
+ * without the `v` version prefix.
+ *
+ * IMPORTANT: this logic must stay in sync with
+ * `src/utils/bundle-name-utils.ts` (`isManifestIdMatch`) until that
+ * call site is migrated onto this implementation (migration plan §7.5/§7.7).
+ * @param manifestId - The `id` field from the deployment manifest.
+ * @param manifestVersion - The `version` field from the deployment manifest.
+ * @param bundleId - The computed bundle id to match against.
+ * @returns `true` if `manifestId`/`manifestVersion` identify `bundleId`.
+ */
+export function isManifestIdMatch(manifestId: string, manifestVersion: string, bundleId: string): boolean {
+  return manifestId === bundleId
+    || bundleId.endsWith(`-${manifestId}-v${manifestVersion}`)
+    || bundleId.endsWith(`-${manifestId}-${manifestVersion}`);
+}

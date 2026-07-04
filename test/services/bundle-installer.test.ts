@@ -5,9 +5,14 @@
 import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import AdmZip = require('adm-zip');
+import * as sinon from 'sinon';
 import {
   BundleInstaller,
 } from '../../src/services/bundle-installer';
+import {
+  ScopeServiceFactory,
+} from '../../src/services/scope-service-factory';
 import {
   Bundle,
   InstallOptions,
@@ -17,6 +22,7 @@ suite('BundleInstaller', () => {
   let installer: BundleInstaller;
   let mockContext: any;
   let tempDir: string;
+  let sandbox: sinon.SinonSandbox;
 
   const mockBundle: Bundle = {
     id: 'test-bundle',
@@ -36,6 +42,7 @@ suite('BundleInstaller', () => {
   };
 
   setup(() => {
+    sandbox = sinon.createSandbox();
     tempDir = path.join(__dirname, '..', '..', '..', 'test-temp');
 
     mockContext = {
@@ -59,6 +66,7 @@ suite('BundleInstaller', () => {
   });
 
   teardown(() => {
+    sandbox.restore();
     // Cleanup temp directories
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -109,42 +117,91 @@ suite('BundleInstaller', () => {
   });
 
   suite('Validation', () => {
-    test('should validate manifest structure', () => {
-      const validManifest = {
-        id: 'test-bundle',
-        version: '1.0.0',
-        name: 'Test',
-        description: 'Test',
-        author: 'Test',
-        prompts: []
-      };
+    // ScopeServiceFactory.create() is an external boundary (VS Code profile/filesystem
+    // detection) unrelated to manifest validation - stub it out so installFromBuffer()
+    // can run end-to-end hermetically, matching the fake used by the real sync step.
+    const fakeScopeService = {
+      syncBundle: async (): Promise<void> => undefined,
+      unsyncBundle: async (): Promise<void> => undefined
+    };
 
-      // Test validation logic
-      assert.ok(validManifest);
+    const buildZipBuffer = (manifestYaml?: string): Buffer => {
+      const zip = new AdmZip();
+      if (manifestYaml !== undefined) {
+        zip.addFile('deployment-manifest.yml', Buffer.from(manifestYaml));
+      }
+      zip.addFile('prompts/foo.prompt.md', Buffer.from('# Foo'));
+      return zip.toBuffer();
+    };
+
+    const installOptions: InstallOptions = { scope: 'user', force: false };
+
+    setup(() => {
+      sandbox.stub(ScopeServiceFactory, 'create').returns(fakeScopeService);
     });
 
-    test('should reject manifest with missing required fields', () => {
-      const invalidManifest = {
-        id: 'test-bundle'
-        // missing version, name, etc.
-      };
+    test('installs a bundle whose manifest id/version exactly match the bundle', async () => {
+      const buffer = buildZipBuffer('id: test-bundle\nversion: 1.0.0\nname: Test\n');
 
-      // Test validation rejection
-      assert.ok(invalidManifest);
+      const installed = await installer.installFromBuffer(mockBundle, buffer, installOptions);
+
+      assert.strictEqual((installed.manifest as any).id, 'test-bundle');
+      assert.strictEqual((installed.manifest as any).version, '1.0.0');
     });
 
-    test('should reject manifest with wrong bundle ID', () => {
-      const manifest = {
-        id: 'wrong-id', // doesn't match bundle.id
-        version: '1.0.0',
-        name: 'Test',
-        description: 'Test',
-        author: 'Test',
-        prompts: []
-      };
+    test('installs a bundle whose manifest id is a suffix-match collection id (GitHub collections)', async () => {
+      const buffer = buildZipBuffer('id: test2\nversion: 1.0.2\nname: Test Collection\n');
+      const collectionBundle: Bundle = { ...mockBundle, id: 'owner-repo-test2-v1.0.2', version: '1.0.2' };
 
-      // Test ID validation
-      assert.ok(manifest);
+      const installed = await installer.installFromBuffer(collectionBundle, buffer, installOptions);
+
+      assert.strictEqual((installed.manifest as any).id, 'test2');
+    });
+
+    test('creates a minimal fallback manifest when deployment-manifest.yml is absent', async () => {
+      const buffer = buildZipBuffer(undefined);
+
+      const installed = await installer.installFromBuffer(mockBundle, buffer, installOptions);
+
+      const manifest = installed.manifest as any;
+      assert.strictEqual(manifest.bundle_settings.naming.environment_bundle, mockBundle.id);
+      assert.strictEqual(manifest.metadata.description, mockBundle.description);
+    });
+
+    test('rejects when the manifest is missing required fields', async () => {
+      const buffer = buildZipBuffer('id: test-bundle\n');
+
+      await assert.rejects(
+        installer.installFromBuffer(mockBundle, buffer, installOptions),
+        /missing or empty/
+      );
+    });
+
+    test('rejects when the manifest id does not match the bundle, not even as a suffix', async () => {
+      const buffer = buildZipBuffer('id: wrong-id\nversion: 1.0.0\nname: Test\n');
+
+      await assert.rejects(
+        installer.installFromBuffer(mockBundle, buffer, installOptions),
+        /does not match expected/
+      );
+    });
+
+    test('rejects when the manifest version does not match the bundle version', async () => {
+      const buffer = buildZipBuffer('id: test-bundle\nversion: 2.0.0\nname: Test\n');
+
+      await assert.rejects(
+        installer.installFromBuffer(mockBundle, buffer, installOptions),
+        /version .* does not match expected/
+      );
+    });
+
+    test('accepts any manifest version when the bundle version is "latest"', async () => {
+      const buffer = buildZipBuffer('id: test-bundle\nversion: 3.2.1\nname: Test\n');
+      const latestBundle: Bundle = { ...mockBundle, version: 'latest' };
+
+      const installed = await installer.installFromBuffer(latestBundle, buffer, installOptions);
+
+      assert.strictEqual((installed.manifest as any).version, '3.2.1');
     });
 
     // Bundle ID validation tests - testing actual validation behavior

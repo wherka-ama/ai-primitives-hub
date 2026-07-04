@@ -27,11 +27,13 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ai-primitives-hub/core": "workspace:*",
+    "@ai-primitives-hub/core": "file:../core",
+    "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "js-yaml": "^4.1.1"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.5",
     "@types/archiver": "^7.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",

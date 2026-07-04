@@ -27,8 +27,8 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ai-primitives-hub/core": "workspace:*",
-    "@ai-primitives-hub/infra": "workspace:*"
+    "@ai-primitives-hub/core": "file:../core",
+    "@ai-primitives-hub/infra": "file:../infra"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
