@@ -6,6 +6,10 @@
 import * as path from 'node:path';
 import {
   HubManager as AppHubManager,
+  loadHubSources as appLoadHubSources,
+} from '@ai-primitives-hub/app';
+import type {
+  LogEvent,
 } from '@ai-primitives-hub/app';
 import type {
   HubConfig as CoreHubConfig,
@@ -35,7 +39,6 @@ import {
   HubProfile,
   HubProfileBundle,
   HubReference,
-  HubSource,
   ProfileActivationOptions,
   ProfileActivationResult,
   ProfileActivationState,
@@ -44,14 +47,8 @@ import {
   validateHubConfig,
 } from '../types/hub';
 import {
-  RegistrySource,
-} from '../types/registry';
-import {
   Logger,
 } from '../utils/logger';
-import {
-  generateHubSourceId,
-} from '../utils/source-id-utils';
 import {
   SchemaValidator,
   ValidationResult,
@@ -220,46 +217,6 @@ export class HubManager {
         }
       }
     }
-  }
-
-  /**
-   * Check if a source is a duplicate based on URL and config
-   * Compares URL, type, branch, and collectionsPath to determine if sources are identical
-   * @param source Source to check
-   * @param existingSources List of existing sources
-   * @returns The existing duplicate source or undefined
-   */
-  private findDuplicateSource(
-    source: HubSource,
-    existingSources: RegistrySource[]
-  ): RegistrySource | undefined {
-    return existingSources.find((existing: RegistrySource) => {
-      // Must have same type and URL
-      if (existing.type !== source.type || existing.url !== source.url) {
-        return false;
-      }
-
-      // For sources with config, compare relevant fields
-      const existingConfig = existing.config || {};
-      const sourceConfig = source.config || {};
-
-      // Compare branch (for git-based sources)
-      const existingBranch = existingConfig.branch || 'main';
-      const sourceBranch = sourceConfig.branch || 'main';
-      if (existingBranch !== sourceBranch) {
-        return false;
-      }
-
-      // Compare collectionsPath (for awesome-copilot sources)
-      const existingPath = existingConfig.collectionsPath || 'collections';
-      const sourcePath = sourceConfig.collectionsPath || 'collections';
-      if (existingPath !== sourcePath) {
-        return false;
-      }
-
-      // If all criteria match, it's a duplicate
-      return true;
-    });
   }
 
   /**
@@ -561,101 +518,34 @@ export class HubManager {
       const hubData = await this.storage.loadHub(hubId);
       const hubSources = hubData.config.sources || [];
 
-      this.logger.info(`Found ${hubSources.length} sources in hub ${hubId}`);
-
-      // Get existing sources to avoid duplicates
-      const existingSources = await this.registryManager.listSources();
-
-      let addedCount = 0;
-      let skippedCount = 0;
-      let updatedCount = 0;
-
-      for (const hubSource of hubSources) {
-        // Skip disabled sources
-        if (!hubSource.enabled) {
-          this.logger.debug(`Skipping disabled source: ${hubSource.id}`);
-          skippedCount++;
-          continue;
+      await appLoadHubSources(
+        hubId,
+        hubSources,
+        {
+          listSources: () => this.registryManager.listSources(),
+          addSource: (source) => this.registryManager.addSource(source),
+          updateSource: (sourceId, updates) => this.registryManager.updateSource(sourceId, updates)
+        },
+        (event: LogEvent) => {
+          switch (event.level) {
+            case 'debug': {
+              this.logger.debug(event.message);
+              break;
+            }
+            case 'info': {
+              this.logger.info(event.message);
+              break;
+            }
+            case 'warn': {
+              this.logger.warn(event.message);
+              break;
+            }
+            case 'error': {
+              this.logger.error(event.message, event.error);
+              break;
+            }
+          }
         }
-
-        // Generate stable sourceId based on type, URL, and config (branch, collectionsPath)
-        const sourceId = generateHubSourceId(hubSource.type, hubSource.url, {
-          branch: hubSource.config?.branch,
-          collectionsPath: hubSource.config?.collectionsPath
-        });
-
-        // Check if source with same ID already exists (from this hub)
-        const existingSourceById = existingSources.find((s: RegistrySource) => s.id === sourceId);
-
-        if (existingSourceById) {
-          // Update existing source from same hub
-          this.logger.info(`Updating existing hub source: ${sourceId}`);
-          await this.registryManager.updateSource(sourceId, {
-            name: hubSource.name,
-            type: hubSource.type,
-            url: hubSource.url,
-            enabled: hubSource.enabled,
-            priority: hubSource.priority,
-            private: hubSource.private,
-            token: hubSource.token,
-            metadata: hubSource.metadata,
-            config: hubSource.config,
-            hubId: hubId
-          });
-          updatedCount++;
-          continue;
-        }
-
-        // Check if duplicate source already exists (same URL + config)
-        const duplicateSource = this.findDuplicateSource(hubSource, existingSources);
-
-        if (duplicateSource) {
-          this.logger.info(
-            `Skipping duplicate source: ${hubSource.name} `
-            + `(already exists as "${duplicateSource.name}" with ID: ${duplicateSource.id})`
-          );
-          this.logger.debug(
-            `Duplicate detected - URL: ${hubSource.url}, `
-            + `Branch: ${hubSource.config?.branch || 'main'}, `
-            + `CollectionsPath: ${hubSource.config?.collectionsPath || 'collections'}`
-          );
-          skippedCount++;
-          continue;
-        }
-
-        // Add new source
-        this.logger.info(`Adding new hub source: ${sourceId} (${hubSource.name})`);
-
-        // Convert HubSource to RegistrySource
-        const registrySource: RegistrySource = {
-          id: sourceId,
-          name: hubSource.name,
-          type: hubSource.type,
-          url: hubSource.url,
-          enabled: hubSource.enabled,
-          priority: hubSource.priority,
-          private: hubSource.private,
-          token: hubSource.token,
-          metadata: hubSource.metadata,
-          config: hubSource.config,
-          hubId: hubId
-        };
-
-        try {
-          await this.registryManager.addSource(registrySource);
-          addedCount++;
-        } catch (sourceError) {
-          this.logger.warn(
-            `Failed to add hub source ${sourceId} (${hubSource.name}): `
-            + `${sourceError instanceof Error ? sourceError.message : String(sourceError)}`
-          );
-          skippedCount++;
-        }
-      }
-
-      this.logger.info(
-        `Hub source loading complete for ${hubId}: `
-        + `${addedCount} added, ${updatedCount} updated, ${skippedCount} skipped`
       );
     } catch (error) {
       this.logger.error(`Failed to load sources from hub ${hubId}`, error as Error);

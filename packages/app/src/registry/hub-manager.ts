@@ -6,7 +6,7 @@
  * item): import / list / get / getActive / setActive / sync / delete
  * a hub, plus availability probing. Deliberately excludes (ported in
  * later stages):
- *   - source-loading/dedup into `RegistryManager` (Stage 2)
+ *   - source-loading/dedup into `RegistryManager` (Stage 2 — landed, see `load-hub-sources.ts`)
  *   - favorites (Stage 3)
  *   - profile activation/deactivation + conflict detection (Stage 4)
  *   - the sync scheduler (Stage 5)

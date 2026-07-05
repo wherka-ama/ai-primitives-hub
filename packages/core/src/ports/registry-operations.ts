@@ -46,6 +46,19 @@ export interface SourceOperations {
 }
 
 /**
+ * Source read/write operations needed to sync a hub's declared sources
+ * into the registry: list existing sources to detect duplicates/updates
+ * against, add genuinely new ones, and update ones that already came
+ * from the same hub. Deliberately narrower than a full source-CRUD
+ * port (no `removeSource`) since hub-source syncing never deletes.
+ */
+export interface HubSourceSync {
+  listSources(): Promise<RegistrySource[]>;
+  addSource(source: RegistrySource): Promise<void>;
+  updateSource(sourceId: string, updates: Partial<RegistrySource>): Promise<void>;
+}
+
+/**
  * The read-only registry surface `UpdateChecker` needs: sync sources,
  * compare installed vs. latest versions, and enrich the result with
  * per-bundle metadata.
