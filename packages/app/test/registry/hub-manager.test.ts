@@ -1,5 +1,6 @@
 /**
- * Tests for registry/hub-manager.ts (Stage 1: CRUD + fetch/validate).
+ * Tests for registry/hub-manager.ts (Stage 1: CRUD + fetch/validate;
+ * Stage 3: favorites).
  */
 import type {
   HubConfig,
@@ -8,6 +9,7 @@ import type {
 } from '@ai-primitives-hub/core';
 import type {
   ActiveHubStore,
+  FavoritesStore,
   HubResolver,
   HubStore,
 } from '@ai-primitives-hub/infra';
@@ -83,10 +85,21 @@ function makeResolver(config: HubConfig = makeConfig()): HubResolver {
   };
 }
 
+function makeFavoritesStore(): FavoritesStore {
+  const state: { current: Record<string, string[]> } = { current: {} };
+  return {
+    get: vi.fn(async () => state.current),
+    save: vi.fn(async (favorites: Record<string, string[]>) => {
+      state.current = favorites;
+    })
+  } as FavoritesStore;
+}
+
 describe('HubManager (app)', () => {
   let store: ReturnType<typeof makeStore>;
   let activeStore: ReturnType<typeof makeActiveStore>;
   let resolver: HubResolver;
+  let favoritesStore: ReturnType<typeof makeFavoritesStore>;
   let validateConfig: ReturnType<typeof vi.fn<(config: HubConfig) => Promise<ValidationResult>>>;
   let manager: HubManager;
 
@@ -94,8 +107,9 @@ describe('HubManager (app)', () => {
     store = makeStore();
     activeStore = makeActiveStore();
     resolver = makeResolver();
+    favoritesStore = makeFavoritesStore();
     validateConfig = vi.fn(async () => OK);
-    manager = new HubManager({ store, activeStore, resolver, validateConfig });
+    manager = new HubManager({ store, activeStore, resolver, favoritesStore, validateConfig });
   });
 
   describe('importHub', () => {
@@ -265,6 +279,92 @@ describe('HubManager (app)', () => {
 
     it('returns null for a missing hub', async () => {
       expect(await manager.getHub('missing')).toBeNull();
+    });
+  });
+
+  describe('favorites', () => {
+    describe('isProfileFavorite / getFavoriteProfiles / toggleProfileFavorite', () => {
+      it('is not favorited initially', async () => {
+        expect(await manager.isProfileFavorite('hub-a', 'profile-1')).toBe(false);
+        expect(await manager.getFavoriteProfiles()).toEqual({});
+      });
+
+      it('toggles a profile on, then off', async () => {
+        await manager.toggleProfileFavorite('hub-a', 'profile-1');
+        expect(await manager.isProfileFavorite('hub-a', 'profile-1')).toBe(true);
+        expect(await manager.getFavoriteProfiles()).toEqual({ 'hub-a': ['profile-1'] });
+
+        await manager.toggleProfileFavorite('hub-a', 'profile-1');
+        expect(await manager.isProfileFavorite('hub-a', 'profile-1')).toBe(false);
+        expect(await manager.getFavoriteProfiles()).toEqual({});
+      });
+
+      it('removes the hub entry entirely once its favorites list is empty', async () => {
+        await manager.toggleProfileFavorite('hub-a', 'profile-1');
+        await manager.toggleProfileFavorite('hub-a', 'profile-1');
+        const favorites = await manager.getFavoriteProfiles();
+        expect(Object.prototype.hasOwnProperty.call(favorites, 'hub-a')).toBe(false);
+      });
+
+      it('does not create duplicates when toggling on repeatedly', async () => {
+        await manager.toggleProfileFavorite('hub-a', 'profile-1'); // add
+        await manager.toggleProfileFavorite('hub-a', 'profile-1'); // remove
+        await manager.toggleProfileFavorite('hub-a', 'profile-1'); // add back
+
+        const favorites = await manager.getFavoriteProfiles();
+        expect(favorites['hub-a']).toEqual(['profile-1']);
+      });
+
+      it('keeps favorites for different hubs independent', async () => {
+        await manager.toggleProfileFavorite('hub-a', 'profile-1');
+        await manager.toggleProfileFavorite('hub-b', 'profile-2');
+
+        expect(await manager.getFavoriteProfiles()).toEqual({
+          'hub-a': ['profile-1'],
+          'hub-b': ['profile-2']
+        });
+      });
+    });
+
+    describe('removeHubFavorites', () => {
+      it('removes an existing hub entry and reports true', async () => {
+        await manager.toggleProfileFavorite('hub-a', 'profile-1');
+        expect(await manager.removeHubFavorites('hub-a')).toBe(true);
+        expect(await manager.getFavoriteProfiles()).toEqual({});
+      });
+
+      it('reports false and leaves other hubs untouched when the hub has no favorites', async () => {
+        await manager.toggleProfileFavorite('hub-b', 'profile-2');
+        expect(await manager.removeHubFavorites('hub-a')).toBe(false);
+        expect(await manager.getFavoriteProfiles()).toEqual({ 'hub-b': ['profile-2'] });
+      });
+    });
+
+    describe('cleanupOrphanedFavorites', () => {
+      it('removes favorites for hubs that no longer exist and returns their ids', async () => {
+        await manager.importHub({ type: 'local', location: '/a.yml' }, 'existing-hub');
+        await manager.toggleProfileFavorite('existing-hub', 'profile-1');
+        await manager.toggleProfileFavorite('ghost-hub', 'profile-2');
+        await manager.toggleProfileFavorite('another-ghost-hub', 'profile-3');
+
+        const removed = await manager.cleanupOrphanedFavorites();
+
+        expect(removed.toSorted()).toEqual(['another-ghost-hub', 'ghost-hub']);
+        const favorites = await manager.getFavoriteProfiles();
+        expect(favorites).toEqual({ 'existing-hub': ['profile-1'] });
+      });
+
+      it('returns an empty array and does not write when nothing is orphaned', async () => {
+        await manager.importHub({ type: 'local', location: '/a.yml' }, 'existing-hub');
+        await manager.toggleProfileFavorite('existing-hub', 'profile-1');
+
+        (favoritesStore.save as ReturnType<typeof vi.fn>).mockClear();
+        const removed = await manager.cleanupOrphanedFavorites();
+
+        expect(removed).toEqual([]);
+        // eslint-disable-next-line @typescript-eslint/unbound-method -- vitest mock method reference, not a real unbound `this` call
+        expect(favoritesStore.save).not.toHaveBeenCalled();
+      });
     });
   });
 });

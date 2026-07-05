@@ -7,6 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   ActiveHubStore,
+  FavoritesStore,
   HubStore,
   NodeFileSystem,
 } from '@ai-primitives-hub/infra';
@@ -38,17 +39,20 @@ export interface LoadHubResult {
  * HubStorage manages persistent storage of hub configurations.
  *
  * Thin facade over `@ai-primitives-hub/infra`'s `HubStore` +
- * `ActiveHubStore` (migration plan §7.5, HubManager Stage 1): those
- * own the actual on-disk CRUD, this class layers an in-memory cache
- * on top (for fidelity with pre-existing behavior) plus the
- * favorites/profile-activation-state responsibilities that haven't
- * been ported yet (Stages 3/4).
+ * `ActiveHubStore` + `FavoritesStore` (migration plan §7.5, HubManager
+ * Stages 1+3): those own the actual on-disk CRUD, this class layers
+ * an in-memory cache on top (for fidelity with pre-existing behavior,
+ * hub configs only — `FavoritesStore` is deliberately left stateless
+ * here too, mirroring its own no-cache design) plus the
+ * profile-activation-state responsibilities that haven't been ported
+ * yet (Stage 4).
  */
 export class HubStorage {
   private readonly storagePath: string;
   private readonly cache: Map<string, LoadHubResult>;
   private readonly hubStore: HubStore;
   private readonly activeHubStore: ActiveHubStore;
+  private readonly favoritesStore: FavoritesStore;
 
   /**
    * Initialize hub storage
@@ -70,6 +74,7 @@ export class HubStorage {
     const nodeFs = new NodeFileSystem();
     this.hubStore = new HubStore(this.storagePath, nodeFs);
     this.activeHubStore = new ActiveHubStore(path.join(this.storagePath, 'activeHubId.json'), nodeFs);
+    this.favoritesStore = new FavoritesStore(path.join(this.storagePath, 'favorites.json'), nodeFs);
   }
 
   /**
@@ -88,6 +93,15 @@ export class HubStorage {
    */
   public getActiveHubStore(): ActiveHubStore {
     return this.activeHubStore;
+  }
+
+  /**
+   * Expose the underlying infra `FavoritesStore`, e.g. for
+   * `HubManager`'s app-layer delegate wiring.
+   * @returns The infra FavoritesStore backing this facade.
+   */
+  public getFavoritesStore(): FavoritesStore {
+    return this.favoritesStore;
   }
 
   /**
@@ -303,16 +317,7 @@ export class HubStorage {
    * @returns Record<hubId, profileIds[]>
    */
   public async getFavoriteProfiles(): Promise<Record<string, string[]>> {
-    const favoritesPath = path.join(this.storagePath, 'favorites.json');
-    if (!fs.existsSync(favoritesPath)) {
-      return {};
-    }
-    try {
-      const content = await fs.promises.readFile(favoritesPath, 'utf8');
-      return JSON.parse(content);
-    } catch {
-      return {};
-    }
+    return this.favoritesStore.get();
   }
 
   /**
@@ -320,7 +325,6 @@ export class HubStorage {
    * @param favorites
    */
   public async saveFavoriteProfiles(favorites: Record<string, string[]>): Promise<void> {
-    const favoritesPath = path.join(this.storagePath, 'favorites.json');
-    await fs.promises.writeFile(favoritesPath, JSON.stringify(favorites, null, 2), 'utf8');
+    await this.favoritesStore.save(favorites);
   }
 }

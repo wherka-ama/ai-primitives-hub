@@ -158,6 +158,7 @@ export class HubManager {
     this.appHubManager = new AppHubManager({
       store: storage.getHubStore(),
       activeStore: storage.getActiveHubStore(),
+      favoritesStore: storage.getFavoritesStore(),
       resolver,
       validateConfig: async (config: CoreHubConfig): Promise<CoreValidationResult> => {
         const schemaResult = await this.validator.validate(config, this.hubSchemaPath);
@@ -182,10 +183,7 @@ export class HubManager {
     this.logger.info(`Cleaning up resources for hub: ${hubId}`);
 
     // 1. Remove favorites for this hub
-    const favorites = await this.getFavoriteProfiles();
-    if (favorites[hubId]) {
-      delete favorites[hubId];
-      await this.storage.saveFavoriteProfiles(favorites);
+    if (await this.appHubManager.removeHubFavorites(hubId)) {
       this._onFavoritesChanged.fire();
       this.logger.info(`Removed favorites for hub: ${hubId}`);
     }
@@ -925,8 +923,7 @@ export class HubManager {
    * @param profileId Profile identifier
    */
   public async isProfileFavorite(hubId: string, profileId: string): Promise<boolean> {
-    const favorites = await this.storage.getFavoriteProfiles();
-    return favorites[hubId]?.includes(profileId) || false;
+    return this.appHubManager.isProfileFavorite(hubId, profileId);
   }
 
   /**
@@ -934,7 +931,7 @@ export class HubManager {
    * @returns Map of hub ID to list of profile IDs
    */
   public async getFavoriteProfiles(): Promise<Record<string, string[]>> {
-    return this.storage.getFavoriteProfiles();
+    return this.appHubManager.getFavoriteProfiles();
   }
 
   /**
@@ -943,26 +940,7 @@ export class HubManager {
    * @param profileId Profile identifier
    */
   public async toggleProfileFavorite(hubId: string, profileId: string): Promise<void> {
-    const favorites = await this.getFavoriteProfiles();
-    const hubFavorites = favorites[hubId] || [];
-
-    const index = hubFavorites.indexOf(profileId);
-    if (index === -1) {
-      // Add to favorites
-      hubFavorites.push(profileId);
-    } else {
-      // Remove from favorites
-      hubFavorites.splice(index, 1);
-    }
-
-    favorites[hubId] = hubFavorites;
-
-    // Clean up empty hubs
-    if (favorites[hubId].length === 0) {
-      delete favorites[hubId];
-    }
-
-    await this.storage.saveFavoriteProfiles(favorites);
+    await this.appHubManager.toggleProfileFavorite(hubId, profileId);
     this._onFavoritesChanged.fire();
   }
 
@@ -971,21 +949,12 @@ export class HubManager {
    * This handles stale data from hubs that were deleted before cleanup logic was implemented
    */
   public async cleanupOrphanedFavorites(): Promise<void> {
-    const favorites = await this.getFavoriteProfiles();
-    const existingHubs = await this.listHubs();
-    const existingHubIds = new Set(existingHubs.map((h) => h.id));
+    const removed = await this.appHubManager.cleanupOrphanedFavorites();
 
-    let changed = false;
-    for (const hubId of Object.keys(favorites)) {
-      if (!existingHubIds.has(hubId)) {
+    if (removed.length > 0) {
+      for (const hubId of removed) {
         this.logger.info(`Removing orphaned favorites for non-existent hub: ${hubId}`);
-        delete favorites[hubId];
-        changed = true;
       }
-    }
-
-    if (changed) {
-      await this.storage.saveFavoriteProfiles(favorites);
       this._onFavoritesChanged.fire();
     }
   }

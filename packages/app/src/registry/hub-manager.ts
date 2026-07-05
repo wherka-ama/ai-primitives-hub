@@ -1,13 +1,15 @@
 /**
  * HubManager (app) — CRUD + fetch/validate orchestration for hubs.
  *
- * Stage 1 of the staged strangler-fig port of the extension's
+ * Stages 1+3 of the staged strangler-fig port of the extension's
  * `src/services/hub-manager.ts` (migration plan §7.5, HubManager
- * item): import / list / get / getActive / setActive / sync / delete
- * a hub, plus availability probing. Deliberately excludes (ported in
- * later stages):
+ * item): Stage 1 — import / list / get / getActive / setActive /
+ * sync / delete a hub, plus availability probing. Stage 3 — favorited
+ * profiles (`isProfileFavorite`/`getFavoriteProfiles`/
+ * `toggleProfileFavorite`/`cleanupOrphanedFavorites`/
+ * `removeHubFavorites`). Deliberately excludes (ported in later
+ * stages):
  *   - source-loading/dedup into `RegistryManager` (Stage 2 — landed, see `load-hub-sources.ts`)
- *   - favorites (Stage 3)
  *   - profile activation/deactivation + conflict detection (Stage 4)
  *   - the sync scheduler (Stage 5)
  *
@@ -28,6 +30,7 @@ import {
 } from '@ai-primitives-hub/core';
 import type {
   ActiveHubStore,
+  FavoritesStore,
   HubResolver,
   HubStore,
   HubStoreMetadata,
@@ -63,6 +66,7 @@ export interface HubManagerDeps {
   store: HubStore;
   activeStore: ActiveHubStore;
   resolver: HubResolver;
+  favoritesStore: FavoritesStore;
   /**
    * Fully-composed validator (schema + runtime). Injected rather than
    * built here since schema/AJV validation stays delivery-context
@@ -330,5 +334,95 @@ export class HubManager {
       throw new Error(`Hub not found: ${hubId}`);
     }
     await this.deps.activeStore.set(hubId);
+  }
+
+  /**
+   * Check if a profile is favorited.
+   * @param hubId Hub identifier.
+   * @param profileId Profile identifier.
+   * @returns true iff the profile is in that hub's favorites list.
+   */
+  public async isProfileFavorite(hubId: string, profileId: string): Promise<boolean> {
+    const favorites = await this.deps.favoritesStore.get();
+    return favorites[hubId]?.includes(profileId) ?? false;
+  }
+
+  /**
+   * Get every hub's favorited profiles.
+   * @returns Map of hub id to favorited profile ids.
+   */
+  public async getFavoriteProfiles(): Promise<Record<string, string[]>> {
+    return this.deps.favoritesStore.get();
+  }
+
+  /**
+   * Toggle a profile's favorite status for a hub. Removes the hub's
+   * entry entirely once its favorites list becomes empty, rather than
+   * leaving a stale empty array around.
+   * @param hubId Hub identifier.
+   * @param profileId Profile identifier.
+   */
+  public async toggleProfileFavorite(hubId: string, profileId: string): Promise<void> {
+    const favorites = await this.deps.favoritesStore.get();
+    const hubFavorites = favorites[hubId] ?? [];
+
+    const index = hubFavorites.indexOf(profileId);
+    if (index === -1) {
+      hubFavorites.push(profileId);
+    } else {
+      hubFavorites.splice(index, 1);
+    }
+
+    favorites[hubId] = hubFavorites;
+
+    if (favorites[hubId].length === 0) {
+      delete favorites[hubId];
+    }
+
+    await this.deps.favoritesStore.save(favorites);
+  }
+
+  /**
+   * Remove all favorited profiles for a single hub (e.g. on hub
+   * delete, or when switching the active hub away from it). Callers
+   * are responsible for their own event/logging side effects — see
+   * `deleteHub`'s doc for the rationale.
+   * @param hubId Hub identifier whose favorites should be cleared.
+   * @returns true iff that hub had any favorites to remove.
+   */
+  public async removeHubFavorites(hubId: string): Promise<boolean> {
+    const favorites = await this.deps.favoritesStore.get();
+    if (!favorites[hubId]) {
+      return false;
+    }
+    delete favorites[hubId];
+    await this.deps.favoritesStore.save(favorites);
+    return true;
+  }
+
+  /**
+   * Remove favorites recorded against hubs that no longer exist on
+   * disk (stale data from hubs deleted before cleanup-on-delete
+   * existed). Callers are responsible for their own event/logging
+   * side effects, per hub id returned.
+   * @returns Ids of hubs whose orphaned favorites were removed.
+   */
+  public async cleanupOrphanedFavorites(): Promise<string[]> {
+    const favorites = await this.deps.favoritesStore.get();
+    const existingHubIds = new Set((await this.listHubs()).map((h) => h.id));
+
+    const removed: string[] = [];
+    for (const hubId of Object.keys(favorites)) {
+      if (!existingHubIds.has(hubId)) {
+        delete favorites[hubId];
+        removed.push(hubId);
+      }
+    }
+
+    if (removed.length > 0) {
+      await this.deps.favoritesStore.save(favorites);
+    }
+
+    return removed;
   }
 }
