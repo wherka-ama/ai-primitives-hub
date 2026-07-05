@@ -119,6 +119,48 @@ describe('AwesomeCopilotAdapter', () => {
       expect(bundles[0].lastUpdated).toBe(new Date(1_700_000_000_000).toISOString());
     });
 
+    it('attaches a content breakdown + mcpServers to the bundle for the Marketplace content-breakdown UI', async () => {
+      const yamlContent = [
+        'id: a',
+        'name: A',
+        'description: desc',
+        'items:',
+        '  - path: prompts/x.prompt.md',
+        '    kind: prompt',
+        '  - path: agents/y.agent.md',
+        '    kind: agent',
+        'mcpServers:',
+        '  example-server:',
+        '    command: node'
+      ].join('\n');
+      const api = new FakeGitHubApi()
+        .seedJson(COLLECTIONS_LIST_PATH, [{ name: 'a.collection.yml', path: 'collections/a.collection.yml', type: 'file' }])
+        .seedText(`${RAW_BASE}/a.collection.yml`, yamlContent);
+
+      const bundles = await new AwesomeCopilotAdapter(makeSource(), api, new FixedClock(0)).fetchBundles();
+
+      expect((bundles[0] as unknown as { breakdown: Record<string, number> }).breakdown).toEqual({
+        prompts: 1,
+        instructions: 0,
+        chatmodes: 0,
+        agents: 1,
+        skills: 0,
+        mcpServers: 1
+      });
+      expect((bundles[0] as unknown as { mcpServers: unknown }).mcpServers).toEqual({ 'example-server': { command: 'node' } });
+    });
+
+    it('does not attach mcpServers (but still attaches a zero-count breakdown) when the collection declares none', async () => {
+      const api = new FakeGitHubApi()
+        .seedJson(COLLECTIONS_LIST_PATH, [{ name: 'a.collection.yml', path: 'collections/a.collection.yml', type: 'file' }])
+        .seedText(`${RAW_BASE}/a.collection.yml`, collectionYaml());
+
+      const bundles = await new AwesomeCopilotAdapter(makeSource(), api, new FixedClock(0)).fetchBundles();
+
+      expect(bundles[0]).not.toHaveProperty('mcpServers');
+      expect((bundles[0] as unknown as { breakdown: Record<string, number> }).breakdown.mcpServers).toBe(0);
+    });
+
     it('defaults version to 1.0.0 and author to the repo owner when the collection omits them', async () => {
       const api = new FakeGitHubApi()
         .seedJson(COLLECTIONS_LIST_PATH, [{ name: 'a.collection.yml', path: 'collections/a.collection.yml', type: 'file' }])
@@ -195,6 +237,21 @@ describe('AwesomeCopilotAdapter', () => {
       expect(recordingApi.countOf('getJson')).toBe(1);
 
       clock.advance(5 * 60 * 1000 + 1);
+      await adapter.fetchBundles();
+      expect(recordingApi.countOf('getJson')).toBe(2);
+    });
+
+    it('clearCache forces a re-fetch on the next call even within the TTL', async () => {
+      const api = new FakeGitHubApi()
+        .seedJson(COLLECTIONS_LIST_PATH, [{ name: 'a.collection.yml', path: 'collections/a.collection.yml', type: 'file' }])
+        .seedText(`${RAW_BASE}/a.collection.yml`, collectionYaml());
+      const recordingApi = new RecordingGitHubApi(api);
+
+      const adapter = new AwesomeCopilotAdapter(makeSource(), recordingApi, new FixedClock(0));
+      await adapter.fetchBundles();
+      expect(recordingApi.countOf('getJson')).toBe(1);
+
+      adapter.clearCache();
       await adapter.fetchBundles();
       expect(recordingApi.countOf('getJson')).toBe(2);
     });

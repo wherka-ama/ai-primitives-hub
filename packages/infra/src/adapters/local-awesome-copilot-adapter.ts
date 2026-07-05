@@ -25,10 +25,11 @@
  *   `LocalAdapter`'s own precedent - for a source explicitly meant for
  *   iterating on local edits, a stale cache actively works against the
  *   use case.
- * - Not ported: the ad hoc `breakdown`/`mcpServers` fields attached to
- *   the returned `Bundle` purely for the Marketplace webview's
- *   content-breakdown UI (never part of `Bundle`'s actual type - same
- *   reasoning as the remote `AwesomeCopilotAdapter`).
+ * - Ported: the ad hoc `breakdown`/`mcpServers` fields attached to the
+ *   returned `Bundle` purely for the Marketplace webview's
+ *   content-breakdown UI - same reasoning as the remote
+ *   `AwesomeCopilotAdapter`, kept as the same ad hoc cast rather than a
+ *   real `Bundle` field since neither is part of its actual type.
  * @module adapters/local-awesome-copilot-adapter
  */
 import * as path from 'node:path';
@@ -110,6 +111,50 @@ function titleCase(value: string): string {
     .join(' ');
 }
 
+/**
+ * Content breakdown by item kind, plus an MCP server count - read by the
+ * Marketplace webview's content-breakdown UI (`bundle.breakdown`).
+ * @param items - Collection items to count by kind.
+ * @param mcpServers - Raw MCP server config map, if the collection declares any.
+ */
+function calculateBreakdown(items: CollectionItem[], mcpServers?: Record<string, unknown>): Record<string, number> {
+  const breakdown = {
+    prompts: 0,
+    instructions: 0,
+    chatmodes: 0,
+    agents: 0,
+    skills: 0,
+    mcpServers: mcpServers ? Object.keys(mcpServers).length : 0
+  };
+
+  for (const item of items) {
+    switch (item.kind) {
+      case 'prompt': {
+        breakdown.prompts++;
+        break;
+      }
+      case 'instruction': {
+        breakdown.instructions++;
+        break;
+      }
+      case 'chat-mode': {
+        breakdown.chatmodes++;
+        break;
+      }
+      case 'agent': {
+        breakdown.agents++;
+        break;
+      }
+      case 'skill': {
+        breakdown.skills++;
+        break;
+      }
+    }
+  }
+
+  return breakdown;
+}
+
 export class LocalAwesomeCopilotAdapter extends BaseSourceAdapter {
   public readonly type = 'local-awesome-copilot';
 
@@ -157,7 +202,7 @@ export class LocalAwesomeCopilotAdapter extends BaseSourceAdapter {
 
   private buildBundle(collection: CollectionManifest, collectionFile: string, mtimeMs: number): Bundle {
     const collectionPath = path.join(this.getCollectionsDir(), collectionFile);
-    return {
+    const bundle: Bundle = {
       id: collection.id,
       name: collection.name,
       version: collection.version ?? '1.0.0',
@@ -174,6 +219,17 @@ export class LocalAwesomeCopilotAdapter extends BaseSourceAdapter {
       dependencies: [],
       license: 'MIT'
     };
+
+    // Attach a content breakdown + raw MCP servers for the Marketplace
+    // webview's content-breakdown UI. Not part of `Bundle`'s real type -
+    // see this module's own doc.
+    const mcpServers = collection.mcpServers ?? collection.mcp?.items;
+    (bundle as Bundle & { breakdown?: unknown }).breakdown = calculateBreakdown(collection.items, mcpServers);
+    if (mcpServers && Object.keys(mcpServers).length > 0) {
+      (bundle as Bundle & { mcpServers?: unknown }).mcpServers = mcpServers;
+    }
+
+    return bundle;
   }
 
   private createDeploymentManifest(collection: CollectionManifest): Record<string, unknown> {

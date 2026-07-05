@@ -103,6 +103,46 @@ describe('LocalAwesomeCopilotAdapter', () => {
       expect(bundle.lastUpdated).toBe(new Date(1_700_000_000_000).toISOString());
     });
 
+    it('attaches a content breakdown + mcpServers to the bundle for the Marketplace content-breakdown UI', async () => {
+      const yamlContent = [
+        'id: my-collection',
+        'name: My Collection',
+        'description: A collection',
+        'items:',
+        '  - path: prompts/x.prompt.md',
+        '    kind: prompt',
+        '  - path: agents/y.agent.md',
+        '    kind: agent',
+        'mcpServers:',
+        '  example-server:',
+        '    command: node'
+      ].join('\n');
+      const fs = new InMemoryFileSystem();
+      fs.seed('/collections-root/collections/my-collection.collection.yml', yamlContent);
+
+      const [bundle] = await new LocalAwesomeCopilotAdapter(makeSource(), fs).fetchBundles();
+
+      expect((bundle as unknown as { breakdown: Record<string, number> }).breakdown).toEqual({
+        prompts: 1,
+        instructions: 0,
+        chatmodes: 0,
+        agents: 1,
+        skills: 0,
+        mcpServers: 1
+      });
+      expect((bundle as unknown as { mcpServers: unknown }).mcpServers).toEqual({ 'example-server': { command: 'node' } });
+    });
+
+    it('does not attach mcpServers (but still attaches a zero-count breakdown) when the collection declares none', async () => {
+      const fs = new InMemoryFileSystem();
+      fs.seed('/collections-root/collections/my-collection.collection.yml', collectionYaml());
+
+      const [bundle] = await new LocalAwesomeCopilotAdapter(makeSource(), fs).fetchBundles();
+
+      expect(bundle).not.toHaveProperty('mcpServers');
+      expect((bundle as unknown as { breakdown: Record<string, number> }).breakdown.mcpServers).toBe(0);
+    });
+
     it('ignores files in the collections directory that are not .collection.yml', async () => {
       const fs = new InMemoryFileSystem();
       fs.seed('/collections-root/collections/my-collection.collection.yml', collectionYaml());

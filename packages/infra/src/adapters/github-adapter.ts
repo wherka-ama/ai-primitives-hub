@@ -10,11 +10,13 @@
  * behaviors deliberately not ported (HTML-error scraping, multi-strategy
  * auth retry) and why.
  *
- * Known gap vs. `main`: the ad hoc `(bundle as any).prompts` /
- * `.mcpServers` attachment (content-breakdown UI in the Marketplace
- * webview) is not ported. Those were never part of `Bundle`'s actual type
- * (see `src/types/registry.ts`'s `DeploymentManifest`, not `Bundle`) —
- * revisit only if/when that UI feature itself is ported.
+ * Ported, deliberately unchanged in shape from `main`: the ad hoc
+ * `(bundle as any).prompts`/`.mcpServers` attachment the Marketplace
+ * webview's content-breakdown UI reads (`ui/marketplace-view-provider.ts`'s
+ * `getContentBreakdown`). Neither field is part of `Bundle`'s real type
+ * (see `src/types/registry.ts`'s `DeploymentManifest`, not `Bundle`) — kept
+ * as the same ad hoc cast rather than promoted to a real `Bundle` field,
+ * to land this as a pure behavior-parity fix, not a type-system change.
  * @module adapters/github-adapter
  */
 import type {
@@ -77,6 +79,10 @@ interface DeploymentManifest {
   tags?: string[];
   dependencies?: Bundle['dependencies'];
   license?: string;
+  /** Read only for the Marketplace webview's content-breakdown UI - see this module's own doc. */
+  prompts?: unknown[];
+  /** Read only for the Marketplace webview's content-breakdown UI - see this module's own doc. */
+  mcpServers?: Record<string, unknown>;
 }
 
 function isManifestAssetName(name: string): boolean {
@@ -203,7 +209,7 @@ export class GitHubAdapter extends BaseSourceAdapter {
 
     const bundleId = generateGitHubReleaseBundleId(owner, repo, release.tag_name, manifest?.id, manifest?.version);
 
-    return {
+    const bundle: Bundle = {
       id: bundleId,
       name: manifest?.name ?? release.name ?? `${repo} ${release.tag_name}`,
       version: manifest?.version ?? release.tag_name.replace(/^v/, ''),
@@ -220,6 +226,18 @@ export class GitHubAdapter extends BaseSourceAdapter {
       downloadUrl: bundleAsset.url,
       repository: this.source.url
     };
+
+    // Attach prompts/mcpServers from the manifest for the Marketplace
+    // webview's content-breakdown UI. Not part of `Bundle`'s real type -
+    // see this module's own doc.
+    if (manifest?.prompts && Array.isArray(manifest.prompts)) {
+      (bundle as Bundle & { prompts?: unknown }).prompts = manifest.prompts;
+    }
+    if (manifest?.mcpServers && typeof manifest.mcpServers === 'object') {
+      (bundle as Bundle & { mcpServers?: unknown }).mcpServers = manifest.mcpServers;
+    }
+
+    return bundle;
   }
 
   public async fetchBundles(): Promise<Bundle[]> {
@@ -307,5 +325,14 @@ export class GitHubAdapter extends BaseSourceAdapter {
     const { owner, repo } = this.parseGitHubUrl();
     const tag = version ? `v${version}` : 'latest';
     return `https://github.com/${owner}/${repo}/releases/download/${tag}/bundle.zip`;
+  }
+
+  /**
+   * Clear the manifest cache. Called by consumers (e.g. a manual,
+   * user-initiated source re-sync) that need to guarantee fresh data
+   * rather than whatever was cached from an earlier `fetchBundles` call.
+   */
+  public clearManifestCache(): void {
+    this.manifestCache.clear();
   }
 }

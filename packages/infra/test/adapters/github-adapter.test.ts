@@ -140,6 +140,33 @@ describe('GitHubAdapter', () => {
       expect(bundles[0]).toMatchObject({ id: 'owner-repo-json-collection-3.0.0', name: 'JSON Bundle', version: '3.0.0' });
     });
 
+    it('attaches manifest prompts/mcpServers to the bundle for the Marketplace content-breakdown UI', async () => {
+      const manifestYaml = [
+        'id: my-collection',
+        'name: My Bundle',
+        'version: 1.0.0',
+        'prompts:',
+        '  - id: example',
+        '    file: prompts/example.prompt.md',
+        'mcpServers:',
+        '  example-server:',
+        '    command: node'
+      ].join('\n');
+      const api = new FakeGitHubApi().seedJson(RELEASES_PATH, [makeRelease()]).seedText(MANIFEST_ASSET_URL, manifestYaml);
+
+      const bundles = await new GitHubAdapter(makeSource(), api).fetchBundles();
+
+      expect((bundles[0] as unknown as { prompts: unknown[] }).prompts).toEqual([{ id: 'example', file: 'prompts/example.prompt.md' }]);
+      expect((bundles[0] as unknown as { mcpServers: unknown }).mcpServers).toEqual({ 'example-server': { command: 'node' } });
+    });
+
+    it('does not attach prompts/mcpServers when the manifest declares neither', async () => {
+      const bundles = await new GitHubAdapter(makeSource(), new FakeGitHubApi().seedJson(RELEASES_PATH, [makeRelease()]).seedText(MANIFEST_ASSET_URL, MANIFEST_YAML)).fetchBundles();
+
+      expect(bundles[0]).not.toHaveProperty('prompts');
+      expect(bundles[0]).not.toHaveProperty('mcpServers');
+    });
+
     it('skips a release missing a manifest asset', async () => {
       const release = makeRelease({ assets: [{ name: 'bundle.zip', browser_download_url: '', url: BUNDLE_ASSET_URL, size: 10 }] });
       const api = new FakeGitHubApi().seedJson(RELEASES_PATH, [release]);
@@ -218,6 +245,18 @@ describe('GitHubAdapter', () => {
       await adapter.fetchBundles();
 
       expect(recordingApi.countOf('getText')).toBe(1);
+    });
+
+    it('clearManifestCache() forces the next fetchBundles() to re-download the manifest', async () => {
+      const api = new FakeGitHubApi().seedJson(RELEASES_PATH, [makeRelease()]).seedText(MANIFEST_ASSET_URL, MANIFEST_YAML);
+      const recordingApi = new RecordingGitHubApi(api);
+
+      const adapter = new GitHubAdapter(makeSource(), recordingApi);
+      await adapter.fetchBundles();
+      adapter.clearManifestCache();
+      await adapter.fetchBundles();
+
+      expect(recordingApi.countOf('getText')).toBe(2);
     });
 
     it('wraps a releases-list failure with a descriptive error', async () => {

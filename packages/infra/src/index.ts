@@ -11,6 +11,7 @@ export * from './adapters';
 export * from './auth';
 export * from './clock';
 export * from './extractors';
+export * from './fs';
 export * from './harvest';
 export * from './http';
 export * from './process';

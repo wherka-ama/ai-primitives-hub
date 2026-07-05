@@ -26,10 +26,11 @@
  *   for a given adapter instance (both are fixed at construction), so the
  *   `Map` never held more than one entry.
  *
- * Not ported (as with `GitHubAdapter`): the ad hoc `breakdown`/`mcpServers`
+ * Ported (as with `GitHubAdapter`): the ad hoc `breakdown`/`mcpServers`
  * fields attached to the returned `Bundle` purely for the Marketplace
- * webview's content-breakdown UI, since they were never part of `Bundle`'s
- * actual type.
+ * webview's content-breakdown UI. Neither is part of `Bundle`'s actual
+ * type, so both stay the same ad hoc cast rather than becoming a real
+ * `Bundle` field - a pure behavior-parity fix, not a type-system change.
  * @module adapters/awesome-copilot-adapter
  */
 import type {
@@ -117,6 +118,50 @@ function titleCase(value: string): string {
     .join(' ');
 }
 
+/**
+ * Content breakdown by item kind, plus an MCP server count - read by the
+ * Marketplace webview's content-breakdown UI (`bundle.breakdown`).
+ * @param items - Collection items to count by kind.
+ * @param mcpServers - Raw MCP server config map, if the collection declares any.
+ */
+function calculateBreakdown(items: CollectionItem[], mcpServers?: Record<string, unknown>): Record<string, number> {
+  const breakdown = {
+    prompts: 0,
+    instructions: 0,
+    chatmodes: 0,
+    agents: 0,
+    skills: 0,
+    mcpServers: mcpServers ? Object.keys(mcpServers).length : 0
+  };
+
+  for (const item of items) {
+    switch (item.kind) {
+      case 'prompt': {
+        breakdown.prompts++;
+        break;
+      }
+      case 'instruction': {
+        breakdown.instructions++;
+        break;
+      }
+      case 'chat-mode': {
+        breakdown.chatmodes++;
+        break;
+      }
+      case 'agent': {
+        breakdown.agents++;
+        break;
+      }
+      case 'skill': {
+        breakdown.skills++;
+        break;
+      }
+    }
+  }
+
+  return breakdown;
+}
+
 export class AwesomeCopilotAdapter extends BaseSourceAdapter {
   public readonly type = 'awesome-copilot';
 
@@ -191,7 +236,7 @@ export class AwesomeCopilotAdapter extends BaseSourceAdapter {
   private buildBundle(collection: CollectionManifest, collectionFile: string): Bundle {
     const { owner } = this.parseGitHubUrl();
     const rawUrl = this.buildRawUrl(`${this.collectionsPath}/${collectionFile}`);
-    return {
+    const bundle: Bundle = {
       id: collection.id,
       name: collection.name,
       version: collection.version ?? '1.0.0',
@@ -208,6 +253,17 @@ export class AwesomeCopilotAdapter extends BaseSourceAdapter {
       dependencies: [],
       license: 'MIT'
     };
+
+    // Attach a content breakdown + raw MCP servers for the Marketplace
+    // webview's content-breakdown UI. Not part of `Bundle`'s real type -
+    // see this module's own doc.
+    const mcpServers = collection.mcpServers ?? collection.mcp?.items;
+    (bundle as Bundle & { breakdown?: unknown }).breakdown = calculateBreakdown(collection.items, mcpServers);
+    if (mcpServers && Object.keys(mcpServers).length > 0) {
+      (bundle as Bundle & { mcpServers?: unknown }).mcpServers = mcpServers;
+    }
+
+    return bundle;
   }
 
   private createDeploymentManifest(collection: CollectionManifest): Record<string, unknown> {
@@ -367,5 +423,15 @@ export class AwesomeCopilotAdapter extends BaseSourceAdapter {
         bundlesFound: 0
       };
     }
+  }
+
+  /**
+   * Clear the collections cache. Called by consumers (e.g. a manual,
+   * user-initiated source re-sync) that need to guarantee fresh data
+   * rather than whatever was cached from an earlier `fetchBundles` call -
+   * same reasoning as `GitHubAdapter.clearManifestCache`.
+   */
+  public clearCache(): void {
+    this.cache = undefined;
   }
 }
