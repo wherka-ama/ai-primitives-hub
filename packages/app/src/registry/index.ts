@@ -5,5 +5,6 @@
 export * from './create-source-adapter';
 export * from './detect-updates';
 export * from './list-installed-bundles';
+export * from './resolve-installation-bundle';
 export * from './uninstall-installed-bundle';
 export * from './version-consolidator';
