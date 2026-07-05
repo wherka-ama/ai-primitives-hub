@@ -7,6 +7,7 @@ import {
   detectBundleUpdates,
   installRegistryBundle,
   listInstalledBundles as listInstalledBundlesCore,
+  searchRegistryBundles,
   uninstallInstalledBundle,
   updateRegistryBundle,
 } from '@ai-primitives-hub/app';
@@ -706,30 +707,6 @@ export class RegistryManager {
   // ===== Helper Methods =====
 
   /**
-   * Sort bundles by criteria
-   * @param bundles
-   * @param sortBy
-   */
-  private sortBundles(bundles: Bundle[], sortBy: string): Bundle[] {
-    switch (sortBy) {
-      case 'downloads': {
-        return bundles.toSorted((a, b) => (b.downloads || 0) - (a.downloads || 0));
-      }
-      case 'rating': {
-        return bundles.toSorted((a, b) => (b.rating || 0) - (a.rating || 0));
-      }
-      case 'recent': {
-        return bundles.toSorted((a, b) =>
-          new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
-        );
-      }
-      default: {
-        return bundles;
-      }
-    }
-  }
-
-  /**
    * Get source type for a source ID
    * Used by version consolidator for identity matching
    * @param sourceId
@@ -1044,6 +1021,14 @@ export class RegistryManager {
 
   /**
    * Search for bundles across all enabled sources
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `searchRegistryBundles`
+   * (migration plan §7.5, Phase 4 item 4) — this function has no
+   * reference-branch counterpart (see its own module header), so it was
+   * designed from scratch here following this migration's established
+   * `registry/*` port-orchestration pattern, porting this method's
+   * (plus the now-removed private `sortBundles` helper's) exact prior
+   * behavior.
    * @param query - Search query options
    * @param query.sourceId - Optional source ID to limit search to a specific source
    * @param query.cacheOnly - If true, only return cached bundles without fetching from network.
@@ -1051,86 +1036,21 @@ export class RegistryManager {
    * @returns Promise resolving to array of matching bundles
    */
   public async searchBundles(query: SearchQuery): Promise<Bundle[]> {
-    this.logger.info('Searching bundles', query);
-
-    const sources = await this.storage.getSources();
-    const allBundles: Bundle[] = [];
-
-    // Filter sources if specified
-    const sourcesToSearch = query.sourceId
-      ? sources.filter((s) => s.id === query.sourceId)
-      : sources.filter((s) => s.enabled);
-
-    this.logger.info(`Searching in ${sourcesToSearch.length} sources`);
-
-    for (const source of sourcesToSearch) {
-      try {
-        // Try cache first
-        let bundles = await this.storage.getCachedSourceBundles(source.id);
-
-        // If cache empty and not in cacheOnly mode, fetch from source
-        if (bundles.length === 0 && !query.cacheOnly) {
-          const adapter = this.getAdapter(source);
-          bundles = await adapter.fetchBundles();
-          await this.storage.cacheSourceBundles(source.id, bundles);
-        }
-
-        allBundles.push(...bundles);
-      } catch (error) {
-        this.logger.error(`Failed to fetch bundles from source '${source.id}'`, error as Error);
-      }
-    }
-
-    // Apply version consolidation for GitHub sources
-    let results = allBundles;
-    try {
-      // Consolidate bundles (only GitHub bundles will be consolidated)
-      // Source type resolver is already configured in constructor
-      results = this.versionConsolidator.consolidateBundles(allBundles);
-      this.logger.debug(`Consolidated ${allBundles.length} bundles into ${results.length} entries`);
-    } catch (error) {
-      this.logger.error('Version consolidation failed, using unconsolidated bundles', error as Error);
-      // Fall back to unconsolidated bundles on error
-      results = allBundles;
-    }
-
-    // Apply filters
-    if (query.text) {
-      const searchText = query.text.toLowerCase();
-      results = results.filter((b) =>
-        b.id === query.text
-        || b.name.toLowerCase().includes(searchText)
-        || b.description.toLowerCase().includes(searchText)
-      );
-    }
-
-    if (query.tags && query.tags.length > 0) {
-      results = results.filter((b) =>
-        query.tags!.some((tag) => b.tags.includes(tag))
-      );
-    }
-
-    if (query.author) {
-      results = results.filter((b) => b.author === query.author);
-    }
-
-    if (query.environment) {
-      results = results.filter((b) => b.environments.includes(query.environment!));
-    }
-
-    // Sort results
-    if (query.sortBy) {
-      results = this.sortBundles(results, query.sortBy);
-    }
-
-    // Apply pagination
-    if (query.offset !== undefined || query.limit !== undefined) {
-      const offset = query.offset || 0;
-      const limit = query.limit || 50;
-      results = results.slice(offset, offset + limit);
-    }
-
-    return results;
+    // Unlike installBundle/updateBundle, no `as X` cast is needed here:
+    // core's Bundle has no loose nested fields (cf. InstalledBundle's
+    // mcpServers) — it's structurally identical to this extension's own
+    // Bundle type outright.
+    return searchRegistryBundles(
+      query,
+      {
+        listSources: () => this.storage.getSources(),
+        getCachedSourceBundles: (sourceId) => this.storage.getCachedSourceBundles(sourceId),
+        cacheSourceBundles: (sourceId, bundles) => this.storage.cacheSourceBundles(sourceId, bundles),
+        getAdapter: (source) => this.getAdapter(source),
+        consolidateBundles: (bundles) => this.versionConsolidator.consolidateBundles(bundles)
+      },
+      (event) => this.forwardLogEvent(event)
+    );
   }
 
   /**
