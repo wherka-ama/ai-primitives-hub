@@ -726,13 +726,23 @@ suite('RegistryManager - Version Change Installation', () => {
       version: '1.0.1',
       description: 'Test',
       author: 'Test',
-      tags: []
+      tags: [],
+      sourceId: 'test-source'
     };
 
-    // Stub internal methods
-    sandbox.stub(manager as any, 'resolveInstallationBundle').resolves(mockBundle);
-    sandbox.stub(manager as any, 'getSourceForBundle').resolves({ id: 'test-source', type: 'github' });
-    sandbox.stub(manager as any, 'downloadAndInstall').resolves({
+    // Stub the resolution/download/install extension points installBundle now
+    // delegates to (installRegistryBundle), replacing the old direct stubs on
+    // the since-removed private resolveInstallationBundle/getSourceForBundle/
+    // downloadAndInstall methods.
+    sandbox.stub(manager, 'getBundleDetails').resolves(mockBundle as any);
+    mockStorage.getSources.resolves([{ id: 'test-source', name: 'Test Source', type: 'github', url: 'https://github.com/test/test', enabled: true, priority: 0 }]);
+    // determineSearchId's version-specific branch (options.version is set below)
+    // looks this up for every source before getBundleDetails is even called.
+    mockStorage.getCachedSourceBundles.resolves([]);
+    const mockAdapter = { downloadBundle: sandbox.stub().resolves(Buffer.from('test')) };
+    sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
+    const mockInstaller = (manager as any).installer;
+    sandbox.stub(mockInstaller, 'installFromBuffer').resolves({
       bundleId: bundleId,
       version: '1.0.1',
       installedAt: new Date().toISOString(),
@@ -777,7 +787,15 @@ suite('RegistryManager - Version Change Installation', () => {
       tags: []
     };
 
-    sandbox.stub(manager as any, 'resolveInstallationBundle').resolves(mockBundle);
+    // Replaces the old direct stub on the since-removed private
+    // resolveInstallationBundle method - getBundleDetails is the extension
+    // point installRegistryBundle's resolution chain now calls into. The
+    // "already installed" check throws before source/adapter/installer are
+    // ever reached, but resolution itself (determineSearchId, since
+    // options.version is set below) still looks sources up first.
+    sandbox.stub(manager, 'getBundleDetails').resolves(mockBundle as any);
+    mockStorage.getSources.resolves([]);
+    mockStorage.getCachedSourceBundles.resolves([]);
 
     // Should throw error for same version
     await assert.rejects(
@@ -809,12 +827,19 @@ suite('RegistryManager - Version Change Installation', () => {
       version: '1.0.15',
       description: 'Test',
       author: 'Test',
-      tags: []
+      tags: [],
+      sourceId: 'test-source'
     };
 
-    sandbox.stub(manager as any, 'resolveInstallationBundle').resolves(mockBundle);
-    sandbox.stub(manager as any, 'getSourceForBundle').resolves({ id: 'test-source', type: 'github' });
-    sandbox.stub(manager as any, 'downloadAndInstall').resolves({
+    // See the identical replacement pattern/rationale in the version-change
+    // test above.
+    sandbox.stub(manager, 'getBundleDetails').resolves(mockBundle as any);
+    mockStorage.getSources.resolves([{ id: 'test-source', name: 'Test Source', type: 'github', url: 'https://github.com/test/test', enabled: true, priority: 0 }]);
+    mockStorage.getCachedSourceBundles.resolves([]);
+    const mockAdapter = { downloadBundle: sandbox.stub().resolves(Buffer.from('test')) };
+    sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
+    const mockInstaller = (manager as any).installer;
+    sandbox.stub(mockInstaller, 'installFromBuffer').resolves({
       bundleId: `${bundleId}-1.0.15`,
       version: '1.0.15',
       installedAt: new Date().toISOString(),

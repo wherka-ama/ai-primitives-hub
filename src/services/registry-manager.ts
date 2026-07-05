@@ -5,6 +5,7 @@
 
 import {
   detectBundleUpdates,
+  installRegistryBundle,
   listInstalledBundles as listInstalledBundlesCore,
   uninstallInstalledBundle,
 } from '@ai-primitives-hub/app';
@@ -452,283 +453,6 @@ export class RegistryManager {
         return installedBaseId === latestBaseId;
       }
     });
-  }
-
-  /**
-   * Clean up old versions of a bundle when a new version is installed
-   * This handles downgrades and version changes by removing previous installation records
-   * @param bundle The newly installed bundle
-   * @param scope The installation scope (user, workspace, or repository)
-   */
-  private async cleanupOldVersions(bundle: Bundle, scope: InstallationScope): Promise<void> {
-    // Repository scope cleanup is handled by LockfileManager
-    if (scope === 'repository') {
-      return;
-    }
-    try {
-      // Get source information to determine sourceType
-      const source = await this.getSourceForBundle(bundle);
-      const sourceType = source.type;
-
-      // Get the base bundle identity (without version suffix)
-      const baseIdentity = VersionManager.extractBundleIdentity(bundle.id, sourceType);
-
-      // Get all installed bundles in this scope
-      // OPTIMIZATION: Filter early by sourceId to reduce iterations
-      const allInstalled = await this.storage.getInstalledBundles(scope);
-      const candidateBundles = allInstalled.filter((installed) => installed.sourceId === bundle.sourceId);
-
-      // Find all installations that match this bundle's identity
-      const oldInstallations = candidateBundles.filter((installed) => {
-        const installedSourceType = (installed.sourceType as SourceType) || 'github';
-
-        return VersionManager.isSameBundleIdentity(
-          installed.bundleId,
-          installedSourceType,
-          bundle.id,
-          sourceType
-        ) && installed.version !== bundle.version;
-      });
-
-      // Remove old versions
-      for (const oldInstall of oldInstallations) {
-        this.logger.debug(`Removing old version ${oldInstall.version} of bundle ${baseIdentity}`);
-        await this.storage.removeInstallation(oldInstall.bundleId, scope);
-      }
-
-      if (oldInstallations.length > 0) {
-        this.logger.info(`Cleaned up ${oldInstallations.length} old version(s) of bundle ${baseIdentity}`);
-      }
-    } catch (error) {
-      // Log but don't fail if cleanup fails - the new version is already installed
-      this.logger.warn(`Failed to cleanup old versions: ${(error as Error).message}`);
-    }
-  }
-
-  /**
-   * Check existing installation and determine if installation should proceed
-   * Returns modified options if version change is detected
-   * @param bundleId
-   * @param bundle
-   * @param options
-   */
-  private async checkExistingInstallation(
-    bundleId: string,
-    bundle: Bundle,
-    options: InstallOptions
-  ): Promise<InstallOptions> {
-    const existing = await this.storage.getInstalledBundle(bundleId, options.scope);
-
-    if (!existing || options.force) {
-      return options;
-    }
-
-    // If a different version is being installed, allow it (treat as version change)
-    if (existing.version !== bundle.version) {
-      this.logger.info(`Version change detected: ${existing.version} → ${bundle.version}`);
-      return { ...options, force: true };
-    }
-
-    throw new Error(`Bundle '${bundleId}' is already installed. Use force=true to reinstall.`);
-  }
-
-  /**
-   * Resolve the bundle to install, handling version-specific requests
-   * @param bundleId
-   * @param options
-   */
-  private async resolveInstallationBundle(
-    bundleId: string,
-    options: InstallOptions
-  ): Promise<Bundle> {
-    // Try exact versioned bundle first if applicable
-    if (options.version && BundleIdentityMatcher.hasVersionSuffix(bundleId)) {
-      const exactBundle = await this.tryGetExactVersionedBundle(bundleId, options.version);
-      if (exactBundle) {
-        return exactBundle;
-      }
-    }
-
-    // Fall back to identity-based search
-    return await this.resolveByIdentity(bundleId, options);
-  }
-
-  /**
-   * Try to get an exact versioned bundle
-   * Returns null if not found or version doesn't match
-   * @param bundleId
-   * @param version
-   */
-  private async tryGetExactVersionedBundle(bundleId: string, version: string): Promise<Bundle | null> {
-    try {
-      const bundle = await this.getBundleDetails(bundleId);
-      if (bundle.version === version) {
-        return bundle;
-      }
-      this.logger.debug(`Bundle ${bundleId} found but version mismatch: ${bundle.version} !== ${version}`);
-      return null;
-    } catch {
-      this.logger.debug(`Exact bundle ${bundleId} not found, trying identity-based search`);
-      return null;
-    }
-  }
-
-  /**
-   * Resolve bundle by identity, applying version override if needed
-   * @param bundleId
-   * @param options
-   */
-  private async resolveByIdentity(bundleId: string, options: InstallOptions): Promise<Bundle> {
-    const searchId = await this.determineSearchId(bundleId, options);
-    let bundle = await this.getBundleDetails(searchId);
-
-    if (options.version) {
-      bundle = await this.applyVersionOverride(bundle, bundleId, options.version);
-    }
-
-    return bundle;
-  }
-
-  /**
-   * Determine the search ID for bundle lookup
-   * @param bundleId
-   * @param options
-   */
-  private async determineSearchId(bundleId: string, options: InstallOptions): Promise<string> {
-    if (!options.version) {
-      return bundleId;
-    }
-
-    // For version-specific requests, try to extract identity
-    const sources = await this.storage.getSources();
-    for (const source of sources) {
-      const cachedBundles = await this.storage.getCachedSourceBundles(source.id);
-      const matchingBundle = cachedBundles.find((b) => b.id === bundleId);
-      if (matchingBundle) {
-        return VersionManager.extractBundleIdentity(bundleId, source.type);
-      }
-    }
-
-    return bundleId;
-  }
-
-  /**
-   * Apply version override to bundle
-   * @param bundle
-   * @param originalBundleId
-   * @param requestedVersion
-   */
-  private async applyVersionOverride(
-    bundle: Bundle,
-    originalBundleId: string,
-    requestedVersion: string
-  ): Promise<Bundle> {
-    const sources = await this.storage.getSources();
-    const source = sources.find((s) => s.id === bundle.sourceId);
-
-    if (!source) {
-      this.logger.warn('Source not found for version override, using latest');
-      return bundle;
-    }
-
-    const identity = VersionManager.extractBundleIdentity(originalBundleId, source.type);
-    const specificVersion = this.versionConsolidator.getBundleVersion(identity, requestedVersion);
-
-    if (specificVersion) {
-      this.logger.info(`Installing specific version ${requestedVersion} instead of latest ${bundle.version}`);
-      // Use the original bundle ID from the version cache to preserve the correct format
-      // (e.g., owner-repo-v1.0.0 instead of owner-repo-1.0.0)
-      return {
-        ...bundle,
-        id: specificVersion.bundleId,
-        version: specificVersion.version,
-        downloadUrl: specificVersion.downloadUrl,
-        manifestUrl: specificVersion.manifestUrl,
-        lastUpdated: specificVersion.publishedAt
-      };
-    }
-
-    this.logger.warn(`Requested version ${requestedVersion} not found, using latest ${bundle.version}`);
-    return bundle;
-  }
-
-  /**
-   * Get source for a bundle
-   * @param bundle
-   */
-  private async getSourceForBundle(bundle: Bundle): Promise<RegistrySource> {
-    const sources = await this.storage.getSources();
-    const source = sources.find((s) => s.id === bundle.sourceId);
-
-    if (!source) {
-      throw new Error(`Source '${bundle.sourceId}' not found`);
-    }
-
-    return source;
-  }
-
-  /**
-   * Download and install a bundle
-   * @param bundle
-   * @param source
-   * @param options
-   */
-  private async downloadAndInstall(
-    bundle: Bundle,
-    source: RegistrySource,
-    options: InstallOptions
-  ): Promise<InstalledBundle> {
-    const adapter = this.getAdapter(source);
-
-    // For local-skills, use symlink installation instead of copying
-    if (source.type === 'local-skills') {
-      this.logger.debug(`Installing local skill as symlink from ${source.type} adapter`);
-      const localSkillsAdapter = adapter as any;
-
-      if (typeof localSkillsAdapter.getSkillSourcePath === 'function'
-        && typeof localSkillsAdapter.getSkillName === 'function') {
-        const skillSourcePath = localSkillsAdapter.getSkillSourcePath(bundle);
-        const skillName = localSkillsAdapter.getSkillName(bundle);
-
-        const localSkillSymlink = await this.installer.installLocalSkillAsSymlink(
-          bundle,
-          skillName,
-          skillSourcePath,
-          options
-        );
-
-        // Ensure sourceId and sourceType are set
-        localSkillSymlink.sourceId = bundle.sourceId;
-        localSkillSymlink.sourceType = source.type;
-
-        if (options.profileId) {
-          localSkillSymlink.profileId = options.profileId;
-        }
-
-        return localSkillSymlink;
-      }
-      // Fall through to standard installation if methods not available
-      this.logger.warn(`LocalSkillsAdapter missing symlink methods, falling back to standard installation`);
-    }
-
-    // Unified download path: all adapters use downloadBundle()
-    this.logger.debug(`Downloading bundle from ${source.type} adapter`);
-    const bundleBuffer = await adapter.downloadBundle(bundle);
-    this.logger.debug(`Bundle downloaded: ${bundleBuffer.length} bytes`);
-
-    // Install from buffer
-    const installation: InstalledBundle = await this.installer.installFromBuffer(bundle, bundleBuffer, options, source.type);
-
-    // Add profileId if provided
-    if (options.profileId) {
-      installation.profileId = options.profileId;
-    }
-
-    // Ensure sourceId and sourceType are set for identity matching
-    installation.sourceId = bundle.sourceId;
-    installation.sourceType = source.type;
-
-    return installation;
   }
 
   /**
@@ -1467,36 +1191,35 @@ export class RegistryManager {
    * @param silent
    */
   public async installBundle(bundleId: string, options: InstallOptions, silent = false): Promise<InstalledBundle> {
-    this.logger.info(`Installing bundle: ${bundleId}`, options);
-
-    // Resolve the bundle to install (handles version-specific requests)
-    const bundle = await this.resolveInstallationBundle(bundleId, options);
-
-    // Check existing installation and determine if we should proceed
-    const installOptions = await this.checkExistingInstallation(bundleId, bundle, options);
-
-    // Get source
-    const source = await this.getSourceForBundle(bundle);
-
-    // Download and install
-    const installation = await this.downloadAndInstall(bundle, source, installOptions);
-
-    // Record installation FIRST (before cleanup) to ensure metadata is safe
-    // If anything fails here, old versions remain and can be used as fallback
-    // Note: Repository scope bundles are tracked via LockfileManager, not RegistryStorage
-    // The lockfile is already updated by BundleInstaller during installation
-    if (options.scope !== 'repository') {
-      await this.storage.recordInstallation(installation);
-    }
-
-    // Clean up old versions AFTER successful recording
-    // This ensures we don't lose the old version if recording fails
-    await this.cleanupOldVersions(bundle, options.scope);
+    // See uninstallBundle's identical, documented `as InstalledBundle` cast:
+    // core's DeploymentManifest.mcpServers is intentionally looser than this
+    // extension's McpServersManifest; the data itself is always this
+    // extension's own shape here too, since it only ever flows from
+    // RegistryStorage/BundleInstaller below.
+    const installation = await installRegistryBundle(
+      bundleId,
+      options,
+      {
+        getBundleDetails: (id) => this.getBundleDetails(id),
+        listSources: () => this.storage.getSources(),
+        getCachedSourceBundles: (sourceId) => this.storage.getCachedSourceBundles(sourceId),
+        getBundleVersion: (identity, version) => this.versionConsolidator.getBundleVersion(identity, version),
+        getInstalledBundle: (id, scope) => this.storage.getInstalledBundle(id, scope),
+        getAdapter: (source) => this.getAdapter(source),
+        installFromBuffer: (bundle, buffer, installOptions, sourceType) =>
+          this.installer.installFromBuffer(bundle, buffer, installOptions, sourceType),
+        installLocalSkillAsSymlink: (bundle, skillName, sourcePath, installOptions) =>
+          this.installer.installLocalSkillAsSymlink(bundle, skillName, sourcePath, installOptions),
+        recordInstallation: (installedBundle) => this.storage.recordInstallation(installedBundle as InstalledBundle),
+        getInstalledBundles: (scope) => this.storage.getInstalledBundles(scope),
+        removeInstallation: (id, scope) => this.storage.removeInstallation(id, scope)
+      },
+      (event) => this.forwardLogEvent(event)
+    ) as InstalledBundle;
 
     if (!silent) {
       this._onBundleInstalled.fire(installation);
     }
-    this.logger.info(`Bundle '${bundleId}' installed successfully`);
 
     return installation;
   }

@@ -848,10 +848,21 @@ suite('Bundle State Management - Integration Tests', () => {
         return Array.from(installedBundles.values());
       });
 
-      // Setup stubs for the other methods
-      sandbox.stub(registryManager as any, 'resolveInstallationBundle').resolves(bundleV1x0x18);
-      sandbox.stub(registryManager as any, 'getSourceForBundle').resolves({ id: 'test-source', type: 'github' });
-      sandbox.stub(registryManager as any, 'downloadAndInstall').resolves({
+      // Setup stubs for the extension points installBundle now delegates to
+      // (installRegistryBundle), replacing the old direct stubs on the
+      // since-removed private resolveInstallationBundle/getSourceForBundle/
+      // downloadAndInstall methods.
+      sandbox.stub(registryManager, 'getBundleDetails').resolves(bundleV1x0x18 as any);
+      mockStorage.getSources.resolves([
+        { id: 'test-source', name: 'Test Source', type: 'github', url: 'https://github.com/test/test', enabled: true, priority: 0 }
+      ]);
+      // determineSearchId's version-specific branch (options.version is set
+      // below) looks this up for every source before getBundleDetails runs.
+      mockStorage.getCachedSourceBundles.resolves([]);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns({
+        downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
+      } as any);
+      mockInstaller.installFromBuffer.resolves({
         bundleId: `${bundleIdBase}-1.0.18`,
         version: '1.0.18',
         installedAt: new Date().toISOString(),
