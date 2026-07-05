@@ -32,7 +32,7 @@ flowchart TD
     START --> CMD
     CMD --> RM
     
-    RM --> STEP1[1. Create Adapter for Source<br/>RepositoryAdapterFactory]
+    RM --> STEP1[1. Create Adapter for Source<br/>createRegistryAdapter]
     STEP1 --> STEP2[2. Download Bundle ZIP or Buffer<br/>adapter methods]
     STEP2 --> STEP3[3. Extract to Temp Directory<br/>unzip]
     STEP3 --> STEP4[4. Validate deployment-manifest.yml<br/>check structure]
@@ -149,31 +149,34 @@ All errors are logged to the Output panel under "AI Primitives Hub".
 
 ### Overview
 
-The adapter pattern allows the registry to support multiple source types (GitHub, Local, Awesome Copilot) through a unified interface.
+The adapter pattern allows the registry to support multiple source types (GitHub, Local, Awesome Copilot, APM, Skills) through a unified interface. **Concrete adapters live in `packages/infra/src/adapters/` (the `@ai-primitives-hub/infra` package), not in the extension's own `src/adapters/`** — see [Adapter Architecture](./architecture/adapters.md) and [Adapter API Reference](../reference/adapter-api.md) for the full, up-to-date picture; this section is a summary.
 
 ### Architecture Diagram
 
 ```mermaid
 flowchart TD
-    BI[BundleInstaller]
-    FACTORY[RepositoryAdapterFactory.create<br/>Factory Pattern]
-    
-    BI --> FACTORY
-    
-    FACTORY --> GHA[GitHubAdapter]
-    FACTORY --> LA[LocalAdapter]
-    FACTORY --> ACA[AwesomeCopilotAdapter]
-    FACTORY --> LACA[LocalAwesomeCopilotAdapter]
-    FACTORY --> APMA[ApmAdapter]
-    FACTORY --> LAPMA[LocalApmAdapter]
-    
-    INTERFACE["<b>IRepositoryAdapter Interface</b><br/>- fetchBundles<br/>- downloadBundle<br/>- validate<br/>- requiresAuthentication"]
-    
+    RM[RegistryManager]
+    FACTORY_EXT["src/adapters/infra-adapter-factory.ts<br/>createRegistryAdapter"]
+    FACTORY_APP["@ai-primitives-hub/app<br/>createSourceAdapter"]
+
+    RM --> FACTORY_EXT --> FACTORY_APP
+
+    FACTORY_APP --> GHA[GitHubAdapter]
+    FACTORY_APP --> LA[LocalAdapter]
+    FACTORY_APP --> ACA[AwesomeCopilotAdapter]
+    FACTORY_APP --> LACA[LocalAwesomeCopilotAdapter]
+    FACTORY_APP --> APMA[ApmAdapter]
+    FACTORY_APP --> LAPMA[LocalApmAdapter]
+    FACTORY_APP --> SKA[SkillsAdapter]
+    FACTORY_APP --> LSKA[LocalSkillsAdapter]
+
+    INTERFACE["<b>SourceAdapter port (core)</b><br/>- fetchBundles<br/>- downloadBundle<br/>- validate<br/>- requiresAuthentication"]
+
     GHA -.implements.-> INTERFACE
     LA -.implements.-> INTERFACE
     ACA -.implements.-> INTERFACE
-    
-    style FACTORY fill:#FFC107
+
+    style FACTORY_APP fill:#FFC107
     style INTERFACE fill:#E3F2FD
     style GHA fill:#4CAF50
     style LA fill:#4CAF50
@@ -183,39 +186,34 @@ flowchart TD
 ### Key Files & Components
 
 #### Adapter Factory
-**File**: `src/adapters/RepositoryAdapter.ts`  
-**Class**: `RepositoryAdapterFactory`
+**File**: `packages/app/src/registry/create-source-adapter.ts`
+**Function**: `createSourceAdapter`
 
 ```typescript
-// Creates appropriate adapter for source type
-static create(source: RegistrySource): IRepositoryAdapter {
-    const AdapterClass = this.adapters.get(source.type);
-    return new AdapterClass(source);
+// Maps a RegistrySource to its concrete infra adapter
+export function createSourceAdapter(source: RegistrySource, deps: SourceAdapterFactoryDeps): SourceAdapter {
+    switch (source.type) {
+        case 'local':
+            return new LocalAdapter(source, deps.fs);
+        case 'github':
+            return new GitHubAdapter(source, buildGitHubApi(buildSourceTokenProvider(source, deps), deps));
+        // ... one case per SourceType, GitHub-hosted ones get a per-source CompositeTokenProvider
+    }
 }
-
-// Register adapters
-RepositoryAdapterFactory.register('github', GitHubAdapter);
-RepositoryAdapterFactory.register('awesome-copilot', AwesomeCopilotAdapter);
-// ... etc
 ```
 
-#### Adapter Registration
-**File**: `src/services/RegistryManager.ts`  
-**Constructor**: Registers all default adapters
+One factory, shared by every delivery context — there is no separate per-adapter registration step to run.
 
-```typescript
-RepositoryAdapterFactory.register('github', GitHubAdapter);
-RepositoryAdapterFactory.register('local', LocalAdapter);
-RepositoryAdapterFactory.register('awesome-copilot', AwesomeCopilotAdapter);
-RepositoryAdapterFactory.register('local-awesome-copilot', LocalAwesomeCopilotAdapter);
-RepositoryAdapterFactory.register('local-apm', LocalApmAdapter);
-RepositoryAdapterFactory.register('apm', ApmAdapter);
-```
+#### Extension-Side Wiring
+**File**: `src/adapters/infra-adapter-factory.ts`
+**Function**: `createRegistryAdapter`
+
+Supplies the Node port implementations (`NodeFileSystem`, `SystemClock`, `NodeHttpClient`, `NodeProcessRunner`) and the extension's GitHub auth fallback chain (`VsCodeSessionTokenProvider` → `GhCliTokenProvider`) that `createSourceAdapter` needs, then calls it. `RegistryManager` calls `createRegistryAdapter`, never `createSourceAdapter` directly.
 
 ### Adapter Types
 
 #### GitHubAdapter
-**File**: `src/adapters/GitHubAdapter.ts`  
+**File**: `packages/infra/src/adapters/github-adapter.ts`
 **Purpose**: Fetches bundles from GitHub releases
 
 ```typescript
@@ -226,13 +224,13 @@ async fetchBundles(): Promise<Bundle[]> {
 ```
 
 **Features**:
-- GitHub API v3 integration
+- GitHub API v3 integration (via the injected `GitHubApi` port)
 - Release asset scanning
-- Authentication fallback chain (VSCode → gh CLI → explicit token)
-- Bearer token authentication
+- Manifest cache with explicit `clearManifestCache()` busting
+- Authentication via an injected `TokenProvider` (VS Code session → `gh` CLI → explicit token, composed by `createSourceAdapter`)
 
 #### AwesomeCopilotAdapter
-**File**: `src/adapters/AwesomeCopilotAdapter.ts`  
+**File**: `packages/infra/src/adapters/awesome-copilot-adapter.ts`
 **Purpose**: Fetches awesome-copilot collections from GitHub
 
 ```typescript
@@ -253,10 +251,10 @@ async downloadBundle(bundle: Bundle): Promise<Buffer> {
 - YAML collection parsing
 - Dynamic ZIP creation with archiver
 - No release requirement
-- Authentication support (added Nov 2025)
+- 5-minute bundle-list cache with explicit `clearCache()` busting
 
 #### LocalAdapter
-**File**: `src/adapters/LocalAdapter.ts`  
+**File**: `packages/infra/src/adapters/local-adapter.ts`
 **Purpose**: Handles local filesystem bundles
 
 ```typescript
@@ -266,26 +264,26 @@ async fetchBundles(): Promise<Bundle[]> {
 ```
 
 **Features**:
-- Filesystem access
+- Filesystem access via the injected `FileSystem` port
 - Local development support
 - file:// protocol support
 - Fast iteration
 
-#### LocalAwesomeCopilotAdapter & LocalApmAdapter
-**Files**: `src/adapters/LocalAwesomeCopilotAdapter.ts`, `src/adapters/LocalApmAdapter.ts`  
-**Purpose**: Local filesystem variants of AwesomeCopilot and APM adapters
+#### LocalAwesomeCopilotAdapter, LocalApmAdapter & LocalSkillsAdapter
+**Files**: `packages/infra/src/adapters/local-awesome-copilot-adapter.ts`, `local-apm-adapter.ts`, `local-skills-adapter.ts`
+**Purpose**: Local filesystem variants of the AwesomeCopilot, APM, and Skills adapters
 
-#### ApmAdapter
-**File**: `src/adapters/ApmAdapter.ts`  
-**Purpose**: Fetches APM (AI Prompt Manager) packages from GitHub
+#### ApmAdapter & SkillsAdapter
+**Files**: `packages/infra/src/adapters/apm-adapter.ts`, `skills-adapter.ts`
+**Purpose**: Fetch APM (AI Prompt Manager) packages and GitHub-hosted skills, respectively
 
 ### Unified Interface
 
-**File**: `src/adapters/RepositoryAdapter.ts`  
-**Interface**: `IRepositoryAdapter`
+**File**: `packages/core/src/ports/source-adapter.ts`
+**Interface**: `SourceAdapter`
 
 ```typescript
-export interface IRepositoryAdapter {
+export interface SourceAdapter {
     readonly type: string;
     readonly source: RegistrySource;
     
@@ -300,49 +298,11 @@ export interface IRepositoryAdapter {
 }
 ```
 
-All adapters implement `downloadBundle()` directly. The base `RepositoryAdapter` class provides common functionality like `requiresAuthentication()` and `getAuthToken()`.
+The extension's own `src/adapters/repository-adapter.ts` re-declares this same shape as `IRepositoryAdapter`, used only as `createRegistryAdapter`'s return type at the VS Code boundary.
 
 ### Adding a New Adapter
 
-To add support for a new registry source:
-
-1. **Create Adapter Class**:
-```typescript
-// src/adapters/MyAdapter.ts
-export class MyAdapter extends RepositoryAdapter {
-    readonly type = 'mytype';
-    
-    async fetchBundles(): Promise<Bundle[]> {
-        // Your implementation
-    }
-    
-    // Implement other IRepositoryAdapter methods
-}
-```
-
-2. **Register in Factory**:
-```typescript
-// src/services/RegistryManager.ts constructor
-RepositoryAdapterFactory.register('mytype', MyAdapter);
-```
-
-3. **Add Source Type**:
-```typescript
-// src/types/registry.ts
-type SourceType = 'github' | 'local' | 
-    'awesome-copilot' | 'local-awesome-copilot' | 
-    'apm' | 'local-apm' | 'mytype';
-```
-
-4. **Write Tests**:
-```typescript
-// test/adapters/MyAdapter.test.ts
-describe('MyAdapter', () => {
-    it('should fetch bundles', async () => {
-        // Test implementation
-    });
-});
-```
+See the [Adapter API Reference](../reference/adapter-api.md) for the full walkthrough (implement `SourceAdapter` in `packages/infra`, wire it into `createSourceAdapter`'s switch statement, extend the `SourceType` union in `packages/core`, add tests in `packages/infra/test/` and `packages/app/test/registry/create-source-adapter.test.ts`).
 
 ---
 
@@ -350,7 +310,7 @@ describe('MyAdapter', () => {
 
 ### Overview
 
-Both `GitHubAdapter` and `AwesomeCopilotAdapter` support private GitHub repositories through a three-tier authentication fallback chain.
+Every GitHub-hosted adapter (`GitHubAdapter`, `AwesomeCopilotAdapter`, `ApmAdapter`, `SkillsAdapter`) supports private GitHub repositories through a three-tier authentication fallback chain, resolved once per source by `createSourceAdapter` and injected as a single `TokenProvider` — no adapter hand-rolls its own chain (see [Adapter API Reference § Authentication](../reference/adapter-api.md#authentication) for the up-to-date version of this section).
 
 ### Authentication Chain
 
@@ -358,118 +318,53 @@ Both `GitHubAdapter` and `AwesomeCopilotAdapter` support private GitHub reposito
 flowchart TD
     START([Request Authentication])
     
-    START --> VSCODE{VSCode<br/>GitHub Auth?}
-    VSCODE -->|Available| USE_VS["Use Bearer Token<br/>✓ Authenticated"]
+    START --> EXPLICIT{Explicit source.token<br/>in Config?}
+    EXPLICIT -->|Available| USE_EX["StaticTokenProvider<br/>✓ Authenticated"]
+    EXPLICIT -->|Not Available| VSCODE{VSCode<br/>GitHub Auth?}
+
+    VSCODE -->|Available| USE_VS["VsCodeSessionTokenProvider<br/>✓ Authenticated"]
     VSCODE -->|Not Available| GHCLI{gh CLI<br/>Installed?}
     
-    GHCLI -->|Available| USE_GH["Use CLI Token<br/>✓ Authenticated"]
-    GHCLI -->|Not Available| EXPLICIT{Explicit Token<br/>in Config?}
+    GHCLI -->|Available| USE_GH["GhCliTokenProvider<br/>✓ Authenticated"]
+    GHCLI -->|Not Available| NONE["No Authentication<br/>⚠️ Public Only"]
     
-    EXPLICIT -->|Available| USE_EX["Use Config Token<br/>✓ Authenticated"]
-    EXPLICIT -->|Not Available| NONE["No Authentication<br/>⚠️ Public Only"]
-    
-    USE_VS --> CACHE[Cache Token]
-    USE_GH --> CACHE
-    USE_EX --> CACHE
-    
+    style USE_EX fill:#4CAF50
     style USE_VS fill:#4CAF50
     style USE_GH fill:#4CAF50
-    style USE_EX fill:#4CAF50
     style NONE fill:#FF9800
-    style CACHE fill:#2196F3
 ```
 
 ### Implementation
 
-**Files**: `src/adapters/GitHubAdapter.ts`, `src/adapters/AwesomeCopilotAdapter.ts`  
-**Method**: `getAuthenticationToken()`
+**Port**: `TokenProvider` (`packages/core/src/ports/http.ts`) — `getToken(host: string): Promise<string | undefined>`
+**Composition**: `CompositeTokenProvider` (`@ai-primitives-hub/infra`), built per source by `createSourceAdapter`
 
 ```typescript
-private async getAuthenticationToken(): Promise<string | undefined> {
-    // Return cached token if already retrieved
-    if (this.authToken !== undefined) {
-        return this.authToken;
+// packages/app/src/registry/create-source-adapter.ts
+function buildSourceTokenProvider(source: RegistrySource, deps: SourceAdapterFactoryDeps): TokenProvider {
+    const providers: TokenProvider[] = [];
+    if (source.token) {
+        providers.push(new StaticTokenProvider(source.token));
     }
-
-    // Try VSCode GitHub authentication
-    try {
-        const session = await vscode.authentication.getSession(
-            'github', 
-            ['repo'], 
-            { silent: true }
-        );
-        if (session) {
-            this.authToken = session.accessToken;
-            this.authMethod = 'vscode';
-            return this.authToken;
-        }
-    } catch (error) {
-        // Log and continue to next method
-    }
-
-    // Try gh CLI
-    try {
-        const { stdout } = await execAsync('gh auth token');
-        const token = stdout.trim();
-        if (token && token.length > 0) {
-            this.authToken = token;
-            this.authMethod = 'gh-cli';
-            return this.authToken;
-        }
-    } catch (error) {
-        // Log and continue to next method
-    }
-
-    // Try explicit token from source config
-    const explicitToken = this.getAuthToken();
-    if (explicitToken) {
-        this.authToken = explicitToken;
-        this.authMethod = 'explicit';
-        return this.authToken;
-    }
-
-    // No authentication available
-    this.authMethod = 'none';
-    return undefined;
+    providers.push(...deps.fallbackTokenProviders);
+    return new CompositeTokenProvider(providers);
 }
 ```
 
-### Bearer Token Format
+`CompositeTokenProvider` tries each wrapped provider in order and returns the first resolved token; it has no GitHub-specific knowledge itself. The extension supplies `deps.fallbackTokenProviders` as `[VsCodeSessionTokenProvider, GhCliTokenProvider]` (`src/adapters/infra-adapter-factory.ts`) — each provider is host-aware and simply returns `undefined` for a non-GitHub host, letting the next one in the chain try.
+
+No adapter, old or new, ever sees a `vscode` import or shells out to `gh` itself — that lives entirely in the two `TokenProvider` implementations.
+
+### Token Header Format
 
 ```typescript
-// Correct format for GitHub API
-headers['Authorization'] = `Bearer ${token}`;
-
-// NOT the deprecated format:
-// headers['Authorization'] = `token ${token}`;
-```
-
-### Logging
-
-Authentication attempts and results are logged:
-
-```
-[GitHubAdapter] Attempting authentication...
-[GitHubAdapter] ✓ Using VSCode GitHub authentication
-[GitHubAdapter] Token preview: gho_abc12...
-[GitHubAdapter] Request to https://api.github.com/... with auth (method: vscode)
-```
-
-Errors are also logged:
-
-```
-[GitHubAdapter] ✗ No authentication available
-[GitHubAdapter] HTTP 404: Not Found - Repository not found or not accessible
+// GitHub API format used throughout packages/infra/src/adapters/github-adapter.ts
+headers['Authorization'] = `token ${token}`;
 ```
 
 ### Token Caching
 
-Tokens are cached after first successful retrieval to avoid repeated authentication attempts:
-
-```typescript
-private authToken: string | undefined;
-private authMethod: 'vscode' | 'gh-cli' | 'explicit' | 'none' = 'none';
-```
+`GitHubApiClient` (the concrete `GitHubApi` used by every GitHub-hosted adapter) calls `TokenProvider.getToken()` once per request rather than caching the result itself — this lets a provider backed by an expiring/rotating session (e.g. a VS Code auth session) stay correct without any adapter needing its own retry-on-401 logic. If a provider wants to cache internally, that is its own implementation detail behind the same `getToken()` contract.
 
 ---
 
@@ -696,10 +591,10 @@ this.profileCommands = new ProfileCommands(this.context, this.registryManager);
 | Task | Entry Point | Key Files |
 |------|-------------|-----------|
 | Install Bundle | `BundleCommands` | `RegistryManager`, `BundleInstaller`, `UserScopeService` |
-| Fetch from GitHub | `GitHubAdapter` | `RepositoryAdapter`, `GitHubAdapter` |
-| Fetch Awesome Copilot | `AwesomeCopilotAdapter` | `RepositoryAdapter`, `AwesomeCopilotAdapter` |
+| Fetch from GitHub | `GitHubAdapter` | `packages/infra/src/adapters/github-adapter.ts` |
+| Fetch Awesome Copilot | `AwesomeCopilotAdapter` | `packages/infra/src/adapters/awesome-copilot-adapter.ts` |
 | UI Interaction | `MarketplaceViewProvider` | `MarketplaceViewProvider`, `extension.ts` |
-| Add Source Type | `RepositoryAdapterFactory` | Create new adapter class, register |
+| Add Source Type | `createSourceAdapter` | `packages/app/src/registry/create-source-adapter.ts`, new adapter class in `packages/infra` |
 
 ### Test Coverage Goals
 
@@ -716,14 +611,16 @@ npm test -- --coverage
 ```
 
 **Test Organization**:
-- `test/adapters/` - Adapter unit tests
+- `packages/infra/test/adapters/` - Adapter unit tests (Vitest)
+- `test/adapters/` - Extension-side adapter wiring tests (`infra-adapter-factory.test.ts`, `vscode-session-token-provider.test.ts`)
 - `test/services/` - Service tests
 - `test/utils/` - Utility tests
 - `test/fixtures/` - Test data
 
 **Key Test Files**:
-- `GitHubAdapter.auth.test.ts` - Authentication tests
-- `AwesomeCopilotAdapter.test.ts` - Collection parsing
+- `packages/infra/test/adapters/github-adapter.test.ts` - GitHub fetch/download/caching
+- `packages/infra/test/adapters/awesome-copilot-adapter.test.ts` - Collection parsing
+- `test/adapters/infra-adapter-factory.test.ts` - Per-source-type adapter construction and auth policy
 - `collectionValidator.test.ts` - YAML validation
 
 ---
@@ -850,7 +747,7 @@ For detailed guidance on extending specific subsystems:
 
 | Extension Type | Key Files | Steps |
 |----------------|-----------|-------|
-| New Adapter | `src/adapters/`, `src/types/registry.ts` | Create adapter class, register in RegistryManager |
+| New Adapter | `packages/infra/src/adapters/`, `packages/app/src/registry/create-source-adapter.ts`, `packages/core/src/domain/source/types.ts` | Implement `SourceAdapter`, wire into the factory switch, extend `SourceType` |
 | New Scaffold | `templates/scaffolds/`, `src/commands/ScaffoldCommand.ts` | Create template dir, add manifest.json, update enum |
 | New Schema | `schemas/`, `src/services/SchemaValidator.ts` | Create JSON schema, use SchemaValidator |
 | New Command | `src/commands/`, `package.json` | Define in package.json, implement handler, register |

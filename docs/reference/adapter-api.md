@@ -1,17 +1,19 @@
 # Adapter API Reference
 
-This document describes how to create custom adapters for the AI Primitives Hub extension.
+This document describes how to create adapters for the AI Primitives Hub extension.
 
 ## Overview
 
 Adapters provide a unified interface for fetching bundles from different sources. The AI Primitives Hub uses the adapter pattern to support multiple source types (GitHub, local files, and curated collections).
 
-## IRepositoryAdapter Interface
+**Adapters live in `packages/infra/src/adapters/` (the `@ai-primitives-hub/infra` package), not in the extension's own `src/adapters/`.** The extension, and eventually `packages/cli`, both consume them through `@ai-primitives-hub/app`'s `createSourceAdapter` factory — see [Architecture](../contributor-guide/architecture/adapters.md) for the full picture and why the split exists.
 
-All adapters must implement the `IRepositoryAdapter` interface:
+## SourceAdapter Interface
+
+All adapters must implement `@ai-primitives-hub/core`'s `SourceAdapter` port (`packages/core/src/ports/source-adapter.ts`):
 
 ```typescript
-interface IRepositoryAdapter {
+interface SourceAdapter {
     // The type of repository this adapter handles
     readonly type: string;
     
@@ -41,6 +43,8 @@ interface IRepositoryAdapter {
     forceAuthentication?(): Promise<void>;
 }
 ```
+
+The extension's own `src/adapters/repository-adapter.ts` re-declares this same shape as `IRepositoryAdapter` purely as the return type of its adapter factory (`createRegistryAdapter`) at the VS Code boundary — the two interfaces are structurally identical, not two different contracts to implement.
 
 ## Installation Paths
 
@@ -74,22 +78,27 @@ async downloadBundle(bundle: Bundle): Promise<Buffer> {
 }
 ```
 
-## Creating a Custom Adapter
+## Creating a New Adapter
 
 ### Step 1: Implement the Interface
 
-```typescript
-import { IRepositoryAdapter, Bundle, SourceMetadata, ValidationResult } from '../types';
+Add your adapter to `packages/infra/src/adapters/`:
 
-export class MyCustomAdapter implements IRepositoryAdapter {
-    constructor(private config: MyAdapterConfig) {}
-    
+```typescript
+// packages/infra/src/adapters/my-custom-adapter.ts
+import { Bundle, HttpClient, RegistrySource, SourceAdapter, SourceMetadata, ValidationResult } from '@ai-primitives-hub/core';
+
+export class MyCustomAdapter implements SourceAdapter {
+    public readonly type = 'my-custom';
+
+    constructor(public readonly source: RegistrySource, private readonly httpClient: HttpClient) {}
+
     async fetchBundles(): Promise<Bundle[]> {
         // Fetch bundle list from your source
-        const response = await fetch(this.config.apiUrl);
-        const data = await response.json();
-        
-        return data.bundles.map(item => ({
+        const response = await this.httpClient.fetch({ url: this.source.url });
+        const data = JSON.parse(Buffer.from(response.body).toString('utf8'));
+
+        return data.bundles.map((item: { id: string; name: string; version: string; description: string }) => ({
             id: item.id,
             name: item.name,
             version: item.version,
@@ -100,65 +109,62 @@ export class MyCustomAdapter implements IRepositoryAdapter {
     
     async downloadBundle(bundle: Bundle): Promise<Buffer> {
         // For buffer-based adapters
-        const response = await fetch(`${this.config.apiUrl}/download/${bundle.id}`);
-        return Buffer.from(await response.arrayBuffer());
+        const response = await this.httpClient.fetch({ url: bundle.downloadUrl });
+        return Buffer.from(response.body);
     }
     
     async fetchMetadata(): Promise<SourceMetadata> {
         return {
-            name: this.config.name,
+            name: this.source.name,
             type: 'my-custom',
-            url: this.config.apiUrl,
+            url: this.source.url,
         };
     }
     
     async validate(): Promise<ValidationResult> {
         try {
-            await fetch(this.config.apiUrl);
-            return { valid: true };
+            await this.fetchBundles();
+            return { valid: true, errors: [], warnings: [] };
         } catch (error) {
-            return { valid: false, error: error.message };
+            return { valid: false, errors: [error instanceof Error ? error.message : String(error)], warnings: [] };
         }
     }
-    
-    getManifestUrl(bundleId: string, version: string): string {
-        return `${this.config.apiUrl}/manifests/${bundleId}/${version}`;
+
+    requiresAuthentication(): boolean {
+        return this.source.private === true;
+    }
+
+    getManifestUrl(bundleId: string, version?: string): string {
+        return `${this.source.url}/manifests/${bundleId}/${version ?? 'latest'}`;
     }
     
-    getDownloadUrl(bundleId: string, version: string): string {
-        return `${this.config.apiUrl}/download/${bundleId}/${version}`;
+    getDownloadUrl(bundleId: string, version?: string): string {
+        return `${this.source.url}/download/${bundleId}/${version ?? 'latest'}`;
     }
 }
 ```
 
-### Step 2: Register the Adapter
+Only depend on `@ai-primitives-hub/core` ports (`HttpClient`, `FileSystem`, `Clock`, `TokenProvider`, ...) for I/O, never `node:fs`/`node:child_process`/`vscode` directly — see [Architecture](../contributor-guide/architecture/adapters.md) for why, and `packages/infra/src/fs/node-filesystem.ts` for the reference Node implementation of a port. If your source is GitHub-flavored, reuse `@ai-primitives-hub/core`'s `GitHubApi` port and `packages/infra`'s `GitHubApiClient` implementation (a thin wrapper over `HttpClient` adding `getJson<T>(path)`/`download(url)` convenience methods plus GitHub auth headers) instead of calling `HttpClient.fetch` directly — see `packages/infra/src/adapters/github-adapter.ts` or `skills-adapter.ts` for real examples.
 
-Register your adapter with the `RepositoryAdapterFactory`:
+### Step 2: Wire It Into the Factory
 
-```typescript
-import { RepositoryAdapterFactory } from '../adapters/RepositoryAdapterFactory';
-import { MyCustomAdapter } from './MyCustomAdapter';
-
-// Register the adapter type
-RepositoryAdapterFactory.register('my-custom', MyCustomAdapter);
-```
-
-### Step 3: Update Source Types
-
-Add your adapter type to the `SourceType` union in `src/types/registry.ts`:
+Add your `SourceType` to the union in `packages/core/src/domain/source/types.ts`, then add a case to `createSourceAdapter`'s switch statement:
 
 ```typescript
-export type SourceType = 
-    | 'github' 
-    | 'local' 
-    | 'awesome-copilot'
-    | 'local-awesome-copilot'
-    | 'apm'
-    | 'local-apm'
-    | 'my-custom';
+// packages/app/src/registry/create-source-adapter.ts
+case 'my-custom':
+    return new MyCustomAdapter(source, deps.httpClient);
 ```
+
+That single factory is shared by every delivery context (the VS Code extension today, `packages/cli` later) — you do not register or wire the adapter again anywhere else.
+
+### Step 3: Add Tests
+
+Add a unit test file next to the adapter, `packages/infra/test/adapters/my-custom-adapter.test.ts` (Vitest), and a case in `packages/app/test/registry/create-source-adapter.test.ts` covering the new switch branch.
 
 ## Built-in Adapters
+
+All implemented in `packages/infra/src/adapters/`:
 
 | Adapter | Source Type | Description | Status |
 |---------|-------------|-------------|--------|
@@ -173,34 +179,17 @@ export type SourceType =
 
 ## Authentication
 
-Adapters that access private repositories should implement authentication. The GitHub and AwesomeCopilot adapters use a three-tier authentication chain:
+Adapters that access private repositories don't implement authentication themselves — they take an injected `TokenProvider` (`@ai-primitives-hub/core`'s port: `getToken(host): Promise<string | undefined>`) and call it when building request headers. `createSourceAdapter` builds a `CompositeTokenProvider` per source, trying each of the following in order and using the first one that resolves a token:
 
-1. **VS Code GitHub Authentication** — Uses the built-in VS Code GitHub auth
-2. **GitHub CLI** — Falls back to `gh auth token` if available
-3. **Explicit Token** — Uses a configured token from source config
+1. **Explicit token** — `StaticTokenProvider`, wrapping a token set directly on `RegistrySource.token`
+2. **VS Code GitHub authentication** — the extension's own `VsCodeSessionTokenProvider` (`vscode.authentication.getSession('github', ...)`), supplied as one of `createSourceAdapter`'s `fallbackTokenProviders`
+3. **GitHub CLI** — `@ai-primitives-hub/infra`'s `GhCliTokenProvider` (`gh auth token`), the other `fallbackTokenProviders` entry
+4. **No authentication** — public repositories only
 
-```typescript
-private async getAuthenticationToken(): Promise<string | undefined> {
-    // 1. Try VSCode GitHub authentication
-    const session = await vscode.authentication.getSession('github', ['repo'], { silent: true });
-    if (session) return session.accessToken;
-    
-    // 2. Try GitHub CLI
-    const { stdout } = await execAsync('gh auth token');
-    if (stdout.trim()) return stdout.trim();
-    
-    // 3. Try explicit token from source config
-    const explicitToken = this.getAuthToken();
-    if (explicitToken) return explicitToken;
-    
-    return undefined;
-}
-```
-
-Use Bearer token format for authenticated requests:
+This keeps every adapter's own code free of any auth-chain logic; a new adapter that needs GitHub auth just takes a `TokenProvider` in its constructor and calls `getToken('github.com')`. Use `token`-scheme headers for authenticated GitHub API requests, matching `packages/infra/src/adapters/github-adapter.ts`:
 
 ```typescript
-headers['Authorization'] = `Bearer ${token}`;
+headers['Authorization'] = `token ${token}`;
 ```
 
 ## Bundle Manifest Format
@@ -221,19 +210,15 @@ prompts:
 
 ## Error Handling
 
-Adapters should handle errors gracefully and return meaningful error messages:
+`packages/infra` adapters have no logger dependency — they wrap the underlying error in a new `Error` with a descriptive, adapter-specific message and let it propagate; the caller (`RegistryManager`/`app`'s orchestration functions) is responsible for logging:
 
 ```typescript
 async fetchBundles(): Promise<Bundle[]> {
     try {
-        const response = await fetch(this.config.apiUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        return await response.json();
+        const response = await this.httpClient.fetch({ url: this.source.url });
+        return parseBundles(response.body);
     } catch (error) {
-        Logger.getInstance().error(`[MyAdapter] Failed to fetch bundles: ${error.message}`);
-        throw error;
+        throw new Error(`Failed to fetch bundles from my-custom source: ${error instanceof Error ? error.message : error}`);
     }
 }
 ```
