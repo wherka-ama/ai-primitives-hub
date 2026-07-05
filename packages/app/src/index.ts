@@ -12,11 +12,14 @@
  * Landing incrementally: install/ (+ its writers/ and stores/ support
  * modules) is the first real module family to land.
  */
+export * from './context-detection';
+export * from './discovery';
 export * from './install';
 export * from './writers';
 export * from './stores';
 export * from './update';
 export * from './registry';
+export * from './search';
 
 /**
  * Phase 1 scaffolding marker, kept until `cli` has real code of its own

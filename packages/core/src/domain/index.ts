@@ -8,6 +8,7 @@ export * from './bundle/version';
 export * from './bundle/identity-matcher';
 export * from './collection/types';
 export * from './collection/manifest-validator';
+export * from './discovery/types';
 export * from './errors';
 export * from './source/types';
 export * from './source-id';

@@ -5,6 +5,7 @@
 export * from './source-adapter';
 export * from './app-storage';
 export * from './clock';
+export * from './copilot-sdk';
 export * from './filesystem';
 export * from './http';
 export * from './github-api';
