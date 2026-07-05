@@ -8,9 +8,7 @@
 import * as assert from 'node:assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
-import {
-  RepositoryAdapterFactory,
-} from '../../src/adapters/repository-adapter';
+import * as InfraAdapterFactory from '../../src/adapters/infra-adapter-factory';
 import {
   RegistryManager,
 } from '../../src/services/registry-manager';
@@ -250,7 +248,7 @@ suite('RegistryManager - Event Emission Behavior', () => {
     const mockAdapter = {
       downloadBundle: sandbox.stub().resolves(Buffer.from('test'))
     };
-    sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+    sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
     const mockInstaller = (manager as any).installer;
     sandbox.stub(mockInstaller, 'installFromBuffer').resolves({
@@ -369,7 +367,7 @@ suite('RegistryManager - Event Emission Behavior', () => {
     const mockAdapter = {
       downloadBundle: sandbox.stub().resolves(Buffer.from('test'))
     };
-    sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+    sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
     // Mock installer
     const mockInstaller = (manager as any).installer;
@@ -440,7 +438,7 @@ suite('RegistryManager - Event Emission Behavior', () => {
     const mockAdapter = {
       downloadBundle: sandbox.stub().resolves(Buffer.from('test'))
     };
-    sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+    sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
     const mockInstaller = (manager as any).installer;
     const updateStub = sandbox.stub(mockInstaller, 'update').resolves({
@@ -503,7 +501,7 @@ suite('RegistryManager - Event Emission Behavior', () => {
       ])
     };
 
-    sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+    sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
     mockStorage.getInstalledBundles.resolves([localSkillInstall]);
     const updatedInstallations: InstalledBundle[] = [];
     mockStorage.recordInstallation.callsFake((installation: InstalledBundle) => {
@@ -652,7 +650,7 @@ suite('RegistryManager - Source Management', () => {
       validate: sandbox.stub().resolves({ valid: true, errors: [] }),
       fetchBundles: sandbox.stub().resolves([])
     };
-    const factoryStub = sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+    const factoryStub = sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
     await manager.addSource(newSource);
 

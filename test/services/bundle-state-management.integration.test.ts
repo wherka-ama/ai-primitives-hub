@@ -14,9 +14,7 @@
 import * as assert from 'node:assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
-import {
-  RepositoryAdapterFactory,
-} from '../../src/adapters/repository-adapter';
+import * as InfraAdapterFactory from '../../src/adapters/infra-adapter-factory';
 import {
   BundleInstaller,
 } from '../../src/services/bundle-installer';
@@ -143,7 +141,7 @@ suite('Bundle State Management - Integration Tests', () => {
         fetchBundles: sandbox.stub().resolves([bundle]),
         downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
       };
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
       // Step 1: Install the bundle
       const installedBundle: InstalledBundle = {
@@ -236,7 +234,7 @@ suite('Bundle State Management - Integration Tests', () => {
       // First fetch returns v1.0.0
       mockAdapter.fetchBundles.onFirstCall().resolves([bundleV1]);
 
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
       mockInstaller.installFromBuffer.resolves(installedBundleV1);
       mockStorage.recordInstallation.resolves();
@@ -293,7 +291,7 @@ suite('Bundle State Management - Integration Tests', () => {
         downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
       };
 
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
       // Step 1: Install specific version v1.0.1 from dropdown
       const installedBundleV1x0x1: InstalledBundle = {
@@ -358,7 +356,7 @@ suite('Bundle State Management - Integration Tests', () => {
         downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
       };
 
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
       // No bundles installed initially
       mockStorage.getInstalledBundles.resolves([]);
@@ -418,7 +416,7 @@ suite('Bundle State Management - Integration Tests', () => {
         downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
       };
 
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
       mockStorage.cacheSourceBundles.resolves();
 
       // Step 1: Sync GitHub source
@@ -485,7 +483,7 @@ suite('Bundle State Management - Integration Tests', () => {
         downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
       };
 
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
       mockStorage.cacheSourceBundles.resolves();
 
       // Mock update operation
@@ -578,7 +576,7 @@ suite('Bundle State Management - Integration Tests', () => {
         downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
       };
 
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
       mockStorage.cacheSourceBundles.resolves();
 
       // Step 1: Sync Awesome Copilot source
@@ -627,7 +625,7 @@ suite('Bundle State Management - Integration Tests', () => {
         downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
       };
 
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
       // Step 1: Install specific older version v1.0.16 (NOT the latest v1.0.17)
       const installedBundleV1x0x16: InstalledBundle = {
@@ -1117,7 +1115,7 @@ suite('Bundle State Management - Integration Tests', () => {
         downloadBundle: sandbox.stub().resolves(Buffer.from('mock-bundle-data'))
       };
 
-      sandbox.stub(RepositoryAdapterFactory, 'create').returns(mockAdapter as any);
+      sandbox.stub(InfraAdapterFactory, 'createRegistryAdapter').returns(mockAdapter as any);
 
       // TEST: Call getBundleDetails with versioned ID
       // This is what happens when clicking on installed bundle in Registry Explorer

@@ -10,35 +10,16 @@ import {
 import type {
   LogEvent,
 } from '@ai-primitives-hub/app';
+import {
+  GitHubAdapter as InfraGitHubAdapter,
+} from '@ai-primitives-hub/infra';
 import * as vscode from 'vscode';
 import {
-  ApmAdapter,
-} from '../adapters/apm-adapter';
-import {
-  AwesomeCopilotAdapter,
-} from '../adapters/awesome-copilot-adapter';
-import {
-  GitHubAdapter,
-} from '../adapters/github-adapter';
-import {
-  LocalAdapter,
-} from '../adapters/local-adapter';
-import {
-  LocalApmAdapter,
-} from '../adapters/local-apm-adapter';
-import {
-  LocalAwesomeCopilotAdapter,
-} from '../adapters/local-awesome-copilot-adapter';
-import {
-  LocalSkillsAdapter,
-} from '../adapters/local-skills-adapter';
+  createRegistryAdapter,
+} from '../adapters/infra-adapter-factory';
 import {
   IRepositoryAdapter,
-  RepositoryAdapterFactory,
 } from '../adapters/repository-adapter';
-import {
-  SkillsAdapter,
-} from '../adapters/skills-adapter';
 import {
   RegistryStorage,
 } from '../storage/registry-storage';
@@ -186,16 +167,6 @@ export class RegistryManager {
     // Initialize version consolidator with source type resolver
     this.versionConsolidator = new VersionConsolidator();
     this.versionConsolidator.setSourceTypeResolver((sourceId: string) => this.getSourceType(sourceId));
-
-    // Register default adapters
-    RepositoryAdapterFactory.register('github', GitHubAdapter);
-    RepositoryAdapterFactory.register('local', LocalAdapter);
-    RepositoryAdapterFactory.register('awesome-copilot', AwesomeCopilotAdapter);
-    RepositoryAdapterFactory.register('local-awesome-copilot', LocalAwesomeCopilotAdapter);
-    RepositoryAdapterFactory.register('local-apm', LocalApmAdapter);
-    RepositoryAdapterFactory.register('apm', ApmAdapter);
-    RepositoryAdapterFactory.register('skills', SkillsAdapter);
-    RepositoryAdapterFactory.register('local-skills', LocalSkillsAdapter);
   }
 
   /**
@@ -235,7 +206,7 @@ export class RegistryManager {
       if (source.enabled) {
         try {
           const enrichedSource = this.enrichSourceWithGlobalToken(source);
-          const adapter = RepositoryAdapterFactory.create(enrichedSource);
+          const adapter = createRegistryAdapter(enrichedSource);
           this.adapters.set(source.id, adapter);
         } catch (error) {
           this.logger.error(`Failed to create adapter for source '${source.id}'`, error as Error);
@@ -295,7 +266,7 @@ export class RegistryManager {
 
     if (!adapter) {
       const enrichedSource = this.enrichSourceWithGlobalToken(source);
-      adapter = RepositoryAdapterFactory.create(enrichedSource);
+      adapter = createRegistryAdapter(enrichedSource);
       this.adapters.set(source.id, adapter);
     }
 
@@ -1169,7 +1140,7 @@ export class RegistryManager {
    */
   public clearAdapterCache(sourceId: string): void {
     const adapter = this.adapters.get(sourceId);
-    if (adapter && adapter instanceof GitHubAdapter) {
+    if (adapter && adapter instanceof InfraGitHubAdapter) {
       adapter.clearManifestCache();
       this.logger.debug(`Cleared manifest cache for source: ${sourceId}`);
     }
@@ -1186,7 +1157,7 @@ export class RegistryManager {
 
     // Validate source (with global token if applicable)
     const enrichedSource = this.enrichSourceWithGlobalToken(source);
-    const adapter = RepositoryAdapterFactory.create(enrichedSource);
+    const adapter = createRegistryAdapter(enrichedSource);
     const validation = await adapter.validate();
 
     if (!validation.valid) {
@@ -1239,7 +1210,7 @@ export class RegistryManager {
 
     if (updatedSource && updatedSource.enabled) {
       const enrichedSource = this.enrichSourceWithGlobalToken(updatedSource);
-      const adapter = RepositoryAdapterFactory.create(enrichedSource);
+      const adapter = createRegistryAdapter(enrichedSource);
       this.adapters.set(sourceId, adapter);
     }
 
@@ -1318,7 +1289,7 @@ export class RegistryManager {
    */
   public async validateSource(source: RegistrySource): Promise<ValidationResult> {
     const enrichedSource = this.enrichSourceWithGlobalToken(source);
-    const adapter = RepositoryAdapterFactory.create(enrichedSource);
+    const adapter = createRegistryAdapter(enrichedSource);
     return await adapter.validate();
   }
 
