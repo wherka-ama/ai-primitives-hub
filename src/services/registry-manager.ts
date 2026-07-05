@@ -6,6 +6,7 @@
 import {
   detectBundleUpdates,
   listInstalledBundles as listInstalledBundlesCore,
+  uninstallInstalledBundle,
 } from '@ai-primitives-hub/app';
 import type {
   LogEvent,
@@ -1537,64 +1538,44 @@ export class RegistryManager {
 
   /**
    * Uninstall a bundle
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `uninstallInstalledBundle`
+   * (migration plan §7.5, Phase 4 item 4).
    * @param bundleId
    * @param scope
    * @param silent
    */
   public async uninstallBundle(bundleId: string, scope: InstallationScope = 'user', silent = false): Promise<void> {
-    this.logger.info(`Uninstalling bundle: ${bundleId}`);
-
-    // Get installation record - repository scope uses LockfileManager
-    let installed: InstalledBundle | undefined;
-
-    if (scope === 'repository') {
-      const workspaceRoot = getWorkspaceRoot();
-      if (!workspaceRoot) {
-        throw new Error('Cannot uninstall repository-scoped bundle: no workspace is open');
-      }
-
-      const lockfileManager = LockfileManager.getInstance(workspaceRoot);
-
-      // Use getInstalledBundles() to search both main and local lockfiles
-      const installedBundles = await lockfileManager.getInstalledBundles();
-      installed = installedBundles.find((b) => b.bundleId === bundleId);
-    } else {
-      installed = await this.storage.getInstalledBundle(bundleId, scope);
-    }
-
-    if (!installed) {
-      throw new Error(`Bundle '${bundleId}' is not installed in ${scope} scope`);
-    }
-
-    // Get source information for post-uninstall hooks
-    let source: RegistrySource | undefined;
-    const installedSourceId = installed.sourceId;
-    if (installedSourceId) {
-      const sources = await this.storage.getSources();
-      source = sources.find((s) => s.id === installedSourceId);
-    }
-
-    // For local-skills, use symlink uninstallation (removes symlink, not source directory)
-    if (installed.sourceType === 'local-skills' || source?.type === 'local-skills') {
-      this.logger.debug(`Uninstalling local skill symlink: ${bundleId}`);
-      await this.installer.uninstallSkillSymlink(installed);
-    } else {
-      // Uninstall using BundleInstaller
-      await this.installer.uninstall(installed);
-    }
-
-    // Remove installation record using the stored bundle ID from the installation record
-    // This ensures we remove the correct record even for versioned bundles
-    // Note: For repository scope, the lockfile is updated by BundleInstaller.uninstall()
-    // Repository scope bundles are tracked via LockfileManager, not RegistryStorage
-    if (scope !== 'repository') {
-      await this.storage.removeInstallation(installed.bundleId, scope);
-    }
+    const installed = await uninstallInstalledBundle(
+      bundleId,
+      scope,
+      {
+        getInstalledBundle: (id, s) => this.storage.getInstalledBundle(id, s),
+        getRepositoryInstalledBundles: async () => {
+          const workspaceRoot = getWorkspaceRoot();
+          if (!workspaceRoot) {
+            throw new Error('Cannot uninstall repository-scoped bundle: no workspace is open');
+          }
+          // Use getInstalledBundles() to search both main and local lockfiles
+          const lockfileManager = LockfileManager.getInstance(workspaceRoot);
+          return lockfileManager.getInstalledBundles();
+        },
+        listSources: () => this.storage.getSources(),
+        // `core`'s `DeploymentManifest.mcpServers` is intentionally looser
+        // (`Record<string, unknown>`) than this extension's `McpServersManifest`
+        // (see `listInstalledBundles`'s identical, already-documented cast above) —
+        // the data itself is always this extension's own shape here too, since it
+        // only ever flows from `RegistryStorage`/`LockfileManager` above.
+        uninstall: (installedBundle) => this.installer.uninstall(installedBundle as InstalledBundle),
+        uninstallSkillSymlink: (installedBundle) => this.installer.uninstallSkillSymlink(installedBundle as InstalledBundle),
+        removeInstallation: (id, s) => this.storage.removeInstallation(id, s)
+      },
+      (event) => this.forwardLogEvent(event)
+    );
 
     if (!silent) {
       this._onBundleUninstalled.fire(installed.bundleId);
     }
-    this.logger.info(`Bundle '${installed.bundleId}' uninstalled successfully`);
   }
 
   /**
