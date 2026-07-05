@@ -4,6 +4,7 @@
  */
 export * from './create-source-adapter';
 export * from './detect-updates';
+export * from './hub-manager';
 export * from './install-registry-bundle';
 export * from './list-installed-bundles';
 export * from './resolve-installation-bundle';

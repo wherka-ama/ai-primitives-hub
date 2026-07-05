@@ -14,6 +14,7 @@ export * from './extractors';
 export * from './fs';
 export * from './harvest';
 export * from './http';
+export * from './hub';
 export * from './process';
 export * from './resolvers';
 export * from './search';

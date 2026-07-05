@@ -3,18 +3,28 @@
  * Handles hub importing, loading, validation, and synchronization
  */
 
-import {
-  exec,
-} from 'node:child_process';
-import * as fs from 'node:fs';
-import * as http from 'node:http';
-import * as https from 'node:https';
 import * as path from 'node:path';
 import {
-  promisify,
-} from 'node:util';
-import * as yaml from 'js-yaml';
+  HubManager as AppHubManager,
+} from '@ai-primitives-hub/app';
+import type {
+  HubConfig as CoreHubConfig,
+  ValidationResult as CoreValidationResult,
+} from '@ai-primitives-hub/core';
+import {
+  CompositeHubResolver,
+  CompositeTokenProvider,
+  GhCliTokenProvider,
+  GitHubHubResolver,
+  LocalHubResolver,
+  NodeFileSystem,
+  NodeHttpClient,
+  UrlHubResolver,
+} from '@ai-primitives-hub/infra';
 import * as vscode from 'vscode';
+import {
+  VsCodeSessionTokenProvider,
+} from '../adapters/vscode-session-token-provider';
 import {
   HubStorage,
   LoadHubResult,
@@ -31,7 +41,6 @@ import {
   ProfileActivationState,
   ProfileChanges,
   ProfileDeactivationResult,
-  sanitizeHubId,
   validateHubConfig,
 } from '../types/hub';
 import {
@@ -47,8 +56,6 @@ import {
   SchemaValidator,
   ValidationResult,
 } from './schema-validator';
-
-const execAsync = promisify(exec);
 
 /**
  * Resolved bundle with its download URL
@@ -99,14 +106,12 @@ export class HubManager {
   private readonly validator: SchemaValidator;
   private readonly hubSchemaPath: string;
   private readonly logger: Logger;
+  private readonly appHubManager: AppHubManager;
   private readonly _onHubImported = new vscode.EventEmitter<string>();
   private readonly _onHubDeleted = new vscode.EventEmitter<string>();
   private readonly _onHubSynced = new vscode.EventEmitter<string>();
   private readonly _onFavoritesChanged = new vscode.EventEmitter<void>();
   private readonly _onActiveHubChanged = new vscode.EventEmitter<{ oldHubId: string | null; newHubId: string | null }>();
-
-  private authToken: string | undefined;
-  private authMethod: 'vscode' | 'gh-cli' | 'explicit' | 'none' = 'none';
 
   /**
    * Initialize HubManager
@@ -141,6 +146,34 @@ export class HubManager {
     this.validator = validator;
     this.hubSchemaPath = path.join(extensionPath, 'schemas', 'hub-config.schema.json');
     this.logger = Logger.getInstance();
+
+    // Fetch/auth wiring: GitHub auth follows the same fallback chain as
+    // RegistryManager's source adapters (VS Code session, then `gh` CLI) —
+    // see src/adapters/infra-adapter-factory.ts.
+    const httpClient = new NodeHttpClient();
+    const tokenProvider = new CompositeTokenProvider([new VsCodeSessionTokenProvider(true), new GhCliTokenProvider()]);
+    const resolver = new CompositeHubResolver(
+      new GitHubHubResolver(httpClient, tokenProvider),
+      new LocalHubResolver(new NodeFileSystem()),
+      new UrlHubResolver(httpClient, tokenProvider)
+    );
+
+    this.appHubManager = new AppHubManager({
+      store: storage.getHubStore(),
+      activeStore: storage.getActiveHubStore(),
+      resolver,
+      validateConfig: async (config: CoreHubConfig): Promise<CoreValidationResult> => {
+        const schemaResult = await this.validator.validate(config, this.hubSchemaPath);
+        if (!schemaResult.valid) {
+          return schemaResult;
+        }
+        const runtimeResult = validateHubConfig(config);
+        if (!runtimeResult.valid) {
+          return { valid: false, errors: runtimeResult.errors, warnings: [] };
+        }
+        return { valid: true, errors: [], warnings: [] };
+      }
+    });
   }
 
   /**
@@ -190,261 +223,6 @@ export class HubManager {
   }
 
   /**
-   * Validate hub reference
-   * @param reference Hub reference to validate
-   * @returns Validation result
-   */
-  private async validateReference(reference: HubReference): Promise<ValidationResult> {
-    const errors: string[] = [];
-
-    if (!reference.type) {
-      errors.push('Reference type is required');
-    }
-
-    if (!reference.location) {
-      errors.push('Reference location is required');
-    }
-
-    // Type-specific validation
-    switch (reference.type) {
-      case 'github': {
-        if (!reference.location.includes('/')) {
-          errors.push('Invalid GitHub location format. Expected: owner/repo');
-        }
-        break;
-      }
-      case 'url': {
-        try {
-          new URL(reference.location);
-        } catch {
-          errors.push('Invalid URL format');
-        }
-        break;
-      }
-      case 'local': {
-        // Local path validation is done during fetch
-        break;
-      }
-      default: {
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- value is safely stringifiable at runtime
-        errors.push(`Unsupported reference type: ${reference.type}`);
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings: []
-    };
-  }
-
-  /**
-   * Fetch hub configuration from source
-   * @param reference Hub reference
-   * @returns Hub configuration
-   */
-  private async fetchHubConfig(reference: HubReference): Promise<HubConfig> {
-    switch (reference.type) {
-      case 'local': {
-        return this.fetchFromLocal(reference.location);
-      }
-      case 'url': {
-        return this.fetchFromUrl(reference.location);
-      }
-      case 'github': {
-        return this.fetchFromGitHub(reference.location, reference.ref);
-      }
-      default: {
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- value is safely stringifiable at runtime
-        throw new Error(`Unsupported reference type: ${reference.type}`);
-      }
-    }
-  }
-
-  /**
-   * Fetch hub config from local file
-   * @param filePath Local file path
-   * @returns Hub configuration
-   */
-  private async fetchFromLocal(filePath: string): Promise<HubConfig> {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`File not found: ${filePath}`);
-    }
-
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      return yaml.load(content) as HubConfig;
-    } catch (error) {
-      throw new Error(`Failed to load hub config from ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  /**
-   * Get authentication token using fallback chain:
-   * 1. VSCode GitHub API (if user is logged in)
-   * 2. gh CLI (if installed and authenticated)
-   * 3. Explicit token from source configuration
-   */
-  private async getAuthenticationToken(): Promise<string | undefined> {
-    // Return cached token if already resolved
-    if (this.authToken !== undefined) {
-      this.logger.debug(`[HubManager] Using cached token (method: ${this.authMethod})`);
-      return this.authToken;
-    }
-
-    this.logger.info('[HubManager] Attempting authentication...');
-
-    // Try VSCode GitHub authentication first
-    try {
-      this.logger.debug('[HubManager] Trying VSCode GitHub authentication...');
-      const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
-      if (session) {
-        this.authToken = session.accessToken;
-        this.authMethod = 'vscode';
-        this.logger.info('[HubManager] ✓ Using VSCode GitHub authentication');
-        this.logger.debug(`[HubManager] Token preview: ${this.authToken.substring(0, 8)}...`);
-        return this.authToken;
-      }
-      this.logger.debug('[HubManager] VSCode auth session not found');
-    } catch (error) {
-      this.logger.warn(`[HubManager] VSCode auth failed: ${error}`);
-    }
-
-    // Try gh CLI authentication
-    try {
-      this.logger.debug('[HubManager] Trying gh CLI authentication...');
-      const { stdout } = await execAsync('gh auth token');
-      const token = stdout.trim();
-      if (token && token.length > 0) {
-        this.authToken = token;
-        this.authMethod = 'gh-cli';
-        this.logger.info('[HubManager] ✓ Using gh CLI authentication');
-        this.logger.debug(`[HubManager] Token preview: ${this.authToken.substring(0, 8)}...`);
-        return this.authToken;
-      }
-      this.logger.debug('[HubManager] gh CLI returned empty token');
-    } catch (error) {
-      this.logger.warn(`[HubManager] gh CLI auth failed: ${error}`);
-    }
-
-    // No authentication available
-    this.authMethod = 'none';
-    this.logger.warn('[HubManager] ✗ No authentication available - API rate limits will apply and private repos will be inaccessible');
-    return undefined;
-  }
-
-  /**
-   * Fetch hub config from URL
-   * Handles redirects (301/302) by following the Location header
-   * @param url URL to fetch from
-   * @param redirectDepth Current redirect depth (for loop prevention)
-   * @returns Hub configuration
-   */
-  private async fetchFromUrl(url: string, redirectDepth = 0): Promise<HubConfig> {
-    /**
-     * Maximum redirect depth to prevent infinite loops.
-     */
-    const MAX_REDIRECTS = 10;
-    if (redirectDepth >= MAX_REDIRECTS) {
-      this.logger.error(`[HubManager] Maximum redirect depth (${MAX_REDIRECTS}) exceeded`);
-      throw new Error(`Maximum redirect depth (${MAX_REDIRECTS}) exceeded`);
-    }
-
-    // Prepare headers with authentication for GitHub URLs
-    const headers: { [key: string]: string } = {};
-
-    // Get authentication token using fallback chain
-    const token = await this.getAuthenticationToken();
-    if (token) {
-      // Use Bearer token format for OAuth tokens (recommended)
-      headers.Authorization = `token ${token}`;
-      this.logger.debug(`[HubManager] Request to ${url} with auth (method: ${this.authMethod})`);
-    } else {
-      this.logger.debug(`[HubManager] Request to ${url} WITHOUT auth`);
-    }
-
-    // Log headers (sanitized)
-    const sanitizedHeaders = { ...headers };
-    if (sanitizedHeaders.Authorization) {
-      sanitizedHeaders.Authorization = sanitizedHeaders.Authorization.substring(0, 15) + '...';
-    }
-    this.logger.debug(`[HubManager] Request headers: ${JSON.stringify(sanitizedHeaders)}`);
-
-    return new Promise((resolve, reject) => {
-      const protocol = url.startsWith('https') ? https : http;
-      const options: any = { headers };
-      protocol.get(url, options, (res) => {
-        // Handle redirects (301/302)
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const redirectUrl = res.headers.location;
-          if (redirectUrl) {
-            this.logger.debug(`[HubManager] Following redirect (depth ${redirectDepth + 1}) to: ${redirectUrl}`);
-            this.fetchFromUrl(redirectUrl, redirectDepth + 1).then(resolve).catch(reject);
-            return;
-          }
-        }
-
-        if (res.statusCode !== 200) {
-          this.logger.error(`[HubManager] Failed to fetch hub config: HTTP ${res.statusCode}`, undefined);
-          reject(new Error(`Failed to fetch hub config: HTTP ${res.statusCode}`));
-          return;
-        }
-
-        let data = '';
-        res.on('data', (chunk) => data += chunk);
-        res.on('end', () => {
-          try {
-            this.logger.debug(`[HubManager] Successfully fetched hub config, ${data.length} bytes`);
-            const config = yaml.load(data) as HubConfig;
-            resolve(config);
-          } catch (error) {
-            this.logger.error(`[HubManager] Failed to parse hub config`, error as Error);
-            reject(new Error(`Failed to parse hub config: ${error instanceof Error ? error.message : String(error)}`));
-          }
-        });
-      }).on('error', (error) => {
-        this.logger.error(`[HubManager] Network error fetching hub config`, error);
-        reject(new Error(`Failed to fetch hub config: ${error.message}`));
-      });
-    });
-  }
-
-  /**
-   * Fetch hub config from GitHub
-   * @param location GitHub repository (owner/repo)
-   * @param ref Git reference (branch, tag, or commit)
-   * @returns Hub configuration
-   */
-  private async fetchFromGitHub(location: string, ref = 'main'): Promise<HubConfig> {
-    const branch = ref;
-    // Add timestamp to bypass GitHub raw content cache
-    const timestamp = Date.now();
-    const url = `https://raw.githubusercontent.com/${location}/${branch}/hub-config.yml?t=${timestamp}`;
-
-    return this.fetchFromUrl(url);
-  }
-
-  /**
-   * Generate hub ID from config
-   * @param config Hub configuration
-   * @returns Generated hub ID
-   */
-  private generateHubId(config: HubConfig): string {
-    // Use metadata name, sanitized
-    let id = config.metadata.name
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
-
-    // Add timestamp to ensure uniqueness
-    const timestamp = Date.now().toString().slice(-6);
-    id = `${id}-${timestamp}`;
-
-    return id;
-  }
-
-  /**
    * Check if a source is a duplicate based on URL and config
    * Compares URL, type, branch, and collectionsPath to determine if sources are identical
    * @param source Source to check
@@ -485,13 +263,13 @@ export class HubManager {
   }
 
   /**
-   * Clear cached authentication state so that the next call to
-   * getAuthenticationToken() performs a fresh authentication attempt.
-   * Used when re-triggering setup after a user previously declined auth.
+   * No-op retained for backward compatibility: the previous inline
+   * VS Code/gh-cli auth chain cached a resolved token on `this`, but the
+   * `TokenProvider` chain wired into the constructor (see
+   * `VsCodeSessionTokenProvider`/`GhCliTokenProvider`) re-resolves a
+   * fresh token on every call, so there is no cache left to clear.
    */
   public clearAuthCache(): void {
-    this.authToken = undefined;
-    this.authMethod = 'none';
     this.logger.info('[HubManager] Authentication cache cleared');
   }
 
@@ -502,48 +280,16 @@ export class HubManager {
    * @returns Hub identifier
    */
   public async importHub(reference: HubReference, hubId?: string): Promise<string> {
-    // Validate reference
-    const refValidation = await this.validateReference(reference);
-    if (!refValidation.valid) {
-      throw new Error(`Invalid reference: ${refValidation.errors.join(', ')}`);
-    }
-
-    // Fetch hub config from source
-    const config = await this.fetchHubConfig(reference);
-
-    // Validate hub config
-    const validation = await this.validateHub(config);
-    if (!validation.valid) {
-      this.logger.error('Hub validation failed:', undefined, {
-        errors: validation.errors,
-        warnings: validation.warnings
-      });
-      throw new Error(`Hub validation failed: Validation error: ${validation.errors.join(', ')}`);
-    }
-
-    // Generate hub ID if not provided
-    if (!hubId) {
-      hubId = this.generateHubId(config);
-    }
-
-    // Validate hub ID
-    try {
-      sanitizeHubId(hubId);
-    } catch (error) {
-      throw new Error(`Invalid hub ID: ${error instanceof Error ? error.message : String(error)}`);
-    }
-
-    // Save to storage first
-    await this.storage.saveHub(hubId, config, reference);
+    const resolvedHubId = await this.appHubManager.importHub(reference, hubId);
 
     // Load hub sources into RegistryManager
     if (this.registryManager) {
-      await this.loadHubSources(hubId);
+      await this.loadHubSources(resolvedHubId);
     }
 
-    this._onHubImported.fire(hubId);
+    this._onHubImported.fire(resolvedHubId);
 
-    return hubId;
+    return resolvedHubId;
   }
 
   /**
@@ -552,20 +298,7 @@ export class HubManager {
    * @returns Loaded hub configuration and reference
    */
   public async loadHub(hubId: string): Promise<LoadHubResult> {
-    const result = await this.storage.loadHub(hubId);
-
-    // Validate loaded config
-    const validation = await this.validateHub(result.config);
-    if (!validation.valid) {
-      this.logger.error('Hub validation failed on load:', undefined, {
-        hubId,
-        errors: validation.errors,
-        warnings: validation.warnings
-      });
-      throw new Error(`Hub validation failed: ${validation.errors.join(', ')}`);
-    }
-
-    return result;
+    return this.appHubManager.loadHub(hubId);
   }
 
   /**
@@ -574,27 +307,7 @@ export class HubManager {
    * @returns Validation result
    */
   public async validateHub(config: HubConfig): Promise<ValidationResult> {
-    // Schema validation
-    const schemaResult = await this.validator.validate(config, this.hubSchemaPath);
-    if (!schemaResult.valid) {
-      return schemaResult;
-    }
-
-    // Runtime validation
-    const runtimeResult = validateHubConfig(config);
-    if (!runtimeResult.valid) {
-      return {
-        valid: false,
-        errors: runtimeResult.errors,
-        warnings: []
-      };
-    }
-
-    return {
-      valid: true,
-      errors: [],
-      warnings: []
-    };
+    return this.appHubManager.validateHub(config) as Promise<ValidationResult>;
   }
 
   /**
@@ -602,25 +315,7 @@ export class HubManager {
    * @returns Array of hub list items
    */
   public async listHubs(): Promise<HubListItem[]> {
-    const hubIds = await this.storage.listHubs();
-    const hubs: HubListItem[] = [];
-
-    for (const id of hubIds) {
-      try {
-        const result = await this.storage.loadHub(id);
-        hubs.push({
-          id,
-          name: result.config.metadata.name,
-          description: result.config.metadata.description,
-          reference: result.reference
-        });
-      } catch (error) {
-        // Skip hubs that fail to load
-        console.error(`Failed to load hub ${id}:`, error);
-      }
-    }
-
-    return hubs;
+    return this.appHubManager.listHubs();
   }
 
   /**
@@ -631,7 +326,7 @@ export class HubManager {
     // Cleanup resources linked to this hub before deleting
     await this.cleanupHubResources(hubId);
 
-    await this.storage.deleteHub(hubId);
+    await this.appHubManager.deleteHub(hubId);
     this._onHubDeleted.fire(hubId);
   }
 
@@ -665,20 +360,7 @@ export class HubManager {
    * @param hubId Hub identifier to sync
    */
   public async syncHub(hubId: string): Promise<void> {
-    // Load existing hub to get reference
-    const existing = await this.storage.loadHub(hubId);
-
-    // Fetch latest config from source
-    const config = await this.fetchHubConfig(existing.reference);
-
-    // Validate updated config
-    const validation = await this.validateHub(config);
-    if (!validation.valid) {
-      throw new Error(`Hub validation failed after sync: ${validation.errors.join(', ')}`);
-    }
-
-    // Update storage
-    await this.storage.saveHub(hubId, config, existing.reference);
+    await this.appHubManager.syncHub(hubId);
 
     // Reload hub sources into RegistryManager
     if (this.registryManager) {
@@ -717,23 +399,13 @@ export class HubManager {
    * @returns true if hub is accessible, false otherwise
    */
   public async verifyHubAvailability(reference: HubReference): Promise<boolean> {
-    try {
-      // Validate reference format
-      const refValidation = await this.validateReference(reference);
-      if (!refValidation.valid) {
-        this.logger.debug(`Hub verification failed: invalid reference - ${refValidation.errors.join(', ')}`);
-        return false;
-      }
-
-      // Try to fetch the hub config
-      await this.fetchHubConfig(reference);
-
+    const available = await this.appHubManager.verifyHubAvailability(reference);
+    if (available) {
       this.logger.debug(`Hub verification successful: ${reference.type}:${reference.location}`);
-      return true;
-    } catch (error) {
-      this.logger.debug(`Hub verification failed: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
+    } else {
+      this.logger.debug(`Hub verification failed: ${reference.type}:${reference.location}`);
     }
+    return available;
   }
 
   /**
@@ -815,7 +487,7 @@ export class HubManager {
    * @returns Active hub ID, or null if no hub is active
    */
   public async getActiveHubId(): Promise<string | null> {
-    return this.storage.getActiveHubId();
+    return this.appHubManager.getActiveHubId();
   }
 
   /**
@@ -823,19 +495,7 @@ export class HubManager {
    * @returns Active hub ID, config and reference, or null if no hub is active
    */
   public async getActiveHub(): Promise<LoadHubResult | null> {
-    const activeHubId = await this.storage.getActiveHubId();
-
-    if (!activeHubId) {
-      return null;
-    }
-
-    try {
-      return await this.storage.loadHub(activeHubId);
-    } catch {
-      // If active hub was deleted, clear the activeHubId
-      await this.storage.setActiveHubId(null);
-      return null;
-    }
+    return this.appHubManager.getActiveHub();
   }
 
   /**
@@ -844,7 +504,7 @@ export class HubManager {
    */
   public async setActiveHub(hubId: string | null): Promise<void> {
     // Get current active hub to check if we're switching
-    const currentActiveHubId = await this.storage.getActiveHubId();
+    const currentActiveHubId = await this.appHubManager.getActiveHubId();
 
     // Cleanup previous hub if switching to a different one
     if (currentActiveHubId && currentActiveHubId !== hubId) {
@@ -865,7 +525,7 @@ export class HubManager {
     }
 
     // Set or clear active hub
-    await this.storage.setActiveHubId(hubId);
+    await this.appHubManager.setActiveHub(hubId);
     this.logger.info(hubId ? `Set active hub: ${hubId}` : 'Cleared active hub');
 
     if (currentActiveHubId !== hubId) {
@@ -1270,12 +930,7 @@ export class HubManager {
    */
   public async getHub(hubId: string): Promise<{ id: string; config: HubConfig; reference: HubReference } | null> {
     try {
-      const result = await this.storage.loadHub(hubId);
-      return {
-        id: hubId,
-        config: result.config,
-        reference: result.reference
-      };
+      return await this.appHubManager.getHub(hubId);
     } catch {
       return null;
     }

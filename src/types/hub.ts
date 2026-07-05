@@ -4,10 +4,12 @@
  */
 
 import {
-  hasPathTraversal,
   sanitizeHubId as sanitizeHubIdCore,
   validateHubReference as validateHubReferenceCore,
 } from '@ai-primitives-hub/core';
+import {
+  validateHubConfig as validateHubConfigInfra,
+} from '@ai-primitives-hub/infra';
 import {
   Profile,
   RegistrySource,
@@ -208,104 +210,7 @@ export function validateHubReference(ref: HubReference): void {
  * @returns Validation result with errors if any
  */
 export function validateHubConfig(config: any): ValidationResult {
-  const errors: string[] = [];
-
-  // Check required fields
-  if (config.version) {
-    // Validate semver format
-    if (!/^\d+\.\d+\.\d+$/.test(config.version)) {
-      errors.push('version must be in semver format (e.g., 1.0.0)');
-    }
-  } else {
-    errors.push('version is required');
-  }
-
-  if (config.metadata) {
-    // Validate metadata fields
-    if (!config.metadata.name) {
-      errors.push('metadata.name is required');
-    }
-    if (!config.metadata.description) {
-      errors.push('metadata.description is required');
-    }
-    if (!config.metadata.maintainer) {
-      errors.push('metadata.maintainer is required');
-    }
-    if (!config.metadata.updatedAt) {
-      errors.push('metadata.updatedAt is required');
-    }
-
-    // Validate checksum format if provided
-    if (config.metadata.checksum && !/^(sha256|sha512):[a-f0-9]+$/.test(config.metadata.checksum)) {
-      errors.push('metadata.checksum must be in format "sha256:hash" or "sha512:hash"');
-    }
-  } else {
-    errors.push('metadata is required');
-  }
-
-  if (config.sources) {
-    // Validate sources
-    if (Array.isArray(config.sources)) {
-      config.sources.forEach((source: any, index: number) => {
-        if (source.id) {
-          // Check for path traversal in source ID
-          if (hasPathTraversal(source.id)) {
-            errors.push(`source[${index}].id contains path traversal: ${source.id}`);
-          }
-        } else {
-          errors.push(`source[${index}].id is required`);
-        }
-        if (!source.type) {
-          errors.push(`source[${index}].type is required`);
-        }
-      });
-    } else {
-      errors.push('sources must be an array');
-    }
-  } else {
-    errors.push('sources is required');
-  }
-
-  // Validate profiles if provided
-  if (config.profiles) {
-    if (Array.isArray(config.profiles)) {
-      // Build source ID set for validation
-      const sourceIds = new Set(
-        config.sources ? config.sources.map((s: any) => s.id) : []
-      );
-
-      config.profiles.forEach((profile: any, pIndex: number) => {
-        if (!profile.id) {
-          errors.push(`profile[${pIndex}].id is required`);
-        }
-        if (!profile.name) {
-          errors.push(`profile[${pIndex}].name is required`);
-        }
-
-        // Validate bundles
-        if (profile.bundles && Array.isArray(profile.bundles)) {
-          profile.bundles.forEach((bundle: any, bIndex: number) => {
-            // Check for path traversal in bundle ID
-            if (bundle.id && hasPathTraversal(bundle.id)) {
-              errors.push(`profile[${pIndex}].bundle[${bIndex}].id contains path traversal: ${bundle.id}`);
-            }
-
-            // Validate source reference
-            if (bundle.source && !sourceIds.has(bundle.source)) {
-              errors.push(`profile[${pIndex}].bundle[${bIndex}] references non-existent source: ${bundle.source}`);
-            }
-          });
-        }
-      });
-    } else {
-      errors.push('profiles must be an array');
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors
-  };
+  return validateHubConfigInfra(config);
 }
 
 /**

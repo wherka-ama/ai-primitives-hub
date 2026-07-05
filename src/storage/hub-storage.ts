@@ -5,7 +5,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as yaml from 'js-yaml';
+import {
+  ActiveHubStore,
+  HubStore,
+  NodeFileSystem,
+} from '@ai-primitives-hub/infra';
 import {
   HubConfig,
   HubReference,
@@ -31,11 +35,20 @@ export interface LoadHubResult {
 }
 
 /**
- * HubStorage manages persistent storage of hub configurations
+ * HubStorage manages persistent storage of hub configurations.
+ *
+ * Thin facade over `@ai-primitives-hub/infra`'s `HubStore` +
+ * `ActiveHubStore` (migration plan §7.5, HubManager Stage 1): those
+ * own the actual on-disk CRUD, this class layers an in-memory cache
+ * on top (for fidelity with pre-existing behavior) plus the
+ * favorites/profile-activation-state responsibilities that haven't
+ * been ported yet (Stages 3/4).
  */
 export class HubStorage {
   private readonly storagePath: string;
   private readonly cache: Map<string, LoadHubResult>;
+  private readonly hubStore: HubStore;
+  private readonly activeHubStore: ActiveHubStore;
 
   /**
    * Initialize hub storage
@@ -53,31 +66,28 @@ export class HubStorage {
     if (!fs.existsSync(this.storagePath)) {
       fs.mkdirSync(this.storagePath, { recursive: true });
     }
+
+    const nodeFs = new NodeFileSystem();
+    this.hubStore = new HubStore(this.storagePath, nodeFs);
+    this.activeHubStore = new ActiveHubStore(path.join(this.storagePath, 'activeHubId.json'), nodeFs);
   }
 
   /**
-   * Validate hub ID for security
-   * @param hubId Hub identifier to validate
-   * @throws {Error} if hub ID is invalid
+   * Expose the underlying infra `HubStore`, e.g. for `HubManager`'s
+   * app-layer delegate wiring.
+   * @returns The infra HubStore backing this facade.
    */
-  private validateHubId(hubId: string): void {
-    try {
-      sanitizeHubId(hubId);
-    } catch (error) {
-      throw new Error(`Invalid hub ID: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  public getHubStore(): HubStore {
+    return this.hubStore;
   }
 
   /**
-   * Get file paths for hub storage
-   * @param hubId Hub identifier
-   * @returns Paths for config and metadata files
+   * Expose the underlying infra `ActiveHubStore`, e.g. for
+   * `HubManager`'s app-layer delegate wiring.
+   * @returns The infra ActiveHubStore backing this facade.
    */
-  private getHubPaths(hubId: string): { config: string; meta: string } {
-    return {
-      config: path.join(this.storagePath, `${hubId}.yml`),
-      meta: path.join(this.storagePath, `${hubId}.meta.json`)
-    };
+  public getActiveHubStore(): ActiveHubStore {
+    return this.activeHubStore;
   }
 
   /**
@@ -87,32 +97,8 @@ export class HubStorage {
    * @param reference Hub reference information
    */
   public async saveHub(hubId: string, config: HubConfig, reference: HubReference): Promise<void> {
-    this.validateHubId(hubId);
-
-    const paths = this.getHubPaths(hubId);
-
-    try {
-      // Write config as YAML
-      const yamlContent = yaml.dump(config, {
-        indent: 2,
-        lineWidth: 120,
-        noRefs: true
-      });
-      fs.writeFileSync(paths.config, yamlContent, 'utf8');
-
-      // Write metadata as JSON
-      const metadata: HubMetadata = {
-        reference,
-        lastModified: new Date(),
-        size: Buffer.byteLength(yamlContent, 'utf8')
-      };
-      fs.writeFileSync(paths.meta, JSON.stringify(metadata, null, 2), 'utf8');
-
-      // Update cache
-      this.cache.set(hubId, { config, reference });
-    } catch (error) {
-      throw new Error(`Failed to save hub '${hubId}': ${error instanceof Error ? error.message : String(error)}`);
-    }
+    await this.hubStore.save(hubId, config, reference);
+    this.cache.set(hubId, { config, reference });
   }
 
   /**
@@ -122,48 +108,13 @@ export class HubStorage {
    * @returns Loaded hub configuration and reference
    */
   public async loadHub(hubId: string, forceReload = false): Promise<LoadHubResult> {
-    this.validateHubId(hubId);
-
-    // Check cache first
     if (!forceReload && this.cache.has(hubId)) {
       return this.cache.get(hubId)!;
     }
 
-    const paths = this.getHubPaths(hubId);
-
-    // Check if hub exists
-    if (!fs.existsSync(paths.config)) {
-      throw new Error(`Hub not found: ${hubId}`);
-    }
-
-    try {
-      // Load config from YAML
-      const configContent = fs.readFileSync(paths.config, 'utf8');
-      const config = yaml.load(configContent) as HubConfig;
-
-      // Load metadata
-      let reference: HubReference;
-      if (fs.existsSync(paths.meta)) {
-        const metaContent = fs.readFileSync(paths.meta, 'utf8');
-        const metadata = JSON.parse(metaContent) as HubMetadata;
-        reference = metadata.reference;
-      } else {
-        // Fallback if metadata doesn't exist
-        reference = {
-          type: 'local',
-          location: paths.config
-        };
-      }
-
-      const result: LoadHubResult = { config, reference };
-
-      // Update cache
-      this.cache.set(hubId, result);
-
-      return result;
-    } catch (error) {
-      throw new Error(`Failed to load hub '${hubId}': ${error instanceof Error ? error.message : String(error)}`);
-    }
+    const result = await this.hubStore.load(hubId);
+    this.cache.set(hubId, result);
+    return result;
   }
 
   /**
@@ -171,42 +122,8 @@ export class HubStorage {
    * @param hubId Hub identifier to delete
    */
   public async deleteHub(hubId: string): Promise<void> {
-    this.validateHubId(hubId);
-
-    const paths = this.getHubPaths(hubId);
-
-    if (!fs.existsSync(paths.config)) {
-      throw new Error(`Hub not found: ${hubId}`);
-    }
-
-    try {
-      // Delete config file
-      if (fs.existsSync(paths.config)) {
-        fs.unlinkSync(paths.config);
-      }
-
-      // Delete metadata file
-      if (fs.existsSync(paths.meta)) {
-        fs.unlinkSync(paths.meta);
-      }
-
-      // Clean up activation state files for this hub
-      const activationsDir = path.join(this.storagePath, 'profile-activations');
-      if (fs.existsSync(activationsDir)) {
-        const files = fs.readdirSync(activationsDir);
-        for (const file of files) {
-          if (file.startsWith(`${hubId}_`) && file.endsWith('.json')) {
-            const filePath = path.join(activationsDir, file);
-            fs.unlinkSync(filePath);
-          }
-        }
-      }
-
-      // Remove from cache
-      this.cache.delete(hubId);
-    } catch (error) {
-      throw new Error(`Failed to delete hub '${hubId}': ${error instanceof Error ? error.message : String(error)}`);
-    }
+    await this.hubStore.remove(hubId);
+    this.cache.delete(hubId);
   }
 
   /**
@@ -214,21 +131,7 @@ export class HubStorage {
    * @returns Array of hub IDs
    */
   public async listHubs(): Promise<string[]> {
-    try {
-      const files = fs.readdirSync(this.storagePath);
-      const hubIds: string[] = [];
-
-      for (const file of files) {
-        if (file.endsWith('.yml')) {
-          const hubId = file.replace('.yml', '');
-          hubIds.push(hubId);
-        }
-      }
-
-      return hubIds;
-    } catch (error) {
-      throw new Error(`Failed to list hubs: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    return this.hubStore.list();
   }
 
   /**
@@ -237,20 +140,15 @@ export class HubStorage {
    * @returns Hub metadata
    */
   public async getHubMetadata(hubId: string): Promise<HubMetadata> {
-    this.validateHubId(hubId);
-
-    const paths = this.getHubPaths(hubId);
-
-    if (!fs.existsSync(paths.meta)) {
-      throw new Error(`Hub not found: ${hubId}`);
-    }
-
-    try {
-      const metaContent = fs.readFileSync(paths.meta, 'utf8');
-      return JSON.parse(metaContent) as HubMetadata;
-    } catch (error) {
-      throw new Error(`Failed to get metadata for hub '${hubId}': ${error instanceof Error ? error.message : String(error)}`);
-    }
+    const metadata = await this.hubStore.getMetadata(hubId);
+    return {
+      reference: metadata.reference,
+      // `lastModified` is persisted as an ISO string; kept typed as `Date`
+      // here for backward compatibility with this method's pre-existing
+      // (mis-typed, but never runtime-checked) public signature.
+      lastModified: metadata.lastModified as unknown as Date,
+      size: metadata.size
+    };
   }
 
   /**
@@ -377,20 +275,7 @@ export class HubStorage {
    * @returns Active hub ID or null if none set
    */
   public async getActiveHubId(): Promise<string | null> {
-    const activeHubPath = path.join(this.storagePath, 'activeHubId.json');
-
-    if (!fs.existsSync(activeHubPath)) {
-      return null;
-    }
-
-    try {
-      const content = await fs.promises.readFile(activeHubPath, 'utf8');
-      const data = JSON.parse(content);
-      return data.hubId || null;
-    } catch (error) {
-      console.error('Failed to read active hub ID:', error);
-      return null;
-    }
+    return this.activeHubStore.get();
   }
 
   /**
@@ -398,33 +283,19 @@ export class HubStorage {
    * @param hubId Hub identifier to set as active (or null to clear)
    */
   public async setActiveHubId(hubId: string | null): Promise<void> {
-    const activeHubPath = path.join(this.storagePath, 'activeHubId.json');
-
     if (hubId === null) {
-      // Clear active hub
-      if (fs.existsSync(activeHubPath)) {
-        await fs.promises.unlink(activeHubPath);
-      }
+      await this.activeHubStore.set(null);
       return;
     }
 
     // Validate the hub exists
-    this.validateHubId(hubId);
+    sanitizeHubId(hubId);
     const hubs = await this.listHubs();
     if (!hubs.includes(hubId)) {
       throw new Error(`Cannot set active hub: hub '${hubId}' does not exist`);
     }
 
-    // Write active hub ID
-    const data = {
-      hubId,
-      setAt: new Date().toISOString()
-    };
-    await fs.promises.writeFile(
-      activeHubPath,
-      JSON.stringify(data, null, 2),
-      'utf8'
-    );
+    await this.activeHubStore.set(hubId);
   }
 
   /**
