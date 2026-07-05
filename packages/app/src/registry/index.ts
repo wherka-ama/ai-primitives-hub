@@ -8,4 +8,5 @@ export * from './install-registry-bundle';
 export * from './list-installed-bundles';
 export * from './resolve-installation-bundle';
 export * from './uninstall-installed-bundle';
+export * from './update-registry-bundle';
 export * from './version-consolidator';

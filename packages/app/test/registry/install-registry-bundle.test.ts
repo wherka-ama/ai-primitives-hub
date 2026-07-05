@@ -80,7 +80,7 @@ function makeAdapter(overrides: Partial<LocalSkillsCapableAdapter> = {}): LocalS
     source: makeSource(),
     fetchBundles: async () => [],
     downloadBundle: async () => Buffer.from('zip-bytes'),
-    fetchMetadata: async () => ({ name: 'Source 1', type: 'github', url: 'https://example.com' }),
+    fetchMetadata: async () => ({ name: 'Source 1', description: 'Test source', bundleCount: 1, lastUpdated: '2024-01-01T00:00:00.000Z', version: '1.0.0' }),
     validate: async () => ({ valid: true, errors: [], warnings: [] }),
     requiresAuthentication: () => false,
     getManifestUrl: () => 'https://example.com/manifest',

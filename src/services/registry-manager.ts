@@ -8,6 +8,7 @@ import {
   installRegistryBundle,
   listInstalledBundles as listInstalledBundlesCore,
   uninstallInstalledBundle,
+  updateRegistryBundle,
 } from '@ai-primitives-hub/app';
 import type {
   LogEvent,
@@ -1344,105 +1345,29 @@ export class RegistryManager {
    * @param version
    */
   public async updateBundle(bundleId: string, version?: string): Promise<void> {
-    this.logger.info(`Updating bundle: ${bundleId} to version: ${version || 'latest'}`);
-
-    // Get current installation - use listInstalledBundles to include repository-scoped bundles
-    const allInstalled = await this.listInstalledBundles();
-    const current = allInstalled.find((b) => b.bundleId === bundleId);
-
-    if (!current) {
-      throw new Error(`Bundle '${bundleId}' is not installed`);
-    }
-
-    // For repository-scoped bundles, check for local modifications before updating
-    // Requirements: 14.1-14.10
-    await this.checkLocalModificationsBeforeUpdate(bundleId, current);
-
-    // Get new bundle details
-    // Extract identity for GitHub bundles to find the latest version
-    const identity = current.sourceType === 'github'
-      ? VersionManager.extractBundleIdentity(bundleId, 'github')
-      : bundleId.replace(/-v?\d+\.\d+\.\d+(-[\w.]+)?$/, '');
-
-    let bundle: Bundle;
-    if (version) {
-      // Search for the specific version
-      const versionedId = `${identity}-${version}`;
-
-      try {
-        bundle = await this.getBundleDetails(versionedId);
-      } catch {
-        // If versioned ID not found, try the identity
-        this.logger.warn(`Bundle '${versionedId}' not found, trying identity '${identity}'`);
-        bundle = await this.getBundleDetails(identity);
-        // Verify the version matches
-        if (bundle.version !== version) {
-          throw new Error(`Requested version ${version} not found for bundle '${identity}'`);
-        }
-      }
-    } else {
-      // Try to get bundle by identity first (for GitHub bundles with versions)
-      try {
-        bundle = await this.getBundleDetails(identity);
-        this.logger.debug(`Found bundle by identity: ${identity} -> ${bundle.id} v${bundle.version}`);
-      } catch {
-        // Fall back to exact bundleId if identity lookup fails
-        this.logger.debug(`Identity lookup failed for '${identity}', trying exact bundleId '${bundleId}'`);
-        bundle = await this.getBundleDetails(bundleId);
-      }
-    }
-
-    // Check if update is needed
-    if (current.version === bundle.version) {
-      this.logger.info(`Bundle '${bundleId}' is already at version ${bundle.version}, reinstalling...`);
-      // Continue with reinstall instead of returning early
-    }
-
-    // Get source and adapter
-    const sources = await this.storage.getSources();
-    const source = sources.find((s) => s.id === bundle.sourceId);
-
-    if (!source) {
-      throw new Error(`Source '${bundle.sourceId}' not found`);
-    }
-
-    const adapter = this.getAdapter(source);
-
-    // Unified download path: use downloadBundle() for all sources
-    this.logger.debug(`Downloading bundle update from ${source.type} adapter`);
-    const bundleBuffer = await adapter.downloadBundle(bundle);
-    this.logger.debug(`Bundle downloaded: ${bundleBuffer.length} bytes`);
-
-    // Update using BundleInstaller
-    const updated = await this.installer.update(
-      current,
-      bundle,
-      bundleBuffer,
-      source.type
-    );
-
-    // CRITICAL: Write new installation record first, then remove old record
-    // This ordering ensures crash-safety - if removal fails, we have the new record
-    // If write fails, the old record remains intact
-    // Note: Repository scope bundles are tracked via LockfileManager, not RegistryStorage
-    // The lockfile is already updated by BundleInstaller during update
-    this.logger.debug(`Recording new installation for '${updated.bundleId}' v${updated.version}`);
-    if (current.scope !== 'repository') {
-      await this.storage.recordInstallation(updated);
-    }
-
-    // Only remove old record if bundleId changed (e.g., GitHub bundles with version in ID)
-    // For Awesome Copilot bundles, the bundleId doesn't include version, so old and new are the same
-    // In that case, recordInstallation already overwrote the old record
-    if (updated.bundleId !== bundleId && current.scope !== 'repository') {
-      this.logger.debug(`Removing old installation record for '${bundleId}' from ${current.scope} scope`);
-      await this.storage.removeInstallation(bundleId, current.scope);
-    } else {
-      this.logger.debug(`BundleId unchanged ('${bundleId}'), old record already overwritten`);
-    }
+    // See installBundle's identical, documented `as InstalledBundle` cast:
+    // core's DeploymentManifest.mcpServers is intentionally looser than this
+    // extension's McpServersManifest; the data itself is always this
+    // extension's own shape here too, since it only ever flows from
+    // RegistryStorage/BundleInstaller below.
+    const updated = await updateRegistryBundle(
+      bundleId,
+      version,
+      {
+        listInstalledBundles: () => this.listInstalledBundles(),
+        checkLocalModifications: (id, current) => this.checkLocalModificationsBeforeUpdate(id, current as InstalledBundle),
+        getBundleDetails: (id) => this.getBundleDetails(id),
+        listSources: () => this.storage.getSources(),
+        getAdapter: (source) => this.getAdapter(source),
+        updateInstalledBundle: (current, bundle, buffer, sourceType) =>
+          this.installer.update(current as InstalledBundle, bundle, buffer, sourceType),
+        recordInstallation: (installation) => this.storage.recordInstallation(installation as InstalledBundle),
+        removeInstallation: (id, scope) => this.storage.removeInstallation(id, scope)
+      },
+      (event) => this.forwardLogEvent(event)
+    ) as InstalledBundle;
 
     this._onBundleUpdated.fire(updated);
-    this.logger.info(`Bundle '${bundleId}' updated from v${current.version} to v${bundle.version}`);
   }
 
   /**
