@@ -8,6 +8,7 @@ export * from './hub-manager';
 export * from './install-registry-bundle';
 export * from './list-installed-bundles';
 export * from './load-hub-sources';
+export * from './profile-lifecycle';
 export * from './resolve-installation-bundle';
 export * from './search-registry-bundles';
 export * from './uninstall-installed-bundle';

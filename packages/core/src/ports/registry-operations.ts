@@ -59,6 +59,20 @@ export interface HubSourceSync {
 }
 
 /**
+ * Registry operations needed while activating a hub profile: properly
+ * deactivate a previously-active profile elsewhere (uninstalling its
+ * bundles, not just clearing its flag), and install the newly-active
+ * profile's bundles. Optional dependency of `activateProfile` — when
+ * absent, the caller falls back to flag-only bookkeeping and skips
+ * installation (mirrors the extension's own `if (this.registryManager)`
+ * branching in `src/services/hub-manager.ts`).
+ */
+export interface ProfileLifecycleSync {
+  deactivateProfile(profileId: string): Promise<void>;
+  installBundles(items: { bundleId: string; options: { scope: 'user'; force: boolean; profileId: string } }[]): Promise<void>;
+}
+
+/**
  * The read-only registry surface `UpdateChecker` needs: sync sources,
  * compare installed vs. latest versions, and enrich the result with
  * per-bundle metadata.
