@@ -144,6 +144,20 @@ suite('HubManager', () => {
         /Hub validation failed/
       );
     });
+
+    test('should refresh cached config when re-importing over an existing hub id', async () => {
+      await hubManager.importHub(localRef, 'test-reimport');
+
+      // Populate HubStorage's read-through cache with the original config.
+      const original = await storage.loadHub('test-reimport');
+      assert.strictEqual(original.config.metadata.name, 'Official Prompt Registry Hub');
+
+      const otherFixture = path.join(__dirname, '..', 'fixtures', 'hubs', 'hub-two-sources.yml');
+      await hubManager.importHub({ type: 'local', location: otherFixture }, 'test-reimport');
+
+      const reloaded = await storage.loadHub('test-reimport');
+      assert.strictEqual(reloaded.config.metadata.name, 'Test Hub - Two Sources');
+    });
   });
 
   suite('Hub Validation', () => {
@@ -242,6 +256,20 @@ suite('HubManager', () => {
     test('should fail to delete non-existent hub', async () => {
       await assert.rejects(
         async () => await hubManager.deleteHub('non-existent'),
+        /Hub not found/
+      );
+    });
+
+    test('should not return stale cached config after deletion', async () => {
+      await hubManager.importHub(localRef, 'test-delete-cache');
+
+      // Populate HubStorage's read-through cache.
+      await storage.loadHub('test-delete-cache');
+
+      await hubManager.deleteHub('test-delete-cache');
+
+      await assert.rejects(
+        async () => await storage.loadHub('test-delete-cache'),
         /Hub not found/
       );
     });

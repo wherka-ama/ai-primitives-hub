@@ -298,6 +298,12 @@ export class HubManager {
   public async importHub(reference: HubReference, hubId?: string): Promise<string> {
     const resolvedHubId = await this.appHubManager.importHub(reference, hubId);
 
+    // appHubManager writes through the raw HubStore, bypassing HubStorage's
+    // read-through cache. When `hubId` reuses an already-cached id, that
+    // leaves a stale entry behind — force a refresh so loadHubSources() (and
+    // any other caller reading via `this.storage`) see the imported config.
+    await this.storage.loadHub(resolvedHubId, true);
+
     // Load hub sources into RegistryManager
     if (this.registryManager) {
       await this.loadHubSources(resolvedHubId);
@@ -342,7 +348,10 @@ export class HubManager {
     // Cleanup resources linked to this hub before deleting
     await this.cleanupHubResources(hubId);
 
-    await this.appHubManager.deleteHub(hubId);
+    // Delete via `this.storage`, not appHubManager: both ultimately call the
+    // same underlying HubStore.remove(), but only HubStorage's own version
+    // also evicts the now-deleted hub from its read-through cache.
+    await this.storage.deleteHub(hubId);
     this._onHubDeleted.fire(hubId);
   }
 
@@ -377,6 +386,10 @@ export class HubManager {
    */
   public async syncHub(hubId: string): Promise<void> {
     await this.appHubManager.syncHub(hubId);
+
+    // Same cache-consistency concern as importHub(): refresh HubStorage's
+    // cache with the just-synced config before anything reads it back.
+    await this.storage.loadHub(hubId, true);
 
     // Reload hub sources into RegistryManager
     if (this.registryManager) {
