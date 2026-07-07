@@ -20,6 +20,7 @@ export * from './resolvers';
 export * from './search';
 export * from './storage';
 export * from './stores';
+export * from './telemetry';
 export * from './writers';
 
 /**
