@@ -10,6 +10,7 @@ import {
   FavoritesStore,
   HubStore,
   NodeFileSystem,
+  ProfileActivationStore,
 } from '@ai-primitives-hub/infra';
 import {
   HubConfig,
@@ -39,13 +40,12 @@ export interface LoadHubResult {
  * HubStorage manages persistent storage of hub configurations.
  *
  * Thin facade over `@ai-primitives-hub/infra`'s `HubStore` +
- * `ActiveHubStore` + `FavoritesStore` (migration plan §7.5, HubManager
- * Stages 1+3): those own the actual on-disk CRUD, this class layers
- * an in-memory cache on top (for fidelity with pre-existing behavior,
- * hub configs only — `FavoritesStore` is deliberately left stateless
- * here too, mirroring its own no-cache design) plus the
- * profile-activation-state responsibilities that haven't been ported
- * yet (Stage 4).
+ * `ActiveHubStore` + `FavoritesStore` + `ProfileActivationStore`
+ * (migration plan §7.5, HubManager Stages 1+3+4): those own the actual
+ * on-disk CRUD, this class layers an in-memory cache on top (for
+ * fidelity with pre-existing behavior, hub configs only —
+ * `FavoritesStore`/`ProfileActivationStore` are deliberately left
+ * stateless here too, mirroring their own no-cache design).
  */
 export class HubStorage {
   private readonly storagePath: string;
@@ -53,6 +53,7 @@ export class HubStorage {
   private readonly hubStore: HubStore;
   private readonly activeHubStore: ActiveHubStore;
   private readonly favoritesStore: FavoritesStore;
+  private readonly activationStore: ProfileActivationStore;
 
   /**
    * Initialize hub storage
@@ -75,6 +76,7 @@ export class HubStorage {
     this.hubStore = new HubStore(this.storagePath, nodeFs);
     this.activeHubStore = new ActiveHubStore(path.join(this.storagePath, 'activeHubId.json'), nodeFs);
     this.favoritesStore = new FavoritesStore(path.join(this.storagePath, 'favorites.json'), nodeFs);
+    this.activationStore = new ProfileActivationStore(this.storagePath, nodeFs);
   }
 
   /**
@@ -102,6 +104,15 @@ export class HubStorage {
    */
   public getFavoritesStore(): FavoritesStore {
     return this.favoritesStore;
+  }
+
+  /**
+   * Expose the underlying infra `ProfileActivationStore`, e.g. for
+   * `HubManager`'s app-layer delegate wiring.
+   * @returns The infra ProfileActivationStore backing this facade.
+   */
+  public getProfileActivationStore(): ProfileActivationStore {
+    return this.activationStore;
   }
 
   /**
@@ -176,11 +187,7 @@ export class HubStorage {
     profileId: string,
     state: ProfileActivationState
   ): Promise<void> {
-    const stateDir = path.join(this.storagePath, 'profile-activations');
-    await fs.promises.mkdir(stateDir, { recursive: true });
-
-    const statePath = path.join(stateDir, `${hubId}_${profileId}.json`);
-    await fs.promises.writeFile(statePath, JSON.stringify(state, null, 2));
+    await this.activationStore.save(hubId, profileId, state);
   }
 
   /**
@@ -192,18 +199,7 @@ export class HubStorage {
     hubId: string,
     profileId: string
   ): Promise<ProfileActivationState | null> {
-    const statePath = path.join(
-      this.storagePath,
-      'profile-activations',
-      `${hubId}_${profileId}.json`
-    );
-
-    if (!fs.existsSync(statePath)) {
-      return null;
-    }
-
-    const content = await fs.promises.readFile(statePath, 'utf8');
-    return JSON.parse(content);
+    return this.activationStore.get(hubId, profileId);
   }
 
   /**
@@ -215,41 +211,14 @@ export class HubStorage {
     hubId: string,
     profileId: string
   ): Promise<void> {
-    const statePath = path.join(
-      this.storagePath,
-      'profile-activations',
-      `${hubId}_${profileId}.json`
-    );
-
-    if (fs.existsSync(statePath)) {
-      await fs.promises.unlink(statePath);
-    }
+    await this.activationStore.delete(hubId, profileId);
   }
 
   /**
    * List all active profiles
    */
   public async listActiveProfiles(): Promise<ProfileActivationState[]> {
-    const stateDir = path.join(this.storagePath, 'profile-activations');
-
-    if (!fs.existsSync(stateDir)) {
-      return [];
-    }
-
-    const files = await fs.promises.readdir(stateDir);
-    const states: ProfileActivationState[] = [];
-
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        const content = await fs.promises.readFile(
-          path.join(stateDir, file),
-          'utf8'
-        );
-        states.push(JSON.parse(content));
-      }
-    }
-
-    return states;
+    return this.activationStore.listAll();
   }
 
   /**

@@ -5,15 +5,30 @@
 
 import * as path from 'node:path';
 import {
+  activateProfile as appActivateProfile,
+  createConflictResolutionDialog as appCreateConflictResolutionDialog,
+  deactivateProfile as appDeactivateProfile,
+  formatChangeSummary as appFormatChangeSummary,
+  getActiveProfile as appGetActiveProfile,
+  getHubProfile as appGetHubProfile,
+  getProfileChanges as appGetProfileChanges,
+  hasProfileChanges as appHasProfileChanges,
   HubManager as AppHubManager,
+  listAllActiveProfiles as appListAllActiveProfiles,
+  listProfilesFromHub as appListProfilesFromHub,
   loadHubSources as appLoadHubSources,
+  resolveProfileBundles as appResolveProfileBundles,
+  syncProfile as appSyncProfile,
 } from '@ai-primitives-hub/app';
 import type {
+  HubConfigStore,
   LogEvent,
+  ProfileLifecycleDeps,
 } from '@ai-primitives-hub/app';
 import type {
   HubConfig as CoreHubConfig,
   ValidationResult as CoreValidationResult,
+  ProfileLifecycleSync,
 } from '@ai-primitives-hub/core';
 import {
   CompositeHubResolver,
@@ -104,6 +119,8 @@ export class HubManager {
   private readonly hubSchemaPath: string;
   private readonly logger: Logger;
   private readonly appHubManager: AppHubManager;
+  private readonly profileLifecycleDeps: ProfileLifecycleDeps;
+  private readonly translateLogEvent: (event: LogEvent) => void;
   private readonly _onHubImported = new vscode.EventEmitter<string>();
   private readonly _onHubDeleted = new vscode.EventEmitter<string>();
   private readonly _onHubSynced = new vscode.EventEmitter<string>();
@@ -143,6 +160,26 @@ export class HubManager {
     this.validator = validator;
     this.hubSchemaPath = path.join(extensionPath, 'schemas', 'hub-config.schema.json');
     this.logger = Logger.getInstance();
+    this.translateLogEvent = (event: LogEvent): void => {
+      switch (event.level) {
+        case 'debug': {
+          this.logger.debug(event.message);
+          break;
+        }
+        case 'info': {
+          this.logger.info(event.message);
+          break;
+        }
+        case 'warn': {
+          this.logger.warn(event.message);
+          break;
+        }
+        case 'error': {
+          this.logger.error(event.message, event.error);
+          break;
+        }
+      }
+    };
 
     // Fetch/auth wiring: GitHub auth follows the same fallback chain as
     // RegistryManager's source adapters (VS Code session, then `gh` CLI) —
@@ -172,6 +209,30 @@ export class HubManager {
         return { valid: true, errors: [], warnings: [] };
       }
     });
+
+    // Stage 4 profile-lifecycle wiring: `store` wraps `HubStorage`'s own
+    // cache-aware `saveHub`/`loadHub`/`listHubs` (not the raw, cache-
+    // bypassing `storage.getHubStore()` used above for Stage 1) so that
+    // activateProfile/deactivateProfile's config mutations stay visible
+    // through `HubStorage`'s in-memory cache to any direct caller of it.
+    const cacheAwareStore: HubConfigStore = {
+      save: (id: string, config, reference) => storage.saveHub(id, config, reference),
+      load: (id: string) => storage.loadHub(id),
+      list: () => storage.listHubs()
+    };
+
+    const profileSync: ProfileLifecycleSync | undefined = registryManager
+      ? {
+        deactivateProfile: (id: string) => registryManager.deactivateProfile(id),
+        installBundles: (items) => registryManager.installBundles(items)
+      }
+      : undefined;
+
+    this.profileLifecycleDeps = {
+      store: cacheAwareStore,
+      activationStore: storage.getProfileActivationStore(),
+      profileSync
+    };
   }
 
   /**
@@ -369,27 +430,7 @@ export class HubManager {
    * @returns Array of profiles from the hub
    */
   public async listProfilesFromHub(hubId: string): Promise<HubProfile[]> {
-    const hub = await this.storage.loadHub(hubId);
-    if (!hub) {
-      throw new Error(`Hub not found: ${hubId}`);
-    }
-
-    const profiles = hub.config.profiles || [];
-
-    // Enrich with activation state
-    try {
-      const activeState = await this.storage.getActiveProfileForHub(hubId);
-      if (activeState) {
-        return profiles.map((profile) => ({
-          ...profile,
-          active: activeState.profileId === profile.id
-        }));
-      }
-    } catch (error) {
-      this.logger.warn(`Failed to check profile activation state for hub ${hubId}`, error);
-    }
-
-    return profiles;
+    return appListProfilesFromHub(this.profileLifecycleDeps, hubId, this.translateLogEvent);
   }
 
   /**
@@ -399,20 +440,7 @@ export class HubManager {
    * @returns The requested profile
    */
   public async getHubProfile(hubId: string, profileId: string): Promise<HubProfile> {
-    const profiles = await this.listProfilesFromHub(hubId);
-    this.logger.info(`Found ${profiles.length} profiles in hub ${hubId}`);
-
-    const profile = profiles.find((p) => p.id === profileId);
-
-    if (!profile) {
-      this.logger.error(`Profile ${profileId} not found in hub ${hubId}. Available: ${profiles.map((p) => p.id).join(', ')}`);
-      throw new Error(`Profile not found: ${profileId} in hub ${hubId}`);
-    }
-
-    this.logger.info(`Found profile ${profileId}: ${profile.name}`);
-    this.logger.info(`Profile bundles: ${JSON.stringify(profile.bundles?.map((b) => ({ id: b.id, version: b.version })) || [])}`);
-
-    return profile;
+    return appGetHubProfile(this.profileLifecycleDeps, hubId, profileId, this.translateLogEvent);
   }
 
   /**
@@ -524,26 +552,7 @@ export class HubManager {
           addSource: (source) => this.registryManager.addSource(source),
           updateSource: (sourceId, updates) => this.registryManager.updateSource(sourceId, updates)
         },
-        (event: LogEvent) => {
-          switch (event.level) {
-            case 'debug': {
-              this.logger.debug(event.message);
-              break;
-            }
-            case 'info': {
-              this.logger.info(event.message);
-              break;
-            }
-            case 'warn': {
-              this.logger.warn(event.message);
-              break;
-            }
-            case 'error': {
-              this.logger.error(event.message, event.error);
-              break;
-            }
-          }
-        }
+        this.translateLogEvent
       );
     } catch (error) {
       this.logger.error(`Failed to load sources from hub ${hubId}`, error as Error);
@@ -584,26 +593,7 @@ export class HubManager {
     hubId: string,
     profileId: string
   ): Promise<ResolvedBundle[]> {
-    const profile = await this.getHubProfile(hubId, profileId);
-    const resolved: ResolvedBundle[] = [];
-
-    this.logger.info(`Resolving bundles for profile ${profileId} in hub ${hubId}`);
-    this.logger.info(`Profile has ${profile.bundles?.length || 0} bundles`);
-
-    if (!profile.bundles || profile.bundles.length === 0) {
-      this.logger.warn(`No bundles found in profile ${profileId}`);
-      return resolved;
-    }
-
-    for (const bundle of profile.bundles) {
-      this.logger.info(`Resolving bundle: ${bundle.id} v${bundle.version} from source: ${bundle.source}`);
-      // Note: We don't resolve URLs anymore since registryManager.installBundle()
-      // searches sources by bundle ID and uses the appropriate adapter
-      resolved.push({ bundle: bundle, url: '' }); // URL not needed
-    }
-
-    this.logger.info(`Resolved ${resolved.length} bundles total`);
-    return resolved;
+    return appResolveProfileBundles(this.profileLifecycleDeps, hubId, profileId, this.translateLogEvent);
   }
 
   /**
@@ -617,148 +607,7 @@ export class HubManager {
     profileId: string,
     options: ProfileActivationOptions
   ): Promise<ProfileActivationResult> {
-    try {
-      this.logger.info(`[HubManager] activateProfile called: hubId=${hubId}, profileId=${profileId}, installBundles=${options.installBundles}`);
-
-      // Verify hub and profile exist (throws if not found)
-      await this.getHubProfile(hubId, profileId);
-
-      // Deactivate ALL active hub profiles across ALL hubs (enforce single active profile globally)
-      // This will uninstall bundles from previously active profiles
-      const allHubIds = await this.storage.listHubs();
-      for (const currentHubId of allHubIds) {
-        // Load hub config to check for active profiles in YAML (not activation states)
-        const hubData = await this.storage.loadHub(currentHubId);
-        const activeProfile = hubData.config.profiles.find((p) => p.active);
-
-        if (activeProfile && activeProfile.id !== profileId) {
-          this.logger.info(`Deactivating hub profile from hub ${currentHubId}: ${activeProfile.id}`);
-
-          // Use RegistryManager to properly deactivate profile and uninstall its bundles
-          if (this.registryManager) {
-            try {
-              await this.registryManager.deactivateProfile(activeProfile.id);
-            } catch (error) {
-              this.logger.error(`Failed to deactivate profile ${activeProfile.id}`, error as Error);
-            }
-          } else {
-            // Fallback: just update flags if RegistryManager not available
-            await this.storage.setProfileActiveFlag(currentHubId, activeProfile.id, false);
-            await this.storage.deleteProfileActivationState(currentHubId, activeProfile.id);
-          }
-        }
-      }
-
-      // Resolve all bundles in the profile
-      const resolvedBundles = await this.resolveProfileBundles(hubId, profileId);
-
-      // Create activation state with bundle versions
-      const syncedBundleVersions: Record<string, string> = {};
-      resolvedBundles.forEach((rb) => {
-        syncedBundleVersions[rb.bundle.id] = rb.bundle.version;
-      });
-
-      const activationState: ProfileActivationState = {
-        hubId,
-        profileId,
-        activatedAt: new Date().toISOString(),
-        syncedBundles: resolvedBundles.map((rb) => rb.bundle.id),
-        syncedBundleVersions
-      };
-
-      // Save activation state
-      await this.storage.saveProfileActivationState(hubId, profileId, activationState);
-
-      // Mark profile as active in hub config
-      await this.storage.setProfileActiveFlag(hubId, profileId, true);
-
-      // Install bundles if requested and RegistryManager is available
-      if (options.installBundles && this.registryManager) {
-        this.logger.info(`Installing ${resolvedBundles.length} bundles for profile ${profileId}`);
-
-        const bundlesToInstall = resolvedBundles.map((rb) => ({
-          bundleId: rb.bundle.id,
-          options: {
-            scope: 'user' as const,
-            force: false,
-            profileId: profileId // Tag bundle with profile ID for tracking
-          }
-        }));
-
-        try {
-          await this.registryManager.installBundles(bundlesToInstall);
-
-          // Assuming success if no error thrown (installBundles handles errors internally but doesn't return individual results easily yet, but logs them)
-          this.logger.info(`Bundle installation complete`);
-        } catch (error) {
-          this.logger.error('Batch bundle installation failed', error as Error);
-        }
-      } else if (options.installBundles && !this.registryManager) {
-        this.logger.warn('Bundle installation requested but RegistryManager not available');
-      }
-
-      // Note: Hub profiles are managed separately and displayed in tree view via HubManager
-      // No need to sync to local profile storage - that would create duplicates
-      /* DISABLED - Hub profiles don't need local sync
-            // Sync with local profile in RegistryManager
-            if (this.registryManager) {
-                try {
-                    const localProfiles = await this.registryManager.listProfiles();
-                    const localProfile = localProfiles.find((p: any) => p.id === profileId);
-
-                    // Convert hub profile bundles to local profile format
-                    const profileBundles = resolvedBundles.map(rb => ({
-                        id: rb.bundle.id,
-                        version: rb.bundle.version,
-                        required: true
-                    }));
-
-                    if (localProfile) {
-                        // Update existing profile
-                        this.logger.info(`Updating local profile: ${profileId}`);
-                        await this.registryManager.updateProfile(profileId, {
-                            bundles: profileBundles,
-                            active: true
-                        });
-                    } else {
-                        // Create new profile
-                        this.logger.info(`Creating local profile: ${profileId}`);
-                        await this.registryManager.createProfile({
-                            id: profileId,
-                            name: profile.name,
-                            description: profile.description || `Profile from hub ${hubId}`,
-                            icon: profile.icon || '📦',
-                            bundles: profileBundles,
-                            active: true
-                        });
-                    }
-                    this.logger.info(`Local profile ${profileId} synced successfully`);
-                } catch (error) {
-                    this.logger.error(`Failed to sync local profile: ${profileId}`, error as Error);
-                }
-            } else {
-                this.logger.warn('RegistryManager not available, local profile not synced');
-            }
-            */
-
-      return {
-        success: true,
-        hubId,
-        profileId,
-        resolvedBundles: resolvedBundles.map((rb) => ({
-          bundle: rb.bundle,
-          url: rb.url
-        }))
-      };
-    } catch (error) {
-      return {
-        success: false,
-        hubId,
-        profileId,
-        resolvedBundles: [],
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
+    return appActivateProfile(this.profileLifecycleDeps, hubId, profileId, options, this.translateLogEvent);
   }
 
   /**
@@ -767,34 +616,7 @@ export class HubManager {
    * @param profileId
    */
   public async deactivateProfile(hubId: string, profileId: string): Promise<ProfileDeactivationResult> {
-    try {
-      // Verify profile exists (throws if not found)
-      await this.getHubProfile(hubId, profileId);
-
-      // Get current activation state to track removed bundles
-      const currentState = await this.storage.getProfileActivationState(hubId, profileId);
-      const removedBundles = currentState ? currentState.syncedBundles : [];
-
-      // Remove activation state
-      await this.storage.deleteProfileActivationState(hubId, profileId);
-
-      // Mark profile as inactive
-      await this.storage.setProfileActiveFlag(hubId, profileId, false);
-
-      return {
-        success: true,
-        hubId: hubId,
-        profileId: profileId,
-        removedBundles: removedBundles
-      };
-    } catch (error) {
-      return {
-        success: false,
-        hubId: hubId,
-        profileId: profileId,
-        error: error instanceof Error ? error.message : String(error)
-      };
-    }
+    return appDeactivateProfile(this.profileLifecycleDeps, hubId, profileId);
   }
 
   /**
@@ -802,14 +624,14 @@ export class HubManager {
    * @param hubId
    */
   public async getActiveProfile(hubId: string): Promise<ProfileActivationState | null> {
-    return this.storage.getActiveProfileForHub(hubId);
+    return appGetActiveProfile(this.profileLifecycleDeps, hubId);
   }
 
   /**
    * List all active profiles across all hubs
    */
   public async listAllActiveProfiles(): Promise<ProfileActivationState[]> {
-    return this.storage.listActiveProfiles();
+    return appListAllActiveProfiles(this.profileLifecycleDeps);
   }
 
   /**
@@ -830,16 +652,7 @@ export class HubManager {
    * @param profileId
    */
   public async hasProfileChanges(hubId: string, profileId: string): Promise<boolean> {
-    const changes = await this.getProfileChanges(hubId, profileId);
-    if (!changes) {
-      return false;
-    }
-    return (
-      (changes.bundlesAdded !== undefined && changes.bundlesAdded.length > 0)
-      || (changes.bundlesRemoved !== undefined && changes.bundlesRemoved.length > 0)
-      || (changes.bundlesUpdated !== undefined && changes.bundlesUpdated.length > 0)
-      || (changes.metadataChanged !== undefined && Object.keys(changes.metadataChanged).length > 0)
-    );
+    return appHasProfileChanges(this.profileLifecycleDeps, hubId, profileId);
   }
 
   /**
@@ -848,63 +661,7 @@ export class HubManager {
    * @param profileId
    */
   public async getProfileChanges(hubId: string, profileId: string): Promise<ProfileChanges | null> {
-    // Get activation state
-    const state = await this.storage.getProfileActivationState(hubId, profileId);
-    if (!state) {
-      return null;
-    }
-
-    // Get current profile from hub
-    const currentProfile = await this.getHubProfile(hubId, profileId);
-
-    // Get synced bundles from activation state
-    const syncedBundles = state.syncedBundles;
-
-    // Compare bundles
-    const currentBundleIds = currentProfile.bundles.map((b) => b.id);
-    const bundlesAdded = currentProfile.bundles.filter((b) => !syncedBundles.includes(b.id));
-    const bundlesRemoved = syncedBundles.filter((id) => !currentBundleIds.includes(id));
-
-    // Check for version changes using stored bundle versions
-    const bundlesUpdated: { id: string; oldVersion: string; newVersion: string }[] = [];
-    const profileUpdated = new Date(currentProfile.updatedAt) > new Date(state.activatedAt);
-
-    if (state.syncedBundleVersions) {
-      // Compare each current bundle version with synced version
-      for (const bundle of currentProfile.bundles) {
-        const syncedVersion = state.syncedBundleVersions[bundle.id];
-        if (syncedVersion && syncedVersion !== bundle.version) {
-          bundlesUpdated.push({
-            id: bundle.id,
-            oldVersion: syncedVersion,
-            newVersion: bundle.version
-          });
-        }
-      }
-    }
-
-    // Check metadata changes by comparing updated timestamp
-    const metadataChanged: { name?: boolean; description?: boolean; icon?: boolean } = {};
-    if (profileUpdated) {
-      metadataChanged.name = true;
-      metadataChanged.description = true;
-    }
-
-    const changes: ProfileChanges = {};
-    if (bundlesAdded.length > 0) {
-      changes.bundlesAdded = bundlesAdded;
-    }
-    if (bundlesRemoved.length > 0) {
-      changes.bundlesRemoved = bundlesRemoved;
-    }
-    if (bundlesUpdated.length > 0) {
-      changes.bundlesUpdated = bundlesUpdated;
-    }
-    if (Object.keys(metadataChanged).length > 0) {
-      changes.metadataChanged = metadataChanged;
-    }
-
-    return changes;
+    return appGetProfileChanges(this.profileLifecycleDeps, hubId, profileId);
   }
 
   /**
@@ -914,7 +671,7 @@ export class HubManager {
    */
   public async syncProfile(hubId: string, profileId: string): Promise<void> {
     // Re-activate to update the state
-    await this.activateProfile(hubId, profileId, { installBundles: false });
+    await appSyncProfile(this.profileLifecycleDeps, hubId, profileId, this.translateLogEvent);
   }
 
   /**
@@ -964,43 +721,7 @@ export class HubManager {
    * @param changes
    */
   public formatChangeSummary(changes: ProfileChanges): string {
-    const lines: string[] = [];
-
-    if (changes.bundlesAdded && changes.bundlesAdded.length > 0) {
-      lines.push('Added bundles:');
-      for (const bundle of changes.bundlesAdded) {
-        lines.push(`  + ${bundle.id} v${bundle.version}`);
-      }
-    }
-
-    if (changes.bundlesRemoved && changes.bundlesRemoved.length > 0) {
-      lines.push('Removed bundles:');
-      for (const bundleId of changes.bundlesRemoved) {
-        lines.push(`  - ${bundleId}`);
-      }
-    }
-
-    if (changes.bundlesUpdated && changes.bundlesUpdated.length > 0) {
-      lines.push('Updated bundles:');
-      for (const update of changes.bundlesUpdated) {
-        lines.push(`  ~ ${update.id}: ${update.oldVersion} → ${update.newVersion}`);
-      }
-    }
-
-    if (changes.metadataChanged && Object.keys(changes.metadataChanged).length > 0) {
-      lines.push('Metadata changes:');
-      if (changes.metadataChanged.name) {
-        lines.push('  ~ name changed');
-      }
-      if (changes.metadataChanged.description) {
-        lines.push('  ~ description changed');
-      }
-      if (changes.metadataChanged.icon) {
-        lines.push('  ~ icon changed');
-      }
-    }
-
-    return lines.join('\n');
+    return appFormatChangeSummary(changes);
   }
 
   /**
@@ -1008,32 +729,6 @@ export class HubManager {
    * @param changes
    */
   public createConflictResolutionDialog(changes: ProfileChanges): ConflictResolutionDialog {
-    const changeCount =
-      (changes.bundlesAdded?.length || 0)
-      + (changes.bundlesRemoved?.length || 0)
-      + (changes.bundlesUpdated?.length || 0)
-      + (changes.metadataChanged ? 1 : 0);
-
-    return {
-      title: 'Profile Updates Available',
-      message: `${changeCount} change${changeCount > 1 ? 's' : ''} detected in the profile`,
-      options: [
-        {
-          label: 'Sync Now',
-          description: 'Accept all changes and update profile',
-          action: 'sync'
-        },
-        {
-          label: 'Review Changes',
-          description: 'View detailed changes before syncing',
-          action: 'review'
-        },
-        {
-          label: 'Cancel',
-          description: 'Keep current profile version',
-          action: 'cancel'
-        }
-      ]
-    };
+    return appCreateConflictResolutionDialog(changes);
   }
 }
