@@ -20,6 +20,7 @@ export * from './install/layout';
 export * from './install/transform';
 export * from './registry/types';
 export * from './registry/guards';
+export * from './registry/settings';
 export * from './hub/types';
 export * from './hub/validate';
 export * from './primitive/types';

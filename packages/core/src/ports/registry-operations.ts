@@ -19,9 +19,19 @@ import type {
   BundleUpdate,
 } from '../domain/bundle/types';
 import type {
+  HubProfileWithMetadata,
+  ProfileActivationState,
+} from '../domain/hub/types';
+import type {
   InstallationScope,
   InstalledBundle,
 } from '../domain/install/types';
+import type {
+  ExportedSettingsConfiguration,
+} from '../domain/registry/settings';
+import type {
+  Profile,
+} from '../domain/registry/types';
 import type {
   RegistrySource,
 } from '../domain/source/types';
@@ -101,4 +111,62 @@ export interface UpdateDetectionReader {
   listSources(): Promise<RegistrySource[]>;
   getInstalledBundles(scope?: InstallationScope): Promise<InstalledBundle[]>;
   getInstalledBundle(bundleId: string, scope: InstallationScope): Promise<InstalledBundle | undefined>;
+}
+
+/**
+ * CRUD access to the extension's local (non-hub) `Profile` records.
+ * Ported from `RegistryManager`'s direct use of its `RegistryStorage`
+ * facade's `getProfiles`/`addProfile`/`updateProfile`/`removeProfile` —
+ * needs a `core` port (rather than depending on the concrete storage
+ * class directly, the way `HubManager` depends on `infra`'s `HubStore`)
+ * because `RegistryStorage` is extension-owned with no `infra`
+ * counterpart.
+ */
+export interface ProfileStore {
+  getProfiles(): Promise<Profile[]>;
+  addProfile(profile: Profile): Promise<void>;
+  updateProfile(profileId: string, updates: Partial<Profile>): Promise<void>;
+  removeProfile(profileId: string): Promise<void>;
+}
+
+/**
+ * Read-only view of hub-provided profiles, needed to merge them
+ * alongside local ones (`RegistryManager.listProfiles`/`isHubProfile`).
+ * Ported from the extension's `HubManager.listActiveHubProfiles`/
+ * `.listAllActiveProfiles` — extension-owned, no alternate
+ * implementation, hence a `core` port rather than a concrete class
+ * dependency.
+ */
+export interface HubProfileReader {
+  listActiveHubProfiles(): Promise<HubProfileWithMetadata[]>;
+  listAllActiveProfiles(): Promise<ProfileActivationState[]>;
+}
+
+/**
+ * `HubProfileReader` plus the two mutating hub operations
+ * `RegistryManager.activateProfile`/`.deactivateProfile` delegate to
+ * when the target profile turns out to be hub-provided.
+ */
+export interface HubProfileSync extends HubProfileReader {
+  activateProfile(hubId: string, profileId: string, options: { installBundles: boolean }): Promise<unknown>;
+  deactivateProfile(hubId: string, profileId: string): Promise<unknown>;
+}
+
+/**
+ * Registry-wide operations needed to export/import the extension's
+ * complete settings (sources + profiles + configuration). `listSources`/
+ * `addSource` are deliberately narrow, opaque callbacks (mirroring
+ * `RegistryManager`'s own already-validating `addSource`, not raw
+ * storage) rather than a source-CRUD port, since import only ever adds.
+ * `getConfiguration`/`updateConfiguration` bridge the 3
+ * `promptregistry.*` VS Code settings `exportSettings`/`importSettings`
+ * read and write.
+ */
+export interface RegistrySettingsOperations extends ProfileStore {
+  listSources(): Promise<RegistrySource[]>;
+  addSource(source: RegistrySource): Promise<void>;
+  /** Wipes all sources/profiles/caches — used only by the `'replace'` import strategy. */
+  clearAll(): Promise<void>;
+  getConfiguration(): ExportedSettingsConfiguration;
+  updateConfiguration(updates: ExportedSettingsConfiguration): Promise<void>;
 }

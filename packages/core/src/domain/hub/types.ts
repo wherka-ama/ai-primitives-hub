@@ -63,6 +63,17 @@ export interface HubProfile extends Profile {
   path?: string[];
 }
 
+/**
+ * A `HubProfile` decorated with the hub it came from — the shape
+ * `RegistryManager.listProfiles()` needs to merge hub-provided
+ * profiles alongside local ones. Mirrors the production shape at
+ * `src/services/hub-manager.ts`'s `HubProfileWithMetadata`.
+ */
+export interface HubProfileWithMetadata extends HubProfile {
+  hubId: string;
+  hubName: string;
+}
+
 export interface HubMetadata {
   name: string;
   description: string;

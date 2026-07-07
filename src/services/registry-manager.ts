@@ -4,11 +4,23 @@
  */
 
 import {
+  activateRegistryProfile,
+  createLocalProfile,
+  deactivateRegistryProfile,
+  deleteLocalProfile,
   detectBundleUpdates,
+  exportLocalProfile,
+  exportRegistrySettings,
+  importLocalProfile,
+  importRegistrySettings,
   installRegistryBundle,
+  isHubProfile as isAppHubProfile,
+  listAllProfiles,
   listInstalledBundles as listInstalledBundlesCore,
+  listLocalProfiles as listLocalProfilesCore,
   searchRegistryBundles,
   uninstallInstalledBundle,
+  updateLocalProfile,
   updateRegistryBundle,
 } from '@ai-primitives-hub/app';
 import type {
@@ -35,7 +47,6 @@ import {
   InstalledBundle,
   InstallOptions,
   Profile,
-  ProfileBundle,
   RegistrySource,
   SearchQuery,
   SourceSyncedEvent,
@@ -43,7 +54,6 @@ import {
   ValidationResult,
 } from '../types/registry';
 import {
-  ExportedSettings,
   ExportFormat,
   ImportStrategy,
 } from '../types/settings';
@@ -522,188 +532,6 @@ export class RegistryManager {
     }
   }
 
-  /**
-   * Validate and normalize profile ID
-   * @param profileId
-   */
-  private validateProfileId(profileId: any): string {
-    if (typeof profileId !== 'string') {
-      const profileObj = profileId;
-      if (profileObj && typeof profileObj === 'object' && profileObj.id) {
-        this.logger.warn('Profile object passed to activateProfile, extracting ID');
-        return profileObj.id;
-      }
-      throw new Error(`Invalid profile identifier: expected string, got ${typeof profileId}`);
-    }
-    return profileId;
-  }
-
-  /**
-   * Deactivate all active profiles except the target
-   * @param targetProfileId
-   * @param progress
-   */
-  private async deactivateOtherProfiles(targetProfileId: string, progress: vscode.Progress<any>): Promise<void> {
-    const profiles = await this.storage.getProfiles();
-    progress.report({ message: 'Checking for active profiles...' });
-
-    for (const profile of profiles) {
-      if (profile.active && profile.id !== targetProfileId) {
-        this.logger.info(`Deactivating previous profile: ${profile.id}`);
-        try {
-          await this.deactivateProfile(profile.id);
-        } catch (error) {
-          this.logger.error(`Failed to deactivate profile ${profile.id}`, error as Error);
-        }
-      }
-    }
-  }
-
-  /**
-   * Get profile by ID or throw error
-   * @param profileId
-   */
-  private async getProfileById(profileId: string): Promise<Profile> {
-    const profiles = await this.storage.getProfiles();
-    const profile = profiles.find((p) => p.id === profileId);
-
-    if (!profile) {
-      throw new Error(`Profile not found: ${profileId}`);
-    }
-
-    return profile;
-  }
-
-  /**
-   * Install all bundles associated with a profile
-   * @param profile
-   * @param profileId
-   * @param progress
-   */
-  private async installProfileBundles(
-    profile: Profile,
-    profileId: string,
-    progress: vscode.Progress<any>
-  ): Promise<void> {
-    if (!profile.bundles || profile.bundles.length === 0) {
-      return;
-    }
-
-    progress.report({ message: `Installing ${profile.bundles.length} bundle(s)...` });
-    this.logger.info(`Installing ${profile.bundles.length} bundles for profile '${profileId}'`);
-
-    const allSources = await this.storage.getSources();
-    const installed: InstalledBundle[] = [];
-    const CONCURRENCY_LIMIT = CONCURRENCY_CONSTANTS.REGISTRY_BATCH_LIMIT;
-
-    for (let i = 0; i < profile.bundles.length; i += CONCURRENCY_LIMIT) {
-      const chunk = profile.bundles.slice(i, i + CONCURRENCY_LIMIT);
-
-      const results = await Promise.all(chunk.map(async (bundleRef) => {
-        progress.report({ message: `Installing ${bundleRef.id}...` });
-        try {
-          return await this.installProfileBundle(bundleRef, profileId, allSources, true);
-        } catch (error) {
-          this.logger.error(`Failed to install bundle ${bundleRef.id}`, error as Error);
-          return null;
-        }
-      }));
-
-      for (const result of results) {
-        if (result) {
-          installed.push(result);
-        }
-      }
-    }
-
-    if (installed.length > 0) {
-      this._onBundlesInstalled.fire(installed);
-    }
-
-    this.logger.info(`Profile bundle installation complete: ${installed.length} installed`);
-  }
-
-  /**
-   * Install a single bundle for a profile
-   * @param bundleRef
-   * @param profileId
-   * @param allSources
-   * @param silent
-   */
-  private async installProfileBundle(
-    bundleRef: ProfileBundle,
-    profileId: string,
-    allSources: RegistrySource[],
-    silent = false
-  ): Promise<InstalledBundle | null> {
-    // Check if bundle is already installed
-    const installedBundles = await this.storage.getInstalledBundles();
-    const alreadyInstalled = installedBundles.find((b) => b.bundleId === bundleRef.id);
-
-    if (alreadyInstalled) {
-      this.logger.info(`Bundle ${bundleRef.id} already installed, skipping`);
-      return null;
-    }
-
-    // Search for the bundle
-    this.logger.info(`Searching for bundle: ${bundleRef.id} v${bundleRef.version}`);
-    const queryBySourceAndBundleId = { text: bundleRef.id, tags: [], sourceId: bundleRef.sourceId };
-    const searchResults = await this.searchBundles(queryBySourceAndBundleId);
-    this.logger.info(`Found ${searchResults.length} matching bundles.`, searchResults);
-
-    // Find matching bundle
-    const matchingBundle = searchResults.find((b) => {
-      const idMatch = b.id === bundleRef.id || b.name.toLowerCase().includes(bundleRef.id.toLowerCase());
-      if (bundleRef.sourceId) {
-        return idMatch && b.sourceId === bundleRef.sourceId;
-      }
-      return idMatch;
-    });
-
-    if (!matchingBundle) {
-      this.logger.warn(`Bundle not found: ${bundleRef.id}`);
-      return null;
-    }
-
-    // Get source and adapter
-    const source = allSources.find((s) => s.id === matchingBundle.sourceId);
-    if (!source) {
-      this.logger.warn(`Source not found for bundle: ${matchingBundle.sourceId}`);
-      return null;
-    }
-
-    const adapter = this.getAdapter(source);
-
-    // Download and install
-    this.logger.info(`Installing bundle: ${matchingBundle.id} from source ${matchingBundle.sourceId}`);
-    this.logger.debug(`Downloading bundle from ${source.type} adapter`);
-
-    const bundleBuffer = await adapter.downloadBundle(matchingBundle);
-    this.logger.debug(`Bundle downloaded: ${bundleBuffer.length} bytes`);
-
-    const options: InstallOptions = {
-      scope: 'user',
-      force: false,
-      profileId: profileId
-    };
-
-    const installation: InstalledBundle = await this.installer.installFromBuffer(matchingBundle, bundleBuffer, options, source.type);
-
-    // Ensure sourceId and sourceType are set for identity matching
-    installation.sourceId = matchingBundle.sourceId;
-    installation.sourceType = source.type;
-
-    // Record installation and fire event
-    await this.storage.recordInstallation(installation);
-
-    if (!silent) {
-      this._onBundleInstalled.fire(installation);
-    }
-
-    this.logger.info(`Successfully installed: ${matchingBundle.id}`);
-
-    return installation;
-  }
   // ===== Helper Methods =====
 
   /**
@@ -749,6 +577,51 @@ export class RegistryManager {
         break;
       }
     }
+  }
+
+  /**
+   * Read/write access to local profile storage, shared by every thin
+   * profile-CRUD delegator in the "Profile Management" section below.
+   */
+  private profileStorePorts() {
+    return {
+      getProfiles: () => this.storage.getProfiles(),
+      addProfile: (profile: Profile) => this.storage.addProfile(profile),
+      updateProfile: (profileId: string, updates: Partial<Profile>) => this.storage.updateProfile(profileId, updates),
+      removeProfile: (profileId: string) => this.storage.removeProfile(profileId)
+    };
+  }
+
+  /**
+   * Read/write access needed by `exportSettings`/`importSettings`.
+   */
+  private settingsPorts() {
+    return {
+      ...this.profileStorePorts(),
+      listSources: () => this.listSources(),
+      addSource: (source: RegistrySource) => this.addSource(source),
+      clearAll: () => this.storage.clearAll(),
+      getConfiguration: (): { autoCheckUpdates?: boolean; installationScope?: string; enableLogging?: boolean } => {
+        const config = vscode.workspace.getConfiguration('promptregistry');
+        return {
+          autoCheckUpdates: config.get<boolean>('autoCheckUpdates'),
+          installationScope: config.get<string>('installationScope'),
+          enableLogging: config.get<boolean>('enableLogging')
+        };
+      },
+      updateConfiguration: async (updates: { autoCheckUpdates?: boolean; installationScope?: string; enableLogging?: boolean }) => {
+        const config = vscode.workspace.getConfiguration('promptregistry');
+        if (updates.autoCheckUpdates !== undefined) {
+          await config.update('autoCheckUpdates', updates.autoCheckUpdates, true);
+        }
+        if (updates.installationScope !== undefined) {
+          await config.update('installationScope', updates.installationScope, true);
+        }
+        if (updates.enableLogging !== undefined) {
+          await config.update('enableLogging', updates.enableLogging, true);
+        }
+      }
+    };
   }
 
   /**
@@ -1399,115 +1272,86 @@ export class RegistryManager {
 
   /**
    * Create a profile
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `createLocalProfile`
+   * (migration plan §7.5, Phase 4 item 3).
    * @param profile
    */
   public async createProfile(profile: Omit<Profile, 'createdAt' | 'updatedAt'>): Promise<Profile> {
-    this.logger.info(`Creating profile: ${profile.name}`);
+    const fullProfile = await createLocalProfile(this.profileStorePorts(), profile);
 
-    const fullProfile: Profile = {
-      ...profile,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    await this.storage.addProfile(fullProfile);
     this._onProfileCreated.fire(fullProfile);
-    this.logger.info(`Profile '${profile.name}' created successfully`);
 
     return fullProfile;
   }
 
   /**
    * Update a profile
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `updateLocalProfile`.
    * @param profileId
    * @param updates
    */
   public async updateProfile(profileId: string, updates: Partial<Profile>): Promise<void> {
-    this.logger.info(`Updating profile: ${profileId}`);
+    const updatedProfile = await updateLocalProfile(this.profileStorePorts(), profileId, updates);
 
-    await this.storage.updateProfile(profileId, {
-      ...updates,
-      updatedAt: new Date().toISOString()
-    });
-
-    // Get the updated profile and fire event
-    const profiles = await this.storage.getProfiles();
-    const updatedProfile = profiles.find((p) => p.id === profileId);
     if (updatedProfile) {
       this._onProfileUpdated.fire(updatedProfile);
     }
-
-    this.logger.info(`Profile '${profileId}' updated successfully`);
   }
 
   /**
    * Check if a profile is from the active hub (and thus read-only)
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `isHubProfile`.
    * @param profileId
    */
   public async isHubProfile(profileId: string): Promise<boolean> {
-    if (!this.hubManager) {
-      return false;
-    }
-
-    const hubProfiles = await this.hubManager.listActiveHubProfiles();
-    return hubProfiles.some((p) => p.id === profileId);
+    return await isAppHubProfile(this.hubManager, profileId);
   }
 
   /**
    * Delete a profile
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `deleteLocalProfile`.
    * @param profileId
    */
   public async deleteProfile(profileId: string): Promise<void> {
-    this.logger.info(`Deleting profile: ${profileId}`);
-
-    await this.storage.removeProfile(profileId);
+    await deleteLocalProfile(this.profileStorePorts(), profileId);
     this._onProfileDeleted.fire(profileId);
-
-    this.logger.info(`Profile '${profileId}' deleted successfully`);
   }
 
   /**
    * List only local profiles (from storage, excludes hub profiles)
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `listLocalProfiles`.
    */
   public async listLocalProfiles(): Promise<Profile[]> {
-    return await this.storage.getProfiles();
+    return await listLocalProfilesCore(this.profileStorePorts());
   }
 
   /**
    * List all profiles (both hub profiles and local profiles)
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `listAllProfiles`.
    */
   public async listProfiles(): Promise<Profile[]> {
-    const allProfiles: Profile[] = [];
-
-    // Get hub profiles if hub manager is available
-    if (this.hubManager) {
-      try {
-        const hubProfiles = await this.hubManager.listActiveHubProfiles();
-        // Get list of all active profiles to check activation status
-        const activeProfiles = await this.hubManager.listAllActiveProfiles();
-        const activeProfileIds = new Set(activeProfiles.map((ap) => ap.profileId));
-
-        // Convert HubProfileWithMetadata to Profile format
-        const convertedHubProfiles = hubProfiles.map((hp) => ({
-          ...hp,
-          icon: hp.icon || '📦', // Provide default icon if not defined in hub config
-          active: activeProfileIds.has(hp.id) // Check if this profile is currently active
-        }));
-        allProfiles.push(...convertedHubProfiles);
-      } catch (error) {
-        this.logger.warn('Failed to get hub profiles', error);
-      }
-    }
-
-    // Also get local profiles
-    const localProfiles = await this.storage.getProfiles();
-    allProfiles.push(...localProfiles);
-
-    return allProfiles;
+    return await listAllProfiles(
+      this.profileStorePorts(),
+      this.hubManager,
+      (event) => this.forwardLogEvent(event)
+    );
   }
 
   /**
    * Activate a profile
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `activateRegistryProfile`
+   * (migration plan §7.5, Phase 4 item 3). The original's
+   * `vscode.window.withProgress` wrapper and `progress.report` calls
+   * stay here (presentation-only VS Code glue) — `onLog` forwards
+   * `'info'`-level events to the progress notification in addition to
+   * the `Logger`, matching the original checkpoint messages.
    * @param profileId
    */
   public async activateProfile(profileId: string): Promise<void> {
@@ -1518,211 +1362,114 @@ export class RegistryManager {
     }, async (progress) => {
       progress.report({ message: 'Preparing...' });
 
-      const validatedProfileId = this.validateProfileId(profileId);
-      this.logger.info(`Activating profile: ${validatedProfileId}`);
-
-      // Deactivate ALL currently active profiles (both hub and local)
-      progress.report({ message: 'Deactivating other profiles...' });
-
-      // Deactivate all active hub profiles (and uninstall their bundles)
-      if (this.hubManager) {
-        try {
-          const activeHubProfiles = await this.hubManager.listAllActiveProfiles();
-          for (const activeProfile of activeHubProfiles) {
-            if (activeProfile.profileId !== validatedProfileId) {
-              this.logger.info(`Deactivating hub profile: ${activeProfile.profileId}`);
-              try {
-                // Call RegistryManager.deactivateProfile() instead of HubManager.deactivateProfile()
-                // This ensures bundles are uninstalled, not just flags updated
-                await this.deactivateProfile(activeProfile.profileId);
-              } catch (error) {
-                this.logger.error(`Failed to deactivate hub profile ${activeProfile.profileId}`, error as Error);
-              }
-            }
+      const result = await activateRegistryProfile(
+        {
+          getProfiles: () => this.storage.getProfiles(),
+          updateProfile: (id, updates) => this.storage.updateProfile(id, updates),
+          getSources: () => this.storage.getSources(),
+          getInstalledBundles: () => this.storage.getInstalledBundles(),
+          searchBundles: (query) => this.searchBundles(query),
+          getAdapter: (source) => this.getAdapter(source),
+          installFromBuffer: (bundle, buffer, options, sourceType) =>
+            this.installer.installFromBuffer(bundle, buffer, options, sourceType),
+          recordInstallation: (installation) => this.storage.recordInstallation(installation as InstalledBundle),
+          deactivateOther: (id) => this.deactivateProfile(id),
+          hub: this.hubManager && {
+            listActiveHubProfiles: () => this.hubManager!.listActiveHubProfiles(),
+            listAllActiveProfiles: () => this.hubManager!.listAllActiveProfiles(),
+            activateProfile: (hubId, id, options) => this.hubManager!.activateProfile(hubId, id, options),
+            deactivateProfile: (hubId, id) => this.hubManager!.deactivateProfile(hubId, id)
           }
-        } catch (error) {
-          this.logger.error('Failed to deactivate hub profiles', error as Error);
-        }
-      }
-
-      // Deactivate all active local profiles (and uninstall their bundles)
-      const profiles = await this.storage.getProfiles();
-      for (const localProfile of profiles) {
-        if (localProfile.active && localProfile.id !== validatedProfileId) {
-          this.logger.info(`Deactivating local profile: ${localProfile.id}`);
-          try {
-            // Call deactivateProfile() to properly uninstall bundles, not just update flags
-            await this.deactivateProfile(localProfile.id);
-          } catch (error) {
-            this.logger.error(`Failed to deactivate local profile ${localProfile.id}`, error as Error);
+        },
+        profileId,
+        (event) => {
+          this.forwardLogEvent(event);
+          if (event.level === 'info') {
+            progress.report({ message: event.message });
           }
         }
+      );
+
+      if (result.hubActivation) {
+        this._onProfileActivated.fire({ ...result.hubActivation.hubProfile, active: true });
+        return;
       }
 
-      // Check if this is a hub profile and delegate to HubManager
-      if (this.hubManager) {
-        const isHub = await this.isHubProfile(validatedProfileId);
-        if (isHub) {
-          this.logger.info(`Profile ${validatedProfileId} is from hub, delegating to HubManager`);
-          const hubProfiles = await this.hubManager.listActiveHubProfiles();
-          const hubProfile = hubProfiles.find((p) => p.id === validatedProfileId);
-          if (hubProfile && hubProfile.hubId) {
-            await this.hubManager.activateProfile(hubProfile.hubId, validatedProfileId, { installBundles: true });
-            // Fire event to update tree view with active status
-            this._onProfileActivated.fire({ ...hubProfile, active: true });
-            return;
-          }
+      if (result.localActivation) {
+        this._onProfileActivated.fire(result.localActivation.profile);
+        this._onProfileActivated.fire(result.localActivation.profile);
+
+        if (result.localActivation.installedBundles.length > 0) {
+          this._onBundlesInstalled.fire(result.localActivation.installedBundles as InstalledBundle[]);
         }
       }
-
-      progress.report({ message: 'Installing bundles...' });
-
-      // Get and activate the target profile
-      const profile = await this.getProfileById(validatedProfileId);
-      if (profile) {
-        this._onProfileActivated.fire(profile);
-      }
-
-      // Deactivate other active profiles
-      await this.deactivateOtherProfiles(validatedProfileId, progress);
-
-      this._onProfileActivated.fire(profile);
-
-      // Install profile bundles
-      await this.installProfileBundles(profile, validatedProfileId, progress);
-
-      // Mark profile as active
-      await this.storage.updateProfile(validatedProfileId, { active: true });
-
-      this.logger.info(`Profile '${validatedProfileId}' activated successfully`);
-      progress.report({ message: 'Profile activated successfully' });
     });
   }
 
   /**
    * Deactivate a profile and uninstall its bundles
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s
+   * `deactivateRegistryProfile`.
    * @param profileId
    */
   public async deactivateProfile(profileId: string): Promise<void> {
-    this.logger.info(`Deactivating profile: ${profileId}`);
-
-    // Check if this is a hub profile first
-    if (this.hubManager) {
-      const isHub = await this.isHubProfile(profileId);
-      if (isHub) {
-        this.logger.info(`Profile ${profileId} is from hub, delegating to HubManager`);
-        const hubProfiles = await this.hubManager.listActiveHubProfiles();
-        const hubProfile = hubProfiles.find((p) => p.id === profileId);
-        if (hubProfile && hubProfile.hubId) {
-          await this.hubManager.deactivateProfile(hubProfile.hubId, profileId);
-
-          // Uninstall only the bundles that were installed BY THIS PROFILE
-          // (not bundles installed manually or by other profiles)
-          const bundles = (await this.storage.getInstalledBundles()).filter((b) => b.profileId === profileId);
-
-          if (bundles.length > 0) {
-            this.logger.info(`Uninstalling ${bundles.length} bundles from hub profile '${profileId}'`);
-            await this.uninstallBundles(bundles.map((b) => b.bundleId));
-          }
-
-          // Fire event to update tree view
-          this._onProfileDeactivated.fire(profileId);
-          this.logger.info(`Profile deactivated: ${profileId}`);
-          return;
+    await deactivateRegistryProfile(
+      {
+        getProfiles: () => this.storage.getProfiles(),
+        updateProfile: (id, updates) => this.storage.updateProfile(id, updates),
+        getInstalledBundles: () => this.storage.getInstalledBundles(),
+        uninstallBundles: (bundleIds) => this.uninstallBundles(bundleIds),
+        hub: this.hubManager && {
+          listActiveHubProfiles: () => this.hubManager!.listActiveHubProfiles(),
+          listAllActiveProfiles: () => this.hubManager!.listAllActiveProfiles(),
+          activateProfile: (hubId, id, options) => this.hubManager!.activateProfile(hubId, id, options),
+          deactivateProfile: (hubId, id) => this.hubManager!.deactivateProfile(hubId, id)
         }
-      }
-    }
-
-    const profiles = await this.storage.getProfiles();
-    const profile = profiles.find((p) => p.id === profileId);
-
-    if (!profile) {
-      throw new Error(`Profile not found: ${profileId}`);
-    }
-
-    // Uninstall bundles associated with this profile
-    const installedBundles = await this.storage.getInstalledBundles();
-    const profileBundles = installedBundles.filter((b) => b.profileId === profileId);
-
-    this.logger.info(`Uninstalling ${profileBundles.length} bundles from profile '${profileId}'`);
-
-    await this.uninstallBundles(profileBundles.map((b) => b.bundleId));
-
-    // Mark profile as inactive
-    await this.storage.updateProfile(profileId, { active: false });
+      },
+      profileId,
+      (event) => this.forwardLogEvent(event)
+    );
 
     this._onProfileDeactivated.fire(profileId);
-    this.logger.info(`Profile '${profileId}' deactivated successfully`);
   }
 
   /**
    * Export a profile
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `exportLocalProfile`.
    * @param profileId
    */
   public async exportProfile(profileId: string): Promise<string> {
-    const profiles = await this.storage.getProfiles();
-    const profile = profiles.find((p) => p.id === profileId);
-
-    if (!profile) {
-      throw new Error(`Profile '${profileId}' not found`);
-    }
-
-    return JSON.stringify(profile, null, 2);
+    return await exportLocalProfile(this.profileStorePorts(), profileId);
   }
 
   /**
    * Import a profile
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s `importLocalProfile`.
    * @param profileData
    */
   public async importProfile(profileData: string): Promise<Profile> {
-    const profile = JSON.parse(profileData) as Profile;
-
-    // Update timestamps
-    profile.createdAt = new Date().toISOString();
-    profile.updatedAt = new Date().toISOString();
-    profile.active = false;
-
-    await this.storage.addProfile(profile);
-
-    return profile;
+    return await importLocalProfile(this.profileStorePorts(), profileData);
   }
 
   /**
    * Export complete registry settings (sources + profiles + configuration)
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s
+   * `exportRegistrySettings`.
    * @param format
    */
   public async exportSettings(format: ExportFormat = 'json'): Promise<string> {
-    const sources = await this.listSources();
-    const profiles = await this.storage.getProfiles();
-
-    const config = vscode.workspace.getConfiguration('promptregistry');
-
-    const settings: ExportedSettings = {
-      version: '1.0.0',
-      exportedAt: new Date().toISOString(),
-      sources,
-      profiles,
-      configuration: {
-        autoCheckUpdates: config.get('autoCheckUpdates'),
-        installationScope: config.get('installationScope'),
-        enableLogging: config.get('enableLogging')
-      }
-    };
-
-    if (format === 'yaml') {
-      const yaml = await import('js-yaml');
-      return yaml.default.dump(settings, {
-        indent: 2,
-        lineWidth: 120,
-        noRefs: true
-      });
-    }
-
-    return JSON.stringify(settings, null, 2);
+    return await exportRegistrySettings(this.settingsPorts(), format);
   }
 
   /**
    * Import registry settings (sources + profiles + configuration)
+   *
+   * Thin delegator to `@ai-primitives-hub/app`'s
+   * `importRegistrySettings`.
    * @param data
    * @param format
    * @param strategy
@@ -1732,84 +1479,7 @@ export class RegistryManager {
     format: ExportFormat = 'json',
     strategy: ImportStrategy = 'merge'
   ): Promise<void> {
-    // Parse data
-    let settings: ExportedSettings;
-    try {
-      if (format === 'yaml') {
-        const yaml = await import('js-yaml');
-        settings = yaml.default.load(data) as ExportedSettings;
-      } else {
-        settings = JSON.parse(data);
-      }
-    } catch (error: any) {
-      throw new Error(`Invalid ${format.toUpperCase()} format: ${error.message}`);
-    }
-
-    // Validate schema version
-    if (!settings.version || settings.version !== '1.0.0') {
-      throw new Error(`Incompatible settings version: ${settings.version || 'unknown'}. Expected 1.0.0`);
-    }
-
-    // Validate required fields
-    if (!Array.isArray(settings.sources) || !Array.isArray(settings.profiles)) {
-      throw new Error('Invalid settings format: sources and profiles must be arrays');
-    }
-
-    // Clear if replacing
-    if (strategy === 'replace') {
-      await this.storage.clearAll();
-    }
-
-    // Import sources
-    for (const source of settings.sources) {
-      try {
-        const existingSources = await this.listSources();
-        const existing = existingSources.find((s) => s.id === source.id);
-
-        if (!existing || strategy === 'replace') {
-          // addSource will validate the source
-          await this.addSource(source);
-        }
-      } catch (error: any) {
-        Logger.getInstance().warn(`Failed to import source ${source.name}: ${error.message}`);
-      }
-    }
-
-    // Import profiles
-    for (const profile of settings.profiles) {
-      try {
-        const existingProfiles = await this.storage.getProfiles();
-        const existing = existingProfiles.find((p) => p.id === profile.id);
-
-        if (!existing || strategy === 'replace') {
-          // Reset timestamps and active state
-          profile.createdAt = new Date().toISOString();
-          profile.updatedAt = new Date().toISOString();
-          profile.active = false;
-
-          await this.storage.addProfile(profile);
-        }
-      } catch (error: any) {
-        Logger.getInstance().warn(`Failed to import profile ${profile.name}: ${error.message}`);
-      }
-    }
-
-    // Import configuration
-    if (settings.configuration) {
-      const config = vscode.workspace.getConfiguration('promptregistry');
-
-      if (settings.configuration.autoCheckUpdates !== undefined) {
-        await config.update('autoCheckUpdates', settings.configuration.autoCheckUpdates, true);
-      }
-      if (settings.configuration.installationScope !== undefined) {
-        await config.update('installationScope', settings.configuration.installationScope, true);
-      }
-      if (settings.configuration.enableLogging !== undefined) {
-        await config.update('enableLogging', settings.configuration.enableLogging, true);
-      }
-    }
-
-    // Settings imported - triggering UI refresh via source/profile events
+    await importRegistrySettings(this.settingsPorts(), data, format, strategy, (event) => this.forwardLogEvent(event));
   }
 
   /**
