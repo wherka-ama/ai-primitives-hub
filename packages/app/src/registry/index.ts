@@ -18,4 +18,5 @@ export * from './resolve-installation-bundle';
 export * from './search-registry-bundles';
 export * from './uninstall-installed-bundle';
 export * from './update-registry-bundle';
+export * from './user-config-paths';
 export * from './version-consolidator';
