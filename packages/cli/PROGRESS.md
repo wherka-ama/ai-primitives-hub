@@ -492,23 +492,91 @@ remaining commands.
   reports zero issues in the new file (all 6 pre-existing errors/8 warnings are in
   already-committed files, out of scope — see prior sessions' notes above).
 
+## Command tests: remaining commands (this session) — closes plan item 11
+Filled in every remaining gap from the "Test coverage gap" note above. All new
+suites use a real `NodeFileSystem` against a real `mkdtemp` temp dir (never
+`createTestContext`'s in-memory stub) and the `target add -> hub add --type
+local --id -> hub use -> hub sync` fixture sequence established by
+`profile.test.ts`/`doctor/diagnostics.ts`, reused verbatim wherever a command
+needed an active hub. New files, by command group:
+- `test/commands/source.test.ts`, `test/commands/hub.test.ts` (5 + 16 cases).
+- `test/commands/install.test.ts`, `test/commands/uninstall.test.ts` (5 + 5).
+- `test/commands/target.test.ts` (12: add/list/remove/types, incl. the
+  duplicate-name/unknown-type/not-found paths and the copilot-cli
+  forced-`user`-scope rule flagged as smoke-tested-only in the target-* notes
+  above).
+- `test/commands/index.test.ts` (17, covering all 9 `index-*` subcommands
+  offline — `index harvest` and `index search --install` still excluded, same
+  network/TTY reasons as the smoke-test note above).
+- `test/commands/collection-bundle.test.ts` (16: `collection-*`
+  create/list/validate/affected, `bundle-build`, `bundle-manifest`,
+  `version-compute` via the `gitTagsProvider` test seam, `skill-new`).
+- `test/commands/doctor-status-init-update.test.ts` (12: `doctor` incl. its
+  own 40-step `doctor diagnostics` sub-check, `status`, `init`, `update`).
+- `test/commands/scaffolding.test.ts` (33: a `describe.each` table drives the
+  4 shared behaviors across all 6 `*-create` generators, plus 3 dedicated
+  cases for each one's unique extra field).
+- `test/commands/misc.test.ts` (19: `apply`, `explain`, `config get`,
+  `config list`, `plugins list`, `skill validate` — six command files that a
+  `list_dir` recount showed were missing from the original test-group
+  breakdown above; added before declaring coverage complete).
+
+**Two real, pre-existing bugs found and fixed while writing these tests**
+(both caught by a `--path`/`--out-file` regression test **failing identically
+across every affected command**, which is what showed each was one
+copy-pasted root cause rather than N independent ones):
+1. `bundle-manifest.ts`'s `--out-file <path>` — noted above as "matches
+   reference's own behavior verbatim, not a bug" — is in fact a bug in
+   *both* branches: `ctx.fs.writeFile(outFile, ...)` was called with an
+   absolute `--out-file` still needing a join, but relative paths resolved
+   against the real `process.cwd()` instead of `ctx.cwd()`, breaking under
+   any non-default `Context.cwd()` (i.e. every test harness). Fixed to
+   `path.isAbsolute(outFile) ? outFile : path.join(ctx.cwd(), outFile)`.
+2. All 7 `TemplateEngine`-backed scaffolders (`agent-create.ts`,
+   `instruction-create.ts`, `prompt-create.ts`, `skill-create.ts`,
+   `plugin-create.ts`, `hook-create.ts`, `collection-create.ts`) computed
+   their target dir as `path.join(ctx.cwd(), outputPath)` unconditionally —
+   since `path.join` concatenates every segment positionally regardless of
+   whether a later one looks absolute, an absolute `--path` got silently
+   nested under cwd instead of used as-is. Fixed the same way, mirroring the
+   convention `bundle-build.ts`'s own outDir resolution already documents as
+   the "Context invariant".
+
+Full `pnpm --filter @ai-primitives-hub/cli test`: 12 files / 148 tests, all
+green. `pnpm --filter @ai-primitives-hub/cli lint`: unchanged from the 6
+pre-existing errors / 8 warnings baseline (see prior sessions' notes above) —
+zero new issues in any new or modified file.
+
+## Final `pnpm -r build && pnpm -r test` (this session) — closes plan item 12
+Re-run from `packages/` (the nested CLI monorepo's own workspace root — the
+outer repo root is a *different*, unrelated pnpm workspace for the VS Code
+extension side of this repo; running `-r` from there fails on an unrelated
+`@prompt-registry/collection-scripts` workspace-resolution error and is not
+this package's concern).
+- `pnpm -r build`: `core`/`infra`/`app`/`cli` all build clean.
+- `pnpm -r test`: **core** 15 files/200 tests, **infra** 59 files/654 tests,
+  **app** 37 files/514 tests, **cli** 12 files/148 tests — 123 files / 1,516
+  tests total, all passing.
+
 ## Status
 - [ ] Shared utils (types.ts, bundle-id.ts, collections.ts, skills.ts, validate.ts — not verified this session)
 - [x] doctor/diagnostics.ts ✅ (ported this session as `doctor/diagnostics.ts` + `commands/doctor.ts` — see notes below)
 - [ ] Framework tests
 - [x] Core commands (status ✅, init ✅, install ✅, uninstall ✅, update ✅)
-- [x] hub/source/profile ✅ (build+lint clean; `profile.ts` activate/deactivate covered by `test/commands/profile.test.ts` — see notes above; `hub.ts`/`source.ts` still untested)
-- [x] target-* ✅ (add/list/remove/types; build+lint clean, smoke-verified — see notes above; no committed tests yet)
-- [x] index-* ✅ (build/harvest/search/shortlist/export/stats/report/eval/bench; build+lint clean, smoke-verified — see notes above; no committed tests yet)
+- [x] hub/source/profile ✅ (`hub.ts`/`source.ts`/`profile.ts` all covered by `test/commands/hub.test.ts`/`source.test.ts`/`profile.test.ts`)
+- [x] target-* ✅ (add/list/remove/types; covered by `test/commands/target.test.ts`, 12 cases)
+- [x] index-* ✅ (build/harvest/search/shortlist/export/stats/report/eval/bench; covered by `test/commands/index.test.ts`, 17 cases)
 - [ ] discover (deferred — needs `CopilotSdkClient` port for `--ai`; non-AI path is unblocked, see notes above)
-- [x] collection-* ✅ (create/list/validate/affected; build+lint clean, smoke-verified — see notes above; no committed tests yet)
-- [x] explain/config-get/config-list/apply ✅ (present in tree; `explain`/`config-get` smoke-verified end-to-end via `doctor diagnostics` this session — see notes below)
-- [x] scaffolding generators ✅ (prompt/instruction/agent/skill/plugin/hook-create, skill-new; build+lint clean, smoke-verified)
-- [x] bundle-manifest/bundle-build/version-compute ✅ (build+lint clean, smoke-verified — see notes above; no committed tests yet)
+- [x] collection-* ✅ (create/list/validate/affected; covered by `test/commands/collection-bundle.test.ts`)
+- [x] explain/config-get/config-list/apply ✅ (all 4 covered by `test/commands/misc.test.ts`)
+- [x] scaffolding generators ✅ (prompt/instruction/agent/skill/plugin/hook-create, skill-new; covered by `test/commands/scaffolding.test.ts` (33 cases) + `collection-bundle.test.ts` (skill-new) — **fixed a real absolute-`--path` bug in all 7**, see notes above)
+- [x] bundle-manifest/bundle-build/version-compute ✅ (covered by `test/commands/collection-bundle.test.ts` — **fixed a real absolute/relative-`--out-file` bug in bundle-manifest.ts**, see notes above)
 - [ ] completion (not started — confirmed missing this session)
-- [x] plugins-list/skill-validate/doctor ✅ (`plugins-list`/`skill-validate` present in tree from an earlier untracked session — `plugins-list` smoke-verified via `doctor diagnostics`, `skill-validate` not re-verified this session; `doctor`+`doctor diagnostics` ported and smoke-verified this session — see notes below)
+- [x] plugins-list/skill-validate/doctor ✅ (all 3 covered — `plugins-list`/`skill-validate` by `test/commands/misc.test.ts`, `doctor`+`doctor diagnostics` by `test/commands/doctor-status-init-update.test.ts`)
 - [x] main.ts/index.ts/bin wiring ✅ (62 commands registered; verified against the real compiled `bin/ai-primitives-hub.js` binary — see notes below; `completion`/`discover` not registered, don't exist yet)
-- [~] Command tests (`profile.ts` activate/deactivate done this session — see notes above; `hub.ts`/`source.ts`/`install.ts`/`uninstall.ts`/`target-*.ts`/`index-*.ts` and the rest still open)
-- [x] Final verification ✅ `pnpm -r build && pnpm -r test` — `core`/`infra`/`app`/`cli` all build clean; 654+514+1 tests pass (no `discover`/`completion`/command-level test suites exist yet, so this isn't a substitute for the still-open "Command tests" line above)
+- [x] Command tests ✅ every command file that exists has a covering test suite (12 files / 148 tests under `test/commands/`) — only the never-started `discover`/`completion` commands have no tests, since they have no implementation to test
+- [x] Final verification ✅ `pnpm -r build && pnpm -r test` (run from `packages/`) — `core`/`infra`/`app`/`cli` all build clean; 123 files / 1,516 tests pass across the whole monorepo
+
+Only remaining gaps in the original plan: `discover`'s `--ai` path (needs a `CopilotSdkClient` port) and `completion` (not started). Everything else in the leaf-commands port + test-writing pass (plan items 1–12) is done.
 
 (This file is a working scratchpad — delete once the port is complete and merged.)
