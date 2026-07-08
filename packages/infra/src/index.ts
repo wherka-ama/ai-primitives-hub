@@ -10,6 +10,7 @@
 export * from './adapters';
 export * from './auth';
 export * from './clock';
+export * from './downloaders';
 export * from './extractors';
 export * from './fs';
 export * from './harvest';
@@ -17,6 +18,7 @@ export * from './http';
 export * from './hub';
 export * from './process';
 export * from './resolvers';
+export * from './scaffolding';
 export * from './search';
 export * from './storage';
 export * from './stores';
