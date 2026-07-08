@@ -458,18 +458,46 @@ Full breadth, priority-ordered approach (user-selected). Order:
 
 ## Test coverage gap (pre-existing, not introduced this session)
 No command-level tests exist yet for `hub.ts`/`source.ts`/`install.ts`/`uninstall.ts`/
-`profile.ts`/`target-*.ts`/`index-*.ts` (only `test/index.test.ts`, a placeholder).
-Confirmed the **reference** branch's own `test/commands/` and `test/integration/`
-are also empty — there is nothing to port test-wise; a dedicated test-writing pass
-is still needed (see plan item 11) and should cover `profile.ts`'s activate/deactivate
-loop first, since it's the most novel (non-ported) logic.
+`target-*.ts`/`index-*.ts` (only `test/index.test.ts`, a placeholder, and the new
+`test/commands/profile.test.ts` below). Confirmed the **reference** branch's own
+`test/commands/` and `test/integration/` are also empty — there is nothing to port
+test-wise; a dedicated test-writing pass is still needed (see plan item 11) for the
+remaining commands.
+
+## Command tests: profile.ts activate/deactivate (this session)
+- Added `test/commands/profile.test.ts` (7 cases): list/show the seeded profile,
+  `profile current` with no active profile, activate (installs bundle files to the
+  target + records `profile current`), deactivate (removes installed files + clears
+  current), deactivate-with-nothing-active is a no-op, and a 2-cycle activate/
+  deactivate idempotency check (no residue left on disk).
+- Uses `runCommand` (`framework/golden.ts`) with a **real** `NodeFileSystem` against
+  a real `mkdtemp`-created temp dir, not `createTestContext`'s default in-memory `fs`
+  stub — that stub rejects every call (see `test-context.ts`'s own module doc: "fs
+  ... stubbed initially, any call throws"), so it cannot support activate/deactivate's
+  real file IO. `env` pins `HOME`/`XDG_CONFIG_HOME`/`XDG_CACHE_HOME` into the temp
+  dir, same isolation pattern as `doctor/diagnostics.ts`'s `buildDiagnosticEnv`.
+- Fixture + `beforeEach` command sequence (`target add` -> `hub add --type local
+  --id` -> `hub use` -> `hub sync`) is lifted directly from `doctor/diagnostics.ts`'s
+  already-proven-correct steps 1-4, rather than reconstructed from scratch.
+- JSON envelope shapes used in assertions (`profile list`'s `{profiles}`, `profile
+  show`'s `{profile}`, `profile current`'s `{active: null | {hubId, profileId}}`,
+  `profile activate`'s `{hubId, profileId, ...}`, `profile deactivate`'s
+  `{deactivated: null | {hubId, profileId}}`) were read directly from `profile.ts`'s
+  `formatOutput(...)` call sites (not guessed) before writing assertions, per the
+  project's debugging-discipline rule to isolate fault location — an assertion
+  written against a guessed shape that then fails proves nothing about the
+  production code.
+- All 7 pass on first run against the real (unmodified) `profile.ts`; zero
+  production-code changes needed. `pnpm --filter @ai-primitives-hub/cli lint`
+  reports zero issues in the new file (all 6 pre-existing errors/8 warnings are in
+  already-committed files, out of scope — see prior sessions' notes above).
 
 ## Status
 - [ ] Shared utils (types.ts, bundle-id.ts, collections.ts, skills.ts, validate.ts — not verified this session)
 - [x] doctor/diagnostics.ts ✅ (ported this session as `doctor/diagnostics.ts` + `commands/doctor.ts` — see notes below)
 - [ ] Framework tests
 - [x] Core commands (status ✅, init ✅, install ✅, uninstall ✅, update ✅)
-- [x] hub/source/profile ✅ (build+lint clean; no tests yet — see gap note above)
+- [x] hub/source/profile ✅ (build+lint clean; `profile.ts` activate/deactivate covered by `test/commands/profile.test.ts` — see notes above; `hub.ts`/`source.ts` still untested)
 - [x] target-* ✅ (add/list/remove/types; build+lint clean, smoke-verified — see notes above; no committed tests yet)
 - [x] index-* ✅ (build/harvest/search/shortlist/export/stats/report/eval/bench; build+lint clean, smoke-verified — see notes above; no committed tests yet)
 - [ ] discover (deferred — needs `CopilotSdkClient` port for `--ai`; non-AI path is unblocked, see notes above)
@@ -480,7 +508,7 @@ loop first, since it's the most novel (non-ported) logic.
 - [ ] completion (not started — confirmed missing this session)
 - [x] plugins-list/skill-validate/doctor ✅ (`plugins-list`/`skill-validate` present in tree from an earlier untracked session — `plugins-list` smoke-verified via `doctor diagnostics`, `skill-validate` not re-verified this session; `doctor`+`doctor diagnostics` ported and smoke-verified this session — see notes below)
 - [x] main.ts/index.ts/bin wiring ✅ (62 commands registered; verified against the real compiled `bin/ai-primitives-hub.js` binary — see notes below; `completion`/`discover` not registered, don't exist yet)
-- [ ] Command tests
+- [~] Command tests (`profile.ts` activate/deactivate done this session — see notes above; `hub.ts`/`source.ts`/`install.ts`/`uninstall.ts`/`target-*.ts`/`index-*.ts` and the rest still open)
 - [x] Final verification ✅ `pnpm -r build && pnpm -r test` — `core`/`infra`/`app`/`cli` all build clean; 654+514+1 tests pass (no `discover`/`completion`/command-level test suites exist yet, so this isn't a substitute for the still-open "Command tests" line above)
 
 (This file is a working scratchpad — delete once the port is complete and merged.)
