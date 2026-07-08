@@ -14,6 +14,14 @@ import type {
 } from '../source/types';
 
 /**
+ * Reserved hub id for the synthetic, auto-managed hub that holds
+ * "detached" sources/profiles added directly via `source add`/
+ * `profile create` rather than imported from a real hub reference.
+ * `HubManager.importHub` refuses this id for real imports.
+ */
+export const DEFAULT_LOCAL_HUB_ID = 'default-local';
+
+/**
  * Reference to a hub's location.
  */
 export interface HubReference {

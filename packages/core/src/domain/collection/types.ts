@@ -44,6 +44,87 @@ export interface Collection {
 }
 
 /**
+ * Result of validating a single field (collection id, version, item kind).
+ *
+ * Named `CollectionFieldValidationResult` (not the reference branch's bare
+ * `ValidationResult`) to avoid colliding with the differently-shaped
+ * `ValidationResult` already exported by `domain/source/types.ts`
+ * (`{ valid, errors: string[], warnings? }`, used by `app/registry/hub-manager.ts`)
+ * — both are wildcard re-exported from the same `domain/index.ts` barrel.
+ */
+export interface CollectionFieldValidationResult {
+  valid: boolean;
+  error?: string;
+  normalized?: string;
+  deprecated?: boolean;
+  replacement?: string;
+}
+
+/**
+ * Result of validating a parsed collection object's structure.
+ */
+export interface ObjectValidationResult {
+  ok: boolean;
+  errors: string[];
+}
+
+/**
+ * Result of validating a collection file on disk (parse + structure).
+ */
+export interface FileValidationResult extends ObjectValidationResult {
+  collection?: Collection;
+}
+
+/**
+ * Aggregate result of validating every collection file in a repository.
+ */
+export interface AllCollectionsResult extends ObjectValidationResult {
+  fileResults: ({ file: string } & FileValidationResult)[];
+}
+
+/**
+ * Configurable rules used by the collection validators.
+ */
+export interface ValidationRules {
+  collectionId: {
+    maxLength: number;
+    pattern: RegExp;
+    description: string;
+  };
+  version: {
+    pattern: RegExp;
+    default: string;
+    description: string;
+  };
+  itemKinds: string[];
+  deprecatedKinds: Record<string, string>;
+}
+
+/**
+ * Result of `version compute` — the next semver version + git tag for a collection.
+ */
+export interface VersionInfo {
+  collectionId: string;
+  collectionFile: string;
+  lastVersion: string | null;
+  manualVersion: string;
+  nextVersion: string;
+  tag: string;
+}
+
+/**
+ * Result of `bundle build` — the on-disk artifacts produced for a collection.
+ */
+export interface BundleInfo {
+  collectionId: string;
+  version: string;
+  outDir: string;
+  manifestAsset: string;
+  zipAsset: string;
+  bundleId: string;
+}
+
+/**
  * Parsed `deployment-manifest.yml` — the build spec a `Collection` compiles
  * to. Field names intentionally match the on-disk YAML schema
  * (`snake_case` for schema-defined keys).

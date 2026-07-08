@@ -18,3 +18,13 @@ export interface Clock {
   /** Current time, as an ISO-8601 string — the format persisted throughout `core`'s domain types. */
   nowIso(): string;
 }
+
+/**
+ * Test-clock extension — the manual `advance()` lever used by the CLI
+ * framework's golden tests (`@ai-primitives-hub/cli`'s
+ * `framework/test-context.ts`). Production code never sees this type;
+ * only the test factory upcasts to `Clock` when handing it to commands.
+ */
+export interface TestClock extends Clock {
+  advance(ms: number): void;
+}
