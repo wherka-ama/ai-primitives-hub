@@ -23,6 +23,16 @@ export default defineConfig([
     tsconfigRootDir: import.meta.dirname
   }),
   {
+    // Clipanion's `Command.Usage(...)` is a static factory, not a
+    // constructor — exempt it from `new-cap`'s "capitalized names must
+    // be `new`-called" heuristic.
+    name: 'cli/clipanion-usage-factory',
+    files: ['**/*.ts'],
+    rules: {
+      'new-cap': ['error', { capIsNewExceptions: ['Usage'] }]
+    }
+  },
+  {
     // TODO to be discussed and fixed in a future PR
     name: 'cli/temporary-warn-rules-ts',
     files: ['**/*.ts'],
