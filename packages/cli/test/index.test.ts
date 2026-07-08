@@ -4,11 +4,11 @@ import {
   it,
 } from 'vitest';
 import {
-  CLI_PACKAGE_READY,
+  run,
 } from '../src/index';
 
-describe('@ai-primitives-hub/cli placeholder', () => {
-  it('resolves its @ai-primitives-hub/app dependency and re-exports a truthy marker', () => {
-    expect(CLI_PACKAGE_READY).toBe(true);
+describe('@ai-primitives-hub/cli barrel', () => {
+  it('exports run (the main entry point bin/ai-primitives-hub.js calls)', () => {
+    expect(typeof run).toBe('function');
   });
 });
