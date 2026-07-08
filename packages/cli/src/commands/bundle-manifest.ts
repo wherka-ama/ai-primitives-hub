@@ -445,8 +445,12 @@ export class BundleManifestCommand extends Command {
     const fmt = (this.output ?? 'text');
     const version = this.version ?? '';
     const collectionFile = this.collectionFile;
-    const outFile = this.outFile ?? 'deployment-manifest.yml';
     const cwd = ctx.cwd();
+    const outFileRel = this.outFile ?? 'deployment-manifest.yml';
+    // Resolve against ctx.cwd() (not process.cwd()) so the command
+    // honors injected working directories (Context invariant — see
+    // bundle-build.ts's outDir resolution for the same pattern).
+    const outFile = path.isAbsolute(outFileRel) ? outFileRel : path.join(cwd, outFileRel);
     try {
       await generateBundleManifest(ctx, cwd, { version, collectionFile, output: fmt }, outFile);
       return 0;
