@@ -33,7 +33,13 @@
  * which ignores its `Target` parameter entirely).
  * @module stores/json-lockfile-store
  */
+import {
+  createHash,
+} from 'node:crypto';
 import * as path from 'node:path';
+import type {
+  ExtractedFiles,
+} from '@ai-primitives-hub/core';
 
 /** Lockfile filename for commit-mode (git-tracked) bundle entries. */
 export const LOCKFILE_NAME = 'prompt-registry.lock.json';
@@ -91,6 +97,8 @@ export interface LockfileSourceEntry {
   url: string;
   /** Optional Git branch for git-based sources. */
   branch?: string;
+  /** Optional collections subdirectory, for `awesome-copilot`-type sources. */
+  collectionsPath?: string;
 }
 
 /**
@@ -289,4 +297,71 @@ export const cleanupOrphanedSource = (lock: Lockfile, sourceId: string): Lockfil
   const sources = { ...lock.sources };
   delete sources[sourceId];
   return { ...lock, sources };
+};
+
+/**
+ * Compute SHA256 checksums for every file in an extracted bundle,
+ * producing the `{path, checksum}` pairs `LockfileBundleEntry.files`
+ * expects. Excludes `deployment-manifest.yml` — it is bundle metadata,
+ * not an installed file — matching every writer's own exclusion of it.
+ * @param files - Extracted bundle files (path -> raw bytes).
+ * @returns Per-file checksum entries, manifest excluded.
+ */
+export const checksumFiles = (files: ExtractedFiles): LockfileFileEntry[] => {
+  const entries: LockfileFileEntry[] = [];
+  for (const [filePath, bytes] of files) {
+    if (filePath === 'deployment-manifest.yml') {
+      continue;
+    }
+    entries.push({
+      path: filePath,
+      checksum: createHash('sha256').update(bytes).digest('hex')
+    });
+  }
+  return entries;
+};
+
+/**
+ * Find a project-scope lockfile by walking up from `startDir`, then
+ * optionally falling back to a user-level path. Checks for either
+ * physical lockfile (`LOCKFILE_NAME` or `LOCAL_LOCKFILE_NAME`) at each
+ * directory level — unlike the reference branch's `findLockfile`
+ * (`infra/src/stores/json-lockfile-store.ts`), which only ever checked
+ * a single filename, because this store's schema (adapted to the
+ * extension's real on-disk format, see the module doc above) splits
+ * commit-mode and local-only entries across two physical files rather
+ * than the reference's single-file-with-a-`commitMode`-field shape.
+ * Path resolution only — does not read or validate file contents, so
+ * the lockfile bundle-entry schema difference from the reference is
+ * not a concern here.
+ * @param startDir - Directory to start the upward walk from.
+ * @param fs - LockfileFs adapter (only `exists` is used).
+ * @param userLockfile - Optional user-level lockfile path to try when no
+ *   project-level lockfile is found (typically
+ *   `resolveUserConfigPaths(env).userLockfile`).
+ * @returns Absolute path to the first lockfile found, or `null`.
+ */
+export const findLockfile = async (
+  startDir: string,
+  fs: Pick<LockfileFs, 'exists'>,
+  userLockfile?: string
+): Promise<string | null> => {
+  let dir = startDir;
+  while (true) {
+    for (const name of [LOCKFILE_NAME, LOCAL_LOCKFILE_NAME]) {
+      const candidate = path.join(dir, name);
+      if (await fs.exists(candidate)) {
+        return candidate;
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  if (userLockfile !== undefined && await fs.exists(userLockfile)) {
+    return userLockfile;
+  }
+  return null;
 };

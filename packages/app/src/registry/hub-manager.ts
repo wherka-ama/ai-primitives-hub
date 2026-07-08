@@ -22,10 +22,13 @@
  */
 import type {
   HubConfig,
+  HubProfile,
   HubReference,
+  RegistrySource,
   ValidationResult,
 } from '@ai-primitives-hub/core';
 import {
+  DEFAULT_LOCAL_HUB_ID,
   sanitizeHubId,
 } from '@ai-primitives-hub/core';
 import type {
@@ -158,6 +161,9 @@ export class HubManager {
 
     const id = hubId ?? this.generateHubId(resolved.config);
     sanitizeHubId(id);
+    if (id === DEFAULT_LOCAL_HUB_ID) {
+      throw new Error(`Reserved hub id: ${DEFAULT_LOCAL_HUB_ID}`);
+    }
 
     await this.deps.store.save(id, resolved.config, resolved.reference);
     return id;
@@ -424,5 +430,155 @@ export class HubManager {
     }
 
     return removed;
+  }
+
+  /**
+   * Aggregate sources from a chosen hub (default: active).
+   * @param hubId Optional hub id; defaults to the active hub.
+   * @returns Sources (each decorated with its `hubId`), or an empty
+   * list when no hub id is given and none is active.
+   */
+  public async listSources(hubId?: string): Promise<RegistrySource[]> {
+    let resolvedId = hubId;
+    if (resolvedId === undefined) {
+      resolvedId = (await this.deps.activeStore.get()) ?? undefined;
+      if (resolvedId === undefined) {
+        return [];
+      }
+    }
+    const h = await this.deps.store.load(resolvedId);
+    return h.config.sources.map((s) => ({ ...s, hubId: resolvedId }));
+  }
+
+  /**
+   * List sources across **every** hub on disk (used by `source list`
+   * with no `--hub` filter). Each source carries its `hubId`.
+   * @returns Flattened source list; malformed hubs are skipped.
+   */
+  public async listSourcesAcrossAllHubs(): Promise<RegistrySource[]> {
+    const ids = await this.deps.store.list();
+    const out: RegistrySource[] = [];
+    for (const id of ids) {
+      try {
+        const h = await this.deps.store.load(id);
+        for (const s of h.config.sources) {
+          out.push({ ...s, hubId: id });
+        }
+      } catch {
+        // skip malformed
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Add a detached source, i.e. one not tied to any imported hub.
+   * Creates the synthetic `default-local` hub on first call.
+   * Replaces any existing source with the same id.
+   * @param source Source to add (its `hubId` is ignored — always set to `default-local`).
+   * @returns The persisted source.
+   */
+  public async addDetachedSource(source: Omit<RegistrySource, 'hubId'>): Promise<RegistrySource> {
+    const finalSource: RegistrySource = { ...source, hubId: DEFAULT_LOCAL_HUB_ID };
+    let cfg: HubConfig;
+    let ref: HubReference;
+    if (await this.deps.store.has(DEFAULT_LOCAL_HUB_ID)) {
+      const loaded = await this.deps.store.load(DEFAULT_LOCAL_HUB_ID);
+      cfg = loaded.config;
+      ref = loaded.reference;
+    } else {
+      cfg = {
+        version: '1.0.0',
+        metadata: {
+          name: 'Local sources',
+          description: 'Auto-managed default-local hub for detached sources.',
+          maintainer: 'cli',
+          updatedAt: new Date().toISOString()
+        },
+        sources: [],
+        profiles: []
+      };
+      ref = { type: 'local', location: DEFAULT_LOCAL_HUB_ID };
+    }
+    const filtered = cfg.sources.filter((s) => s.id !== finalSource.id);
+    cfg = { ...cfg, sources: [...filtered, finalSource] };
+    await this.deps.store.save(DEFAULT_LOCAL_HUB_ID, cfg, ref);
+    return finalSource;
+  }
+
+  /**
+   * Remove a detached source from the default-local hub.
+   * @param sourceId Source id.
+   * @returns true iff a source was actually removed.
+   */
+  public async removeDetachedSource(sourceId: string): Promise<boolean> {
+    if (!(await this.deps.store.has(DEFAULT_LOCAL_HUB_ID))) {
+      return false;
+    }
+    const loaded = await this.deps.store.load(DEFAULT_LOCAL_HUB_ID);
+    const before = loaded.config.sources.length;
+    const after = loaded.config.sources.filter((s) => s.id !== sourceId);
+    if (after.length === before) {
+      return false;
+    }
+    await this.deps.store.save(DEFAULT_LOCAL_HUB_ID, { ...loaded.config, sources: after }, loaded.reference);
+    return true;
+  }
+
+  /**
+   * Add a profile to a hub. Auto-creates the hub (e.g. `default-local`)
+   * if it doesn't exist yet. Replaces any existing profile with the
+   * same id.
+   * @param hubId Hub identifier.
+   * @param profile Profile to add.
+   * @returns The persisted profile.
+   */
+  public async addProfile(hubId: string, profile: HubProfile): Promise<HubProfile> {
+    let cfg: HubConfig;
+    let ref: HubReference;
+
+    if (await this.deps.store.has(hubId)) {
+      const loaded = await this.deps.store.load(hubId);
+      cfg = loaded.config;
+      ref = loaded.reference;
+    } else {
+      cfg = {
+        version: '1.0.0',
+        metadata: {
+          name: hubId === DEFAULT_LOCAL_HUB_ID ? 'Local sources' : hubId,
+          description: hubId === DEFAULT_LOCAL_HUB_ID ? 'Auto-managed default-local hub.' : `Hub: ${hubId}`,
+          maintainer: 'cli',
+          updatedAt: new Date().toISOString()
+        },
+        sources: [],
+        profiles: []
+      };
+      ref = { type: 'local', location: hubId };
+    }
+
+    const filtered = cfg.profiles.filter((p) => p.id !== profile.id);
+    cfg = { ...cfg, profiles: [...filtered, profile] };
+    await this.deps.store.save(hubId, cfg, ref);
+    return profile;
+  }
+
+  /**
+   * Remove a profile from a hub.
+   * @param hubId Hub identifier.
+   * @param profileId Profile identifier.
+   * @returns true iff a profile was actually removed.
+   */
+  public async removeProfile(hubId: string, profileId: string): Promise<boolean> {
+    if (!(await this.deps.store.has(hubId))) {
+      return false;
+    }
+    const loaded = await this.deps.store.load(hubId);
+    const before = loaded.config.profiles.length;
+    const after = loaded.config.profiles.filter((p) => p.id !== profileId);
+    if (after.length === before) {
+      return false;
+    }
+    await this.deps.store.save(hubId, { ...loaded.config, profiles: after }, loaded.reference);
+    return true;
   }
 }
