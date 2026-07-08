@@ -127,6 +127,14 @@ items:
       const result = await run(['collection', 'create', '-o', 'json']);
       expect(result.exitCode).toBe(64);
     });
+
+    it('honors an absolute --path as-is instead of nesting it under cwd', async () => {
+      const customDir = path.join(workspace, 'custom-out');
+      const result = await run(['collection', 'create', 'bar', '--path', customDir, '-o', 'json']);
+      expect(result.exitCode).toBe(0);
+      const envelope = parseJson<{ path: string }>(result.stdout);
+      expect(envelope.data.path.startsWith(customDir)).toBe(true);
+    });
   });
 
   describe('collection list', () => {

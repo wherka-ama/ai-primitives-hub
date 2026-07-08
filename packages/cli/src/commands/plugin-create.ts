@@ -89,7 +89,7 @@ export class PluginCreateCommand extends Command {
 
       // Determine output path
       const outputPath = this.pathOption || 'plugins';
-      const targetPath = path.join(ctx.cwd(), outputPath);
+      const targetPath = path.isAbsolute(outputPath) ? outputPath : path.join(ctx.cwd(), outputPath);
 
       // Initialize template engine
       const templateEngine = new TemplateEngine(TEMPLATE_PATHS.plugin);

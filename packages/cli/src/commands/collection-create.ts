@@ -92,7 +92,7 @@ export class CollectionCreateCommand extends Command {
 
       // Determine output path
       const outputPath = this.pathOption || 'collections';
-      const targetPath = path.join(ctx.cwd(), outputPath);
+      const targetPath = path.isAbsolute(outputPath) ? outputPath : path.join(ctx.cwd(), outputPath);
 
       // Use collection ID in filename
       const collectionFileName = `${collectionId}.collection.yml`;
