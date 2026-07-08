@@ -84,10 +84,11 @@ export class SourceAddCommand extends BaseSourceCommand {
     const mgr = createHubManager({ ctx, http, tokens });
 
     if (!this.url) {
-      return renderError(new RegistryError({
+      renderError(new RegistryError({
         code: 'USAGE.MISSING_FLAG',
         message: 'source add: --url <owner/repo|path> is required'
       }), ctx);
+      return 1;
     }
 
     const type = (this.sourceType ?? 'github') as 'github' | 'local';
@@ -176,18 +177,20 @@ export class SourceRemoveCommand extends BaseSourceCommand {
     const mgr = createHubManager({ ctx, http, tokens });
 
     if (!this.sourceId) {
-      return renderError(new RegistryError({
+      renderError(new RegistryError({
         code: 'USAGE.MISSING_FLAG',
         message: 'source remove: <sourceId> required'
       }), ctx);
+      return 1;
     }
 
     const removed = await mgr.removeDetachedSource(this.sourceId);
     if (!removed) {
-      return renderError(new RegistryError({
+      renderError(new RegistryError({
         code: 'BUNDLE.NOT_FOUND',
         message: `source remove: "${this.sourceId}" not in default-local hub`
       }), ctx);
+      return 1;
     }
     formatOutput({
       ctx, command: 'source.remove', output: fmt, status: 'ok',
