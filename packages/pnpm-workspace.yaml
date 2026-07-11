@@ -13,4 +13,7 @@
 packages:
   - '*'
 
+allowBuilds:
+  unrs-resolver: true
+
 engineStrict: true
