@@ -32,11 +32,17 @@ import {
   CollectionValidateCommand,
 } from './commands/collection-validate';
 import {
+  CompletionCommand,
+} from './commands/completion';
+import {
   ConfigGetCommand,
 } from './commands/config-get';
 import {
   ConfigListCommand,
 } from './commands/config-list';
+import {
+  DiscoverCommand,
+} from './commands/discover';
 import {
   DoctorCommand,
   DoctorDiagnosticsCommand,
@@ -227,7 +233,9 @@ async function main(): Promise<number> {
     DoctorCommand,
     DoctorDiagnosticsCommand,
     PluginsListCommand,
-    SkillValidateCommand
+    SkillValidateCommand,
+    CompletionCommand,
+    DiscoverCommand
   ];
 
   const exitCode = await runCli(process.argv.slice(2), {
