@@ -948,7 +948,7 @@ async function performRemoteInstall(
       entry.commitMode = commitMode;
     }
     let nextLock = upsertBundleEntry(existing, manifest.id, entry);
-    const collectionsPath = opts.sourceConfig?.config?.collectionsPath as string | undefined;
+    const collectionsPath = opts.sourceConfig?.config?.collectionsPath;
     nextLock = upsertSource(nextLock, installable.ref.sourceId, {
       type: 'github',
       url: `https://github.com/${repoSlug}`,

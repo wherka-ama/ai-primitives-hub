@@ -179,6 +179,13 @@ export const runCli = async (argv: string[], opts: RunCliOptions): Promise<numbe
     return 0;
   }
 
+  // Top-level --version: print "name version" (clipanion's built-in only
+  // prints the version, but our tests and callers expect the binary name).
+  if (argv[0] === '--version' || argv[0] === '-v') {
+    opts.ctx.stdout.write(`${opts.name} ${opts.version}\n`);
+    return 0;
+  }
+
   // We bypass clipanion's `cli.run` because (a) it always returns 0/1,
   // collapsing the EX_USAGE / EX_SOFTWARE distinction we need,
   // and (b) it writes errors to stdout instead of stderr.
@@ -240,8 +247,7 @@ export const runCli = async (argv: string[], opts: RunCliOptions): Promise<numbe
   // Apply defaultOutput when the command declares an output field but the
   // user did not pass an explicit -o / --output flag.
   if (opts.defaultOutput !== undefined) {
-    const cmd = command as any;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- nullish coalescing to set default output
+    const cmd = command as { output?: string };
     cmd.output ??= opts.defaultOutput;
   }
 

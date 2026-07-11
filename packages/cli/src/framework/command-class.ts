@@ -18,6 +18,7 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- generic class reference
 export const copyCommandPrototype = (baseClass: Function, subClass: Function): void => {
+  // Copy prototype descriptors (methods, getters, setters).
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic prototype access
   const baseDescriptors = Object.getOwnPropertyDescriptors((baseClass as any).prototype);
   for (const [key, descriptor] of Object.entries(baseDescriptors)) {
@@ -26,8 +27,21 @@ export const copyCommandPrototype = (baseClass: Function, subClass: Function): v
       Object.defineProperty((subClass as any).prototype, key, descriptor);
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Clipanion factory method
-  (subClass as any).paths = (baseClass as any).paths;
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Clipanion factory method
-  (subClass as any).usage = (baseClass as any).usage;
+
+  // Copy class fields (own properties on a base instance) so inherited
+  // clipanion options and other field declarations are visible on the
+  // subclass instances.
+  const baseInstance = new (baseClass as unknown as new () => object)();
+  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(baseInstance))) {
+    if (key !== 'constructor') {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- dynamic prototype access
+      Object.defineProperty((subClass as any).prototype, key, descriptor);
+    }
+  }
+
+  // Copy static clipanion metadata (paths / usage) to the subclass.
+  const staticBase = baseClass as unknown as { paths?: unknown; usage?: unknown };
+  const staticSub = subClass as unknown as { paths?: unknown; usage?: unknown };
+  staticSub.paths = staticBase.paths;
+  staticSub.usage = staticBase.usage;
 };

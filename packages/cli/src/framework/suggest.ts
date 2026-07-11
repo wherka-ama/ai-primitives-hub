@@ -50,16 +50,17 @@ export const suggestCommand = (
   cli: Cli,
   binaryName: string
 ): string | undefined => {
-  // Reconstruct the attempted command path from argv (stop at first flag).
-  const attemptedParts: string[] = [];
+  // Reconstruct candidate command prefixes from argv (stop at first flag).
+  const candidates: string[] = [];
+  const prefix: string[] = [];
   for (const token of argv) {
     if (token.startsWith('-')) {
       break;
     }
-    attemptedParts.push(token);
+    prefix.push(token);
+    candidates.push(prefix.join(' '));
   }
-  const attempted = attemptedParts.join(' ');
-  if (attempted.length === 0) {
+  if (candidates.length === 0) {
     return undefined;
   }
 
@@ -69,9 +70,9 @@ export const suggestCommand = (
     if (!def.description) {
       continue;
     }
-    const prefix = `${binaryName} `;
-    const path = def.path.startsWith(prefix)
-      ? def.path.slice(prefix.length)
+    const binaryPrefix = `${binaryName} `;
+    const path = def.path.startsWith(binaryPrefix)
+      ? def.path.slice(binaryPrefix.length)
       : def.path;
     if (path === '--help' || path === '-h' || path === '--version') {
       continue;
@@ -79,21 +80,24 @@ export const suggestCommand = (
     knownPaths.push(path);
   }
 
-  // Find the closest match.
-  let best: string | undefined;
+  // Find the closest match across all candidate prefixes.
+  let bestPath: string | undefined;
   let bestDist = Infinity;
-  for (const path of knownPaths) {
-    const dist = levenshtein(attempted, path);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = path;
+  let bestLen = 0;
+  for (const candidate of candidates) {
+    const threshold = Math.min(2, Math.floor(candidate.length * 0.4));
+    for (const path of knownPaths) {
+      const dist = levenshtein(candidate, path);
+      if (dist <= threshold && (dist < bestDist || (dist === bestDist && candidate.length > bestLen))) {
+        bestDist = dist;
+        bestPath = path;
+        bestLen = candidate.length;
+      }
     }
   }
 
-  // Threshold: small absolute distance or ≤ 40 % of the attempted length.
-  const threshold = Math.min(2, Math.floor(attempted.length * 0.4));
-  if (best !== undefined && bestDist <= threshold && best !== attempted) {
-    return best;
+  if (bestPath !== undefined && bestPath !== candidates.at(-1)) {
+    return bestPath;
   }
 
   return undefined;

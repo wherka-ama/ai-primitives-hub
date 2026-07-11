@@ -18,7 +18,6 @@ import * as path from 'node:path';
 import {
   cleanupOrphanedSource,
   FileTreeTargetWriter,
-  type Lockfile,
   type LockfileBundleEntry,
   readLockfile,
   removeBundleEntry,
@@ -502,7 +501,7 @@ async function performLockfileUninstall(
   const lockPath = path.isAbsolute(lockfile)
     ? lockfile
     : path.join(ctx.cwd(), lockfile);
-  const lock = await readLockfile(lockPath, ctx.fs) as Lockfile | null;
+  const lock = await readLockfile(lockPath, ctx.fs);
 
   if (lock === null) {
     formatOutput({

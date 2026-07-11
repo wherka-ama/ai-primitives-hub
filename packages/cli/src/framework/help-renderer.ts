@@ -104,8 +104,15 @@ export const renderGlobalHelp = (
   }
   lines.push('\n');
 
-  // Render categories in the prescribed order.
-  for (const category of CATEGORY_ORDER) {
+  // Render categories in the prescribed order first, then any unknown
+  // categories alphabetically so nothing is silently dropped.
+  const knownCategories = CATEGORY_ORDER;
+  const unknownCategories = [...byCategory.keys()]
+    .filter((c) => !knownCategories.includes(c))
+    .toSorted((a, b) => a.localeCompare(b));
+  const categories = [...knownCategories, ...unknownCategories];
+
+  for (const category of categories) {
     const list = byCategory.get(category);
     if (!list || list.length === 0) {
       continue;

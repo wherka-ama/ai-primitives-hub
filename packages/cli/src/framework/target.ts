@@ -7,8 +7,8 @@
 import {
   findLockfile,
   getLockfilePathForMode,
-  resolveUserConfigPaths,
   type RepositoryCommitMode,
+  resolveUserConfigPaths,
 } from '@ai-primitives-hub/app';
 import {
   type Target,

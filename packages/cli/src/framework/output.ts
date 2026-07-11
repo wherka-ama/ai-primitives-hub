@@ -150,5 +150,9 @@ const defaultTextRenderer = <T>(data: T): string => {
   // serialization so commands that haven't defined a `textRenderer`
   // still produce *some* meaningful output. Text mode is "best-effort
   // human"; commands wanting machine output should pass `-o json`.
+  // A null/undefined payload means nothing to render.
+  if (data === null || data === undefined) {
+    return '';
+  }
   return `${JSON.stringify(data, null, 2)}\n`;
 };

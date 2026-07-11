@@ -26,11 +26,11 @@ import {
 } from '@ai-primitives-hub/app';
 import type {
   HttpClient,
+  TargetType,
   TokenProvider,
 } from '@ai-primitives-hub/core';
 import {
   TARGET_TYPES,
-  type TargetType,
 } from '@ai-primitives-hub/core';
 import {
   addTarget,

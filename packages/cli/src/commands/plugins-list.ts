@@ -100,10 +100,10 @@ const processPluginFile = (filename: string, dir: string, plugins: Map<string, P
   const name = filename.slice(PLUGIN_PREFIX.length);
   const fullPath = path.join(dir, filename);
   const existing = plugins.get(name);
-  if (existing !== undefined) {
-    existing.conflicts.push(fullPath);
-  } else {
+  if (existing === undefined) {
     plugins.set(name, { name, source: fullPath, conflicts: [] });
+  } else {
+    existing.conflicts.push(fullPath);
   }
 };
 

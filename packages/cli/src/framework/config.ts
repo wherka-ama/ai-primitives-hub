@@ -79,7 +79,7 @@ const DEFAULTS: Config = {
 };
 
 const ENV_PREFIX = 'AI_PRIMITIVES_HUB_';
-const PROJECT_CONFIG_NAMES = ['ai-primitives-hub.yml', 'ai-primitives-hub.yaml'];
+const PROJECT_CONFIG_NAMES = ['ai-primitives-hub.yaml', 'ai-primitives-hub.yml'];
 const USER_CONFIG_FILENAME = 'config.yml';
 
 /**
