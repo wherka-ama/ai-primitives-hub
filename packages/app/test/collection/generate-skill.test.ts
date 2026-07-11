@@ -25,19 +25,19 @@ import {
 
 function createTempDir(prefix: string): [string, () => void] {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const cleanup = () => fs.rmSync(tmp, { recursive: true, force: true });
-  return [tmp, cleanup];
+  const remove = () => fs.rmSync(tmp, { recursive: true, force: true });
+  return [tmp, remove];
 }
 
 let tempDir: string;
-let cleanup: () => void;
+let cleanupFn: () => void;
 
 beforeEach(() => {
-  [tempDir, cleanup] = createTempDir('generate-skill-test-');
+  [tempDir, cleanupFn] = createTempDir('generate-skill-test-');
 });
 
 afterEach(() => {
-  cleanup();
+  cleanupFn();
 });
 
 describe('generate-skill', () => {
