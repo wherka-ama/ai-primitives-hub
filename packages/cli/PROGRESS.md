@@ -559,9 +559,9 @@ this package's concern).
   tests total, all passing.
 
 ## Status
-- [ ] Shared utils (types.ts, bundle-id.ts, collections.ts, skills.ts, validate.ts — not verified this session)
+- [x] Shared utils ✅ (types/bundle-id/collections/skills/validate logic lives in `@ai-primitives-hub/core` and `@ai-primitives-hub/app`; verified by build and tests)
 - [x] doctor/diagnostics.ts ✅ (ported this session as `doctor/diagnostics.ts` + `commands/doctor.ts` — see notes below)
-- [ ] Framework tests
+- [x] Framework tests ✅ (`test/framework/` suite added, 14 files covering CLI runner, context, output, config, help, error, golden, parsers, suggest, table, target, and hub-manager)
 - [x] Core commands (status ✅, init ✅, install ✅, uninstall ✅, update ✅)
 - [x] hub/source/profile ✅ (`hub.ts`/`source.ts`/`profile.ts` all covered by `test/commands/hub.test.ts`/`source.test.ts`/`profile.test.ts`)
 - [x] target-* ✅ (add/list/remove/types; covered by `test/commands/target.test.ts`, 12 cases)
