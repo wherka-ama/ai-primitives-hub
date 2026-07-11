@@ -566,17 +566,17 @@ this package's concern).
 - [x] hub/source/profile ✅ (`hub.ts`/`source.ts`/`profile.ts` all covered by `test/commands/hub.test.ts`/`source.test.ts`/`profile.test.ts`)
 - [x] target-* ✅ (add/list/remove/types; covered by `test/commands/target.test.ts`, 12 cases)
 - [x] index-* ✅ (build/harvest/search/shortlist/export/stats/report/eval/bench; covered by `test/commands/index.test.ts`, 17 cases)
-- [ ] discover (deferred — needs `CopilotSdkClient` port for `--ai`; non-AI path is unblocked, see notes above)
+- [x] discover ✅ (non-AI path ported + `test/commands/discover.test.ts` added; `--ai` still needs a `CopilotSdkClient` port and is handled as a structured `USAGE.AI_NOT_IMPLEMENTED` error)
 - [x] collection-* ✅ (create/list/validate/affected; covered by `test/commands/collection-bundle.test.ts`)
 - [x] explain/config-get/config-list/apply ✅ (all 4 covered by `test/commands/misc.test.ts`)
 - [x] scaffolding generators ✅ (prompt/instruction/agent/skill/plugin/hook-create, skill-new; covered by `test/commands/scaffolding.test.ts` (33 cases) + `collection-bundle.test.ts` (skill-new) — **fixed a real absolute-`--path` bug in all 7**, see notes above)
 - [x] bundle-manifest/bundle-build/version-compute ✅ (covered by `test/commands/collection-bundle.test.ts` — **fixed a real absolute/relative-`--out-file` bug in bundle-manifest.ts**, see notes above)
-- [ ] completion (not started — confirmed missing this session)
+- [x] completion ✅ (ported + `test/commands/completion.test.ts` added)
 - [x] plugins-list/skill-validate/doctor ✅ (all 3 covered — `plugins-list`/`skill-validate` by `test/commands/misc.test.ts`, `doctor`+`doctor diagnostics` by `test/commands/doctor-status-init-update.test.ts`)
-- [x] main.ts/index.ts/bin wiring ✅ (62 commands registered; verified against the real compiled `bin/ai-primitives-hub.js` binary — see notes below; `completion`/`discover` not registered, don't exist yet)
-- [x] Command tests ✅ every command file that exists has a covering test suite (12 files / 148 tests under `test/commands/`) — only the never-started `discover`/`completion` commands have no tests, since they have no implementation to test
+- [x] main.ts/index.ts/bin wiring ✅ (64 commands registered; verified against the real compiled `bin/ai-primitives-hub.js` binary — see notes below; `CompletionCommand` and `DiscoverCommand` are now registered)
+- [x] Command tests ✅ every command file that exists has a covering test suite (14 files / 161 tests under `test/commands/`) — `discover` and `completion` now have dedicated tests; only `discover`'s `--ai` path remains deferred until a `CopilotSdkClient` port lands
 - [x] Final verification ✅ `pnpm -r build && pnpm -r test` (run from `packages/`) — `core`/`infra`/`app`/`cli` all build clean; 123 files / 1,516 tests pass across the whole monorepo
 
-Only remaining gaps in the original plan: `discover`'s `--ai` path (needs a `CopilotSdkClient` port) and `completion` (not started). Everything else in the leaf-commands port + test-writing pass (plan items 1–12) is done.
+Only remaining gap in the original plan: `discover`'s `--ai` path (needs a `CopilotSdkClient` port). `completion` and the `discover` non-AI path are now implemented, tested, and registered. Everything else in the leaf-commands port + test-writing pass (plan items 1–12) is done.
 
 (This file is a working scratchpad — delete once the port is complete and merged.)
