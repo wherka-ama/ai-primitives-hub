@@ -6,11 +6,12 @@
     "build": "rollup --config rollup.config.js"
   },
   "dependencies": {
-    "js-yaml": "^4.1.1"
+    "@ai-primitives-hub/app": "workspace:*"
   },
   "devDependencies": {
     "rollup": "^4.59.0",
     "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.0.0"
   }
 }
