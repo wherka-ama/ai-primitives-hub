@@ -38,7 +38,7 @@ suite('UserScopeService', () => {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    service = new UserScopeService(mockContext);
+    service = new UserScopeService(mockContext, tempDir);
   });
 
   teardown(() => {
@@ -98,6 +98,32 @@ prompts: []
       } catch (error) {
         assert.ok(error, 'Should throw error for invalid bundle path');
       }
+    });
+  });
+
+  suite('Kiro target installation', () => {
+    test('uses the Kiro layout and transforms agent frontmatter', async () => {
+      const bundleId = 'kiro-agent-bundle';
+      const bundlePath = path.join(tempDir, 'kiro-bundle');
+      const agentPath = path.join(bundlePath, 'agents', 'review-agent.md');
+      fs.mkdirSync(path.dirname(agentPath), { recursive: true });
+      fs.writeFileSync(agentPath, '---\ntitle: "Review Agent"\n---\nReview code.');
+      fs.writeFileSync(path.join(bundlePath, 'deployment-manifest.yml'), `
+id: ${bundleId}
+version: "1.0.0"
+prompts:
+  - id: review-agent
+    name: Review Agent
+    file: agents/review-agent.md
+    type: agent
+`);
+
+      const kiroService = new UserScopeService(mockContext, tempDir, 'kiro');
+      await kiroService.syncBundle(bundleId, bundlePath);
+
+      const targetPath = path.join(tempDir, '.kiro', 'agents', 'review-agent.agent.md');
+      assert.ok(fs.existsSync(targetPath), 'Kiro agent should be written under ~/.kiro/agents');
+      assert.ok(fs.readFileSync(targetPath, 'utf8').includes('name: "Review Agent"'));
     });
   });
 
