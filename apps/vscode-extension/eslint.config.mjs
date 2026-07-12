@@ -8,7 +8,7 @@ import {
   createSharedConfig,
   temporaryWarnRules,
   temporaryWarnRulesTs,
-} from './eslint.shared.mjs';
+} from '../../eslint.shared.mjs';
 
 export default defineConfig([
   globalIgnores(

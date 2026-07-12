@@ -701,45 +701,46 @@
     }
   },
   "scripts": {
+    "build": "pnpm run compile",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
-    "vscode:prepublish": "npm run compile",
-    "compile-lib": "npm run build --workspace=lib",
+    "vscode:prepublish": "pnpm run compile",
+    "compile-lib": "pnpm --filter @prompt-registry/collection-scripts run build",
     "copy-webview": "cpy \"src/ui/webview/marketplace/*\" dist/webview/marketplace && cpy \"src/ui/webview/bundle-details/*\" dist/webview/bundle-details",
-    "copy-skill-references": "cpy docs/README.md resources/skills/prompt-registry-helper/references/docs-index.md && cpy \"docs/**\" \"!docs/README.md\" \"!docs/contributor-guide\" \"!docs/contributor-guide/**\" \"!docs/reference/adapter-api.md\" \"!docs/AGENTS.md\" resources/skills/prompt-registry-helper/references",
-    "compile": "npm run compile-lib && webpack --mode production && npm run copy-webview && npm run copy-skill-references",
+    "copy-skill-references": "cd ../.. && cpy docs/README.md apps/vscode-extension/resources/skills/prompt-registry-helper/references/docs-index.md && cpy \"docs/**\" \"!docs/README.md\" \"!docs/contributor-guide\" \"!docs/contributor-guide/**\" \"!docs/reference/adapter-api.md\" \"!docs/AGENTS.md\" apps/vscode-extension/resources/skills/prompt-registry-helper/references",
+    "compile": "pnpm run compile-lib && webpack --mode production && pnpm run copy-webview && pnpm run copy-skill-references",
     "watch": "webpack --mode development --watch",
-    "package": "webpack --mode production --devtool hidden-source-map && npm run copy-webview",
-    "package:vsix": "vsce package",
+    "package": "webpack --mode production --devtool hidden-source-map && pnpm run copy-webview",
+    "package:vsix": "vsce package --no-dependencies",
     "compile-tests": "tsc -p tsconfig.test.json && node scripts/copy-test-fixtures.js",
     "watch-tests": "tsc -p tsconfig.test.json -w",
-    "pretest": "rimraf test-dist && npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src test && npm run lint -w lib",
-    "lint:fix": "eslint src test --fix && npm run lint:fix -w lib",
-    "test": "npm run test:all",
+    "pretest": "rimraf test-dist && pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "lint": "eslint src test && pnpm --filter @prompt-registry/collection-scripts run lint",
+    "lint:fix": "eslint src test --fix && pnpm --filter @prompt-registry/collection-scripts run lint:fix",
+    "test": "pnpm run test:all",
     "test:one": "node scripts/run-single-test.js",
     "test:unit": "npx mocha --ui tdd --require ./test/mocha.setup.js --require ./test/unit.setup.js 'test-dist/test/**/*.test.js' --ignore 'test-dist/test/suite/**/*.test.js' --timeout 5000",
-    "test:integration": "npm run compile-tests && node ./test/runExtensionTests.js",
-    "test:all": "npm run compile-tests && npm run test:unit && npm run test:integration",
-    "test:coverage": "npm run compile-tests && c8 npm run test:all",
+    "test:integration": "pnpm run compile-tests && node ./test/runExtensionTests.js",
+    "test:all": "pnpm run compile-tests && pnpm run test:unit && pnpm run test:integration",
+    "test:coverage": "pnpm run compile-tests && c8 pnpm run test:all",
     "test:coverage:report": "c8 report --reporter=html --reporter=text --reporter=json",
-    "test:coverage:unit": "npm run compile-tests && c8 --reporter=html --reporter=text mocha --ui tdd --require ./test/mocha.setup.js --require ./test/unit.setup.js 'test-dist/test/**/*.test.js' --ignore 'test-dist/test/suite/**/*.test.js' --timeout 5000",
-    "test:coverage:integration": "npm run compile-tests && c8 --reporter=html --reporter=text npm run test:integration",
+    "test:coverage:unit": "pnpm run compile-tests && c8 --reporter=html --reporter=text mocha --ui tdd --require ./test/mocha.setup.js --require ./test/unit.setup.js 'test-dist/test/**/*.test.js' --ignore 'test-dist/test/suite/**/*.test.js' --timeout 5000",
+    "test:coverage:integration": "pnpm run compile-tests && c8 --reporter=html --reporter=text pnpm run test:integration",
     "coverage:clean": "rimraf coverage .nyc_output .c8_output",
     "ignore:status": "node scripts/package-helpers.js status",
     "ignore:dev": "node scripts/package-helpers.js dev",
     "ignore:prod": "node scripts/package-helpers.js prod",
     "ignore:restore": "node scripts/package-helpers.js restore",
-    "package:prepare": "node scripts/package-helpers.js prod && npm run compile",
+    "package:prepare": "node scripts/package-helpers.js prod && pnpm run compile",
     "package:cleanup": "node scripts/package-helpers.js dev",
-    "package:full": "npm run package:prepare && npm run package:vsix && npm run package:cleanup",
-    "package:production": "npm run package:prepare && npm run package:vsix && npm run package:cleanup && echo \"📦 Production package created with optimized size\"",
-    "dev:setup": "npm run ignore:dev && echo \"🔧 Development mode activated - Copilot friendly\"",
-    "dev:package-test": "npm run package:prepare && echo \"📋 Switched to production mode - check file exclusions\" && npm run ignore:status",
+    "package:full": "pnpm run package:prepare && pnpm run package:vsix && pnpm run package:cleanup",
+    "package:production": "pnpm run package:prepare && pnpm run package:vsix && pnpm run package:cleanup && echo \"📦 Production package created with optimized size\"",
+    "dev:setup": "pnpm run ignore:dev && echo \"🔧 Development mode activated - Copilot friendly\"",
+    "dev:package-test": "pnpm run package:prepare && echo \"📋 Switched to production mode - check file exclusions\" && pnpm run ignore:status",
     "version:update": "./scripts/update-version.sh",
-    "version:bump:major": "npm version major --no-git-tag-version && npm run version:update",
-    "version:bump:minor": "npm version minor --no-git-tag-version && npm run version:update",
-    "version:bump:patch": "npm version patch --no-git-tag-version && npm run version:update"
+    "version:bump:major": "npm version major --no-git-tag-version && pnpm run version:update",
+    "version:bump:minor": "npm version minor --no-git-tag-version && pnpm run version:update",
+    "version:bump:patch": "npm version patch --no-git-tag-version && pnpm run version:update"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.1",
@@ -791,9 +792,9 @@
     "webpack-cli": "^5.0.1"
   },
   "dependencies": {
-    "@ai-primitives-hub/app": "file:packages/app",
-    "@ai-primitives-hub/core": "file:packages/core",
-    "@ai-primitives-hub/infra": "file:packages/infra",
+    "@ai-primitives-hub/app": "workspace:*",
+    "@ai-primitives-hub/core": "workspace:*",
+    "@ai-primitives-hub/infra": "workspace:*",
     "@elastic/elasticsearch": "^9.3.4",
     "@prompt-registry/collection-scripts": "workspace:^",
     "adm-zip": "^0.5.16",
@@ -809,14 +810,6 @@
     "yauzl": "^2.10.0"
   },
   "extensionDependencies": [],
-  "overrides": {
-    "mocha": {
-      "chokidar": "^5.0.0",
-      "diff": "^8.0.3",
-      "serialize-javascript": "^7.0.5"
-    },
-    "js-yaml": "^4.1.1"
-  },
   "nyc": {
     "extends": "@istanbuljs/nyc-config-typescript",
     "all": true,
@@ -841,9 +834,5 @@
     ],
     "report-dir": "coverage",
     "temp-dir": ".nyc_output"
-  },
-  "workspaces": [
-    "lib",
-    "github-actions/*"
-  ]
+  }
 }

@@ -28,7 +28,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ai-primitives-hub/core": "file:../core",
+    "@ai-primitives-hub/core": "workspace:*",
     "@elastic/elasticsearch": "^9.3.4",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",

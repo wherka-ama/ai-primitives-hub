@@ -44,7 +44,7 @@ jsPath = jsPath.replace(/\.ts$/, '.js');
 if (!noCompile) {
     console.log('Compiling tests...');
     try {
-        execSync('npm run compile-tests', { stdio: 'inherit' });
+        execSync('pnpm run compile-tests', { stdio: 'inherit' });
     } catch (error) {
         console.error('Test compilation failed');
         process.exit(1);
@@ -57,7 +57,7 @@ console.log(`Compiled path: ${jsPath}`);
 // Run mocha with the compiled test file
 try {
     execSync(
-        `npx mocha --ui tdd --require ./test/mocha.setup.js --require ./test/unit.setup.js --timeout 5000 "${jsPath}"`,
+        `pnpm exec mocha --ui tdd --require ./test/mocha.setup.js --require ./test/unit.setup.js --timeout 5000 "${jsPath}"`,
         { stdio: 'inherit' }
     );
 } catch (error) {

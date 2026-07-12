@@ -11,9 +11,12 @@ if (typeof global.suite === 'undefined' && typeof global.describe === 'undefined
   console.warn('[mocha.setup.js] Warning: Mocha test functions not available yet. This file should be loaded via --require flag.');
 }
 
-// Clear module cache to ensure fresh mocks
+// Clear module cache to ensure fresh logger singleton state, but never evict the
+// vscode mock itself (which is this module). A broad 'vscode' substring match
+// would delete every module under apps/vscode-extension and break instanceof,
+// stubbing, and shared module identity for the whole test suite.
 Object.keys(require.cache).forEach(key => {
-  if (key.includes('vscode') || key.includes('logger')) {
+  if (path.basename(key) === 'logger.js') {
     delete require.cache[key];
   }
 });

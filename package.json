@@ -1,0 +1,24 @@
+{
+  "name": "ai-primitives-hub",
+  "version": "0.0.2",
+  "private": true,
+  "description": "AI Primitives Hub monorepo workspace root",
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "watch": "pnpm -r watch",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "compile": "pnpm -C apps/vscode-extension run compile",
+    "package:vsix": "pnpm -C apps/vscode-extension run package:vsix"
+  },
+  "devDependencies": {
+    "@o3r/eslint-config": "^14.0.4",
+    "eslint": "^9.0.0",
+    "globals": "^16.5.0"
+  }
+}

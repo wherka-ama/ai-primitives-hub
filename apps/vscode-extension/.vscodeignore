@@ -160,3 +160,5 @@ github-actions/
 
 # Test results
 test-results/
+test-temp-wsl/
+prompts/
