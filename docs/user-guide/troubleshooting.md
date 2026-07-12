@@ -11,10 +11,9 @@ View logs: `View → Output → AI Primitives Hub`
 ### Bundles Not Showing in Copilot
 
 1. Check sync completed in logs
-2. Verify directory exists:
-   - **macOS**: `~/Library/Application Support/Code/User/prompts/`
-   - **Linux**: `~/.config/Code/User/prompts/`
-   - **Windows**: `%APPDATA%\Code\User\prompts\`
+2. Verify the generic Copilot prompts directory exists:
+   - **macOS/Linux**: `~/.copilot/prompts/`
+   - **Windows**: `%USERPROFILE%\.copilot\prompts\`
 3. Restart VS Code (`Ctrl+R`)
 4. Run `AI Primitives Hub: Sync All Bundles`
 

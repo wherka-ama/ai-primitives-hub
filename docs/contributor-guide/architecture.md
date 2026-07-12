@@ -97,13 +97,12 @@ To add a new skill:
 
 ## Cross-Platform Paths
 
-| Platform | Copilot Directory |
-|----------|-------------------|
-| macOS | `~/Library/Application Support/Code/User/prompts` |
-| Linux | `~/.config/Code/User/prompts` |
-| Windows | `%APPDATA%/Code/User/prompts` |
+| Platform | Generic Copilot Directory |
+|----------|----------------------------|
+| macOS/Linux | `~/.copilot/` |
+| Windows | `%USERPROFILE%/.copilot/` |
 
-Supports: VS Code Stable, Insiders, Windsurf
+Primitive kinds use `prompts/`, `agents/`, `instructions/`, `skills/`, `hooks/`, and `plugins/` beneath this root. VS Code Stable and Insiders share the same user-level location.
 
 ## Glossary
 

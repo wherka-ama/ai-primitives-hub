@@ -40,10 +40,7 @@ To reset and re-trigger the first-run experience: `Ctrl+Shift+P` → "AI Primiti
 4. **Install** — Click a bundle tile → Install
 5. **Use** — Prompts appear in Copilot Chat as `/<bundle-id>-<prompt-id>`
 
-Installed files location:
-- **macOS**: `~/Library/Application Support/Code/User/prompts/`
-- **Linux**: `~/.config/Code/User/prompts/`
-- **Windows**: `%APPDATA%\Code\User\prompts\`
+User-level primitives are installed under the generic Copilot directory: `~/.copilot/` on macOS and Linux, or `%USERPROFILE%\.copilot\` on Windows. Prompts, agents, instructions, skills, hooks, and plugins use their corresponding subdirectories. When running in Kiro, the extension uses Kiro's user layout under `~/.kiro/`, including `~/.kiro/agents/` and `~/.kiro/skills/`, and applies Kiro-specific agent transformations.
 
 ## Add Your Own Source
 

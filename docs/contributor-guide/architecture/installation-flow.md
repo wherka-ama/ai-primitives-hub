@@ -6,17 +6,21 @@
 
 ```
 Extension Storage/
-├── bundles/                          # Installed bundles
+├── bundles/                          # Extracted bundle cache/staging
 │   └── testing-automation/
 │       ├── deployment-manifest.yml
 │       └── prompts/
 │           └── testing-prompt.prompt.md
 └── registry.json                     # Sources and records
 
-Copilot Directory (macOS)/
-~/Library/Application Support/Code/User/prompts/
-└── testing-automation/
-    └── testing-prompt.prompt.md
+Generic Copilot User Directory/
+~/.copilot/
+├── prompts/
+├── agents/
+├── instructions/
+├── skills/
+├── hooks/
+└── plugins/
 ```
 
 ### Repository Scope
@@ -83,6 +87,14 @@ flowchart TD
     Y --> AA
     U --> AA
 ```
+
+## Generic VS Code User Layout
+
+Both the `vscode` and `vscode-insiders` targets use the same generic user-level root: `~/.copilot`. Primitive kinds are routed beneath that root as `prompts/`, `agents/`, `instructions/`, `skills/`, `hooks/`, and `plugins/`. This avoids maintaining separate stable/Insiders paths and keeps skills with the other user-level primitives.
+
+The extension's `globalStorage` `bundles/` directory remains an internal extracted bundle cache. Runtime primitives are synchronized into `~/.copilot` for VS Code-compatible hosts. When the extension is hosted by Kiro, it selects the `kiro` layout and synchronizes user primitives under `~/.kiro` (for example, `~/.kiro/agents` and `~/.kiro/skills`), applying the Kiro transformer to agent content. The cache is not the runtime discovery location.
+
+The CLI also supports hierarchical layout overrides through `ai-primitives-hub-layouts.yml` while retaining the same built-in generic VS Code layout by default.
 
 ## Scope Selection
 
