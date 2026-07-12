@@ -46,10 +46,10 @@ import {
   ActiveHubStore,
   AwesomeCopilotBundleResolver,
   defaultTokenProvider,
+  FileSystemLayoutConfigLoader,
   GitHubApiClient,
   GitHubBundleResolver,
   HttpsBundleDownloader,
-  FileSystemLayoutConfigLoader,
   HubStore,
   NodeHttpClient,
   readLocalBundle,
@@ -57,10 +57,10 @@ import {
   type RepositoryCommitMode,
   RepositoryScopeWriter,
   RepositoryScopeWriterAdapter,
+  resolveUserConfigDir,
   SourceDispatcher,
   TargetStateStore,
   ZipBundleExtractor,
-  resolveUserConfigDir,
 } from '@ai-primitives-hub/infra';
 import inquirer from 'inquirer';
 import {

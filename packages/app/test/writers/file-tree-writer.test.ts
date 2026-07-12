@@ -305,7 +305,7 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
     expect(result.skipped).toEqual(['some-source-name.md']);
   });
 
-  it('skips items whose kind has no route in the resolved layout', async () => {
+  it('routes agents into the windsurf layout', async () => {
     const fs = new InMemoryFileSystem();
     const writer = new FileTreeTargetWriter({ fs, env: {} });
     const windsurfTarget: Target = { name: 'test', type: 'windsurf', scope: 'repository', rootPath: '/ws' };
@@ -318,8 +318,8 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
 
     const result = await writer.writeManifestItems(windsurfTarget, files, items);
 
-    expect(result.written).toEqual([]);
-    expect(result.skipped).toEqual(['agent-source.md']);
+    expect(result.written).toEqual(['/ws/.windsurf/agents/my-agent.agent.md']);
+    expect(result.skipped).toEqual([]);
   });
 
   it('skips an item whose source file is missing from the extracted files map', async () => {

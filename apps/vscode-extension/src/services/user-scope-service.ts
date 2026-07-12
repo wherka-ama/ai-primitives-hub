@@ -25,6 +25,11 @@ import {
   promisify,
 } from 'node:util';
 import {
+  expandPath,
+  resolveLayout,
+  TransformerRegistry,
+} from '@ai-primitives-hub/app';
+import {
   determineFileType,
   getTargetFileName,
 } from '@ai-primitives-hub/core';
@@ -33,11 +38,6 @@ import type {
   Target,
   TargetType,
 } from '@ai-primitives-hub/core';
-import {
-  TransformerRegistry,
-  expandPath,
-  resolveLayout,
-} from '@ai-primitives-hub/app';
 import * as yaml from 'js-yaml';
 import * as vscode from 'vscode';
 import {
@@ -91,13 +91,20 @@ export class UserScopeService implements IScopeService {
 
   private detectTargetType(): TargetType {
     const appName = (vscode.env.appName ?? '').toLowerCase();
-    if (appName.includes('kiro')) {
+    const uriScheme = (vscode.env.uriScheme ?? '').toLowerCase();
+
+    if (appName.includes('kiro') || uriScheme.includes('kiro')) {
       return 'kiro';
     }
-    if (appName.includes('windsurf')) {
+
+    // Devin is the current rebrand of Windsurf; both use the same paths.
+    const windsurfId = appName.includes('windsurf') || appName.includes('devin')
+      || uriScheme.includes('windsurf') || uriScheme.includes('devin');
+    if (windsurfId) {
       return 'windsurf';
     }
-    return appName.includes('insiders') ? 'vscode-insiders' : 'vscode';
+
+    return appName.includes('insiders') || uriScheme.includes('insiders') ? 'vscode-insiders' : 'vscode';
   }
 
   private getTarget(): Target {
@@ -105,7 +112,7 @@ export class UserScopeService implements IScopeService {
       name: this.targetType,
       type: this.targetType,
       scope: 'user'
-    } as Target;
+    };
   }
 
   private getTargetBaseDirectory(): string {
@@ -120,13 +127,25 @@ export class UserScopeService implements IScopeService {
   }
 
   private getTargetPrimitiveDirectory(type: CopilotFileType): string {
-    const routeKey = type === 'prompt'
-      ? 'prompts/'
-      : type === 'chatmode' || type === 'agent'
-        ? 'agents/'
-        : type === 'skill'
-          ? 'skills/'
-          : 'instructions/';
+    let routeKey: string;
+    switch (type) {
+      case 'prompt': {
+        routeKey = 'prompts/';
+        break;
+      }
+      case 'chatmode':
+      case 'agent': {
+        routeKey = 'agents/';
+        break;
+      }
+      case 'skill': {
+        routeKey = 'skills/';
+        break;
+      }
+      default: {
+        routeKey = 'instructions/';
+      }
+    }
     const route = resolveLayout(this.getTarget()).kindRoutes[routeKey];
     if (route === undefined) {
       throw new Error(`No ${type} route defined for target ${this.targetType}`);
@@ -446,7 +465,7 @@ export class UserScopeService implements IScopeService {
       if (file.transformedContent !== undefined || this.isRunningInWSL()) {
         const content = file.transformedContent ?? await readFile(file.sourcePath, 'utf8');
         await writeFile(file.targetPath, content, 'utf8');
-        this.logger.debug(`Copied file${file.transformedContent !== undefined ? ' (transformed)' : ' (WSL)'}: ${path.basename(file.targetPath)}`);
+        this.logger.debug(`Copied file${file.transformedContent === undefined ? ' (WSL)' : ' (transformed)'}: ${path.basename(file.targetPath)}`);
       } else {
         try {
           await symlink(file.sourcePath, file.targetPath, 'file');

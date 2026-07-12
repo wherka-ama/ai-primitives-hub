@@ -110,6 +110,8 @@
         "kindRoutes": {
           "prompts/": "rules/",
           "instructions/": "rules/",
+          "chatmodes/": "agents/",
+          "agents/": "agents/",
           "skills/": "skills/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"]
@@ -119,6 +121,8 @@
         "kindRoutes": {
           "prompts/": ".windsurf/rules/",
           "instructions/": ".windsurf/rules/",
+          "chatmodes/": ".windsurf/agents/",
+          "agents/": ".windsurf/agents/",
           "skills/": ".windsurf/skills/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"]
