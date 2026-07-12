@@ -93,7 +93,10 @@ export class UserScopeService implements IScopeService {
     const appName = (vscode.env.appName ?? '').toLowerCase();
     const uriScheme = (vscode.env.uriScheme ?? '').toLowerCase();
 
+    this.logger.debug(`[UserScopeService] detectTargetType: appName=${vscode.env.appName}, uriScheme=${vscode.env.uriScheme}`);
+
     if (appName.includes('kiro') || uriScheme.includes('kiro')) {
+      this.logger.debug('[UserScopeService] Detected kiro target');
       return 'kiro';
     }
 
@@ -101,10 +104,13 @@ export class UserScopeService implements IScopeService {
     const windsurfId = appName.includes('windsurf') || appName.includes('devin')
       || uriScheme.includes('windsurf') || uriScheme.includes('devin');
     if (windsurfId) {
+      this.logger.debug('[UserScopeService] Detected windsurf target');
       return 'windsurf';
     }
 
-    return appName.includes('insiders') || uriScheme.includes('insiders') ? 'vscode-insiders' : 'vscode';
+    const target = appName.includes('insiders') || uriScheme.includes('insiders') ? 'vscode-insiders' : 'vscode';
+    this.logger.debug(`[UserScopeService] Detected ${target} target`);
+    return target;
   }
 
   private getTarget(): Target {
