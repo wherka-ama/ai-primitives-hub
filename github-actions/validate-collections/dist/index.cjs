@@ -7447,7 +7447,7 @@ const FILE_EXTENSIONS = {
 const REPOSITORY_DIRECTORIES = {
     prompt: '.github/prompts/',
     instructions: '.github/instructions/',
-    chatmode: '.github/prompts/', // Chatmodes go to prompts directory
+    chatmode: '.github/agents/', // Chatmodes are associated with agents
     agent: '.github/agents/',
     skill: '.github/skills/'
 };
