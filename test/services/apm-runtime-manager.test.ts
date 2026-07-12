@@ -33,39 +33,44 @@ suite('ApmRuntimeManager', () => {
     });
   });
 
-  suite('getStatus', function () {
-    // Increase timeout for this suite as it involves spawning processes
-    this.timeout(10_000);
+  suite('getStatus', () => {
+    let detectRuntimeStub: sinon.SinonStub;
+
+    setup(() => {
+      // Mock the external process detection so getStatus tests stay fast and deterministic
+      detectRuntimeStub = sandbox.stub(runtime as any, 'detectRuntime').resolves({ installed: false });
+    });
 
     test('should return status object with installed property', async () => {
       const status = await runtime.getStatus();
 
-      assert.ok(typeof status.installed === 'boolean');
+      assert.strictEqual(status.installed, false);
+      assert.strictEqual(detectRuntimeStub.callCount, 1);
     });
 
     test('should return cached status on subsequent calls within TTL', async () => {
-      // First call
-      const status1 = await runtime.getStatus();
+      // Make each detection return a new object so strict equality proves caching
+      detectRuntimeStub.callsFake(async () => ({ installed: false }));
 
-      // Second call should use cache
+      const status1 = await runtime.getStatus();
       const status2 = await runtime.getStatus();
 
-      assert.deepStrictEqual(status1, status2);
+      assert.strictEqual(status1, status2);
+      assert.strictEqual(detectRuntimeStub.callCount, 1);
     });
 
     test('should refresh status when forceRefresh is true', async () => {
-      // First call
-      await runtime.getStatus();
+      detectRuntimeStub.callsFake(async () => ({ installed: false }));
 
-      // Force refresh
+      const status1 = await runtime.getStatus();
       const status2 = await runtime.getStatus(true);
 
-      assert.ok(typeof status2.installed === 'boolean');
+      assert.notStrictEqual(status1, status2);
+      assert.strictEqual(detectRuntimeStub.callCount, 2);
     });
 
     test('should include version when APM is installed', async () => {
-      // Mock the internal detection
-      sandbox.stub(runtime as any, 'detectRuntime').resolves({
+      detectRuntimeStub.resolves({
         installed: true,
         version: '1.0.0',
         installMethod: 'pip'
@@ -79,7 +84,7 @@ suite('ApmRuntimeManager', () => {
     });
 
     test('should detect install method', async () => {
-      sandbox.stub(runtime as any, 'detectRuntime').resolves({
+      detectRuntimeStub.resolves({
         installed: true,
         version: '1.0.0',
         installMethod: 'pip'
@@ -95,17 +100,19 @@ suite('ApmRuntimeManager', () => {
 
   suite('clearCache', () => {
     test('should clear cached status', async () => {
-      // Populate cache
-      await runtime.getStatus();
+      let callCount = 0;
+      sandbox.stub(runtime as any, 'detectRuntime').callsFake(async () => {
+        callCount += 1;
+        return { installed: callCount === 1 };
+      });
 
-      // Clear cache
+      const status1 = await runtime.getStatus();
+      assert.strictEqual(status1.installed, true);
+
       runtime.clearCache();
 
-      // Should re-detect on next call
-      // This is hard to verify without more sophisticated mocking
-      // but at least we can verify it doesn't throw
-      const status = await runtime.getStatus();
-      assert.ok(typeof status.installed === 'boolean');
+      const status2 = await runtime.getStatus();
+      assert.strictEqual(status2.installed, false);
     });
   });
 
@@ -132,12 +139,13 @@ suite('ApmRuntimeManager', () => {
 
   suite('Security', () => {
     test('should not execute arbitrary commands', async () => {
-      // This is a conceptual test - in real implementation
-      // the runtime manager should only execute known safe commands
+      // Mock the external process detection to keep the test deterministic
+      sandbox.stub(runtime as any, 'detectRuntime').resolves({ installed: false });
+
       const status = await runtime.getStatus();
 
       // Should not throw and should return valid status
-      assert.ok(typeof status.installed === 'boolean');
+      assert.strictEqual(status.installed, false);
     });
 
     test('should sanitize version output', async () => {
