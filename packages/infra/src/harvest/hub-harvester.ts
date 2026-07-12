@@ -3,7 +3,7 @@
  * "fetch hub-config → walk sources → write index" workflow.
  *
  * Extracted from the legacy `lib/src/primitive-index/cli.ts` so the
- * framework command (`prompt-registry index harvest`) and any other
+ * framework command (`ai-primitives-hub index harvest`) and any other
  * caller can drive the same logic without re-implementing argv
  * plumbing.
  *

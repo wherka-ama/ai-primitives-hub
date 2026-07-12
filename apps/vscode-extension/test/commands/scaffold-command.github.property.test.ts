@@ -87,7 +87,7 @@ suite('GitHub Scaffold Property-Based Tests', () => {
     this.timeout(PropertyTestConfig.TIMEOUT);
 
     // Required files that must exist after scaffolding
-    // Note: Scripts are now provided via @prompt-registry/collection-scripts npm package
+    // Note: Scripts are now provided via @ai-primitives-hub/cli npm package
     const requiredFiles = [
       // GitHub workflows (Requirements 2.1)
       '.github/workflows/publish.yml',
@@ -117,7 +117,7 @@ suite('GitHub Scaffold Property-Based Tests', () => {
     ];
 
     // Required directories
-    // Note: scripts/lib no longer needed - scripts provided via npm package
+    // Note: scripts/lib no longer needed - scripts provided via @ai-primitives-hub/cli npm package
     const requiredDirectories = [
       'prompts',
       'instructions',

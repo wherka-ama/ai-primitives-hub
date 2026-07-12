@@ -114,7 +114,7 @@ suite('ElasticSearchTransport', () => {
 
       assert.strictEqual(indicesCreateStub.callCount, 1);
       const indexArg = indicesCreateStub.firstCall.args[0];
-      assert.ok(indexArg.index.startsWith('prompt-registry-telemetry-'));
+      assert.ok(indexArg.index.startsWith('ai-primitives-hub-telemetry-'));
     });
 
     test('should use custom indexPrefix when provided', async () => {

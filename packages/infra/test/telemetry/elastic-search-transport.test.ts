@@ -107,7 +107,7 @@ describe('ElasticSearchTransport', () => {
 
       expect(mockClient.indicesCreate).toHaveBeenCalledTimes(1);
       const indexArg = mockClient.indicesCreate.mock.calls[0][0];
-      expect(indexArg.index.startsWith('prompt-registry-telemetry-')).toBe(true);
+      expect(indexArg.index.startsWith('ai-primitives-hub-telemetry-')).toBe(true);
     });
 
     it('uses custom indexPrefix when provided', async () => {

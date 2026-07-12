@@ -204,7 +204,7 @@ export class ElasticSearchTransport implements TelemetryTransport {
       }
       const client = this.createClient(clientOptions);
 
-      const indexPrefix = config.indexPrefix ?? 'prompt-registry-telemetry';
+      const indexPrefix = config.indexPrefix ?? 'ai-primitives-hub-telemetry';
       const indexName = ElasticSearchTransport.currentIndexName(indexPrefix);
 
       try {
