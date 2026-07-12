@@ -38,9 +38,6 @@ importers:
       '@elastic/elasticsearch':
         specifier: ^9.3.4
         version: 9.4.2
-      '@prompt-registry/collection-scripts':
-        specifier: workspace:^
-        version: link:../../lib
       adm-zip:
         specifier: ^0.5.16
         version: 0.5.18

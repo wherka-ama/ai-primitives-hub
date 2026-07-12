@@ -2,6 +2,7 @@
   "name": "@prompt-registry/collection-scripts",
   "version": "1.0.4",
   "description": "Shared scripts for building, validating, and publishing Copilot prompt collections",
+  "deprecated": "Use the ai-primitives-hub CLI (@ai-primitives-hub/cli) instead. This package is retained for backwards compatibility only.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

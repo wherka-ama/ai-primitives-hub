@@ -1,5 +1,13 @@
 # @prompt-registry/collection-scripts
 
+> **Deprecated** — this package is no longer the recommended way to validate, build, and publish Copilot prompt collections. The functionality has moved to the **`ai-primitives-hub` CLI** (`@ai-primitives-hub/cli`). New projects should install and use `ai-primitives-hub` instead of `@prompt-registry/collection-scripts`.
+>
+> ```bash
+> npm install -g @ai-primitives-hub/cli
+> # or
+> npx @ai-primitives-hub/cli collection validate
+> ```
+
 Shared scripts for building, validating, and publishing Copilot prompt collections.
 
 ## Installation
