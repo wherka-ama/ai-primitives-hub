@@ -48,6 +48,8 @@ import {
   SourceDispatcher,
   TargetStateStore,
   ZipBundleExtractor,
+  FileSystemLayoutConfigLoader,
+  resolveUserConfigDir,
 } from '@ai-primitives-hub/infra';
 import inquirer from 'inquirer';
 import {
@@ -417,7 +419,12 @@ function writerFor(ctx: Context, target: Target, scope: string, commitMode: Repo
     return new RepositoryScopeWriterAdapter(writer);
   }
   const transformer = TransformerRegistry.withBuiltIns().getTransformer(target.type);
-  return new FileTreeTargetWriter({ fs: ctx.fs, env: ctx.env, transformer });
+  const layoutLoader = new FileSystemLayoutConfigLoader({
+    cwd: ctx.cwd(),
+    fs: ctx.fs,
+    userConfigDir: resolveUserConfigDir(ctx.env)
+  });
+  return new FileTreeTargetWriter({ fs: ctx.fs, env: ctx.env, transformer, layoutLoader });
 }
 
 async function applyUpdates(

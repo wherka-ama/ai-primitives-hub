@@ -36,6 +36,8 @@ import {
   RepositoryScopeWriter,
   RepositoryScopeWriterAdapter,
   TargetStateStore,
+  FileSystemLayoutConfigLoader,
+  resolveUserConfigDir,
 } from '@ai-primitives-hub/infra';
 import {
   Command,
@@ -231,6 +233,11 @@ export const createWriterFactory = (
   // path that `writer.write()` used (targets with a real, non-identity
   // transformer like Kiro would otherwise resolve the wrong path).
   const transformerRegistry = TransformerRegistry.withBuiltIns();
+  const layoutLoader = new FileSystemLayoutConfigLoader({
+    cwd: ctx.cwd(),
+    fs: ctx.fs,
+    userConfigDir: resolveUserConfigDir(ctx.env)
+  });
 
   return (target: Target): TargetWriter => {
     // Use CLI flags to override target scope if specified
@@ -251,7 +258,8 @@ export const createWriterFactory = (
     return new FileTreeTargetWriter({
       fs: ctx.fs,
       env: ctx.env,
-      transformer
+      transformer,
+      layoutLoader
     });
   };
 };
