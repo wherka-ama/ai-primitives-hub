@@ -93,8 +93,8 @@ describe('getRepositoryTargetDirectory', () => {
     expect(getRepositoryTargetDirectory('skill')).toBe('.github/skills/');
   });
 
-  it('routes chatmode into the prompts directory (VS Code Copilot convention)', () => {
-    expect(getRepositoryTargetDirectory('chatmode')).toBe(getRepositoryTargetDirectory('prompt'));
+  it('routes chatmode into the agents directory', () => {
+    expect(getRepositoryTargetDirectory('chatmode')).toBe(getRepositoryTargetDirectory('agent'));
   });
 });
 

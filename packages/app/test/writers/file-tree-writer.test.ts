@@ -43,6 +43,15 @@ describe('resolveLayout', () => {
     expect(layout.kindRoutes).toHaveProperty('skills/');
   });
 
+  it('uses the generic Copilot root for stable and Insiders user targets', () => {
+    for (const type of ['vscode', 'vscode-insiders'] as const) {
+      const layout = resolveLayout({ name: type, type, scope: 'user' });
+      expect(layout.baseDir).toBe('${HOME}/.copilot');
+      expect(layout.kindRoutes['skills/']).toBe('skills/');
+      expect(layout.kindRoutes['agents/']).toBe('agents/');
+    }
+  });
+
   it('resolves kiro repository scope routes to .kiro/steering/', () => {
     const target: Target = { name: 'test', type: 'kiro', scope: 'repository', rootPath: '/ws' };
     const layout = resolveLayout(target);
@@ -61,6 +70,31 @@ describe('resolveLayoutAsync', () => {
     const target: Target = { name: 'test', type: 'vscode', scope: 'user' };
     const layout = await resolveLayoutAsync(target, new BuiltInOnlyLayoutConfigLoader());
     expect(layout.kindRoutes).toHaveProperty('prompts/');
+  });
+
+  it('uses an injected layout loader when writing', async () => {
+    const fs = new InMemoryFileSystem();
+    const target: Target = { name: 'test', type: 'vscode', scope: 'user' };
+    const loader = {
+      load: async () => [{
+        layouts: {
+          vscode: {
+            user: {
+              baseDir: '/custom',
+              kindRoutes: { 'prompts/': 'custom-prompts/' },
+              skipPaths: []
+            }
+          }
+        }
+      }]
+    };
+    const writer = new FileTreeTargetWriter({ fs, env: {}, layoutLoader: loader });
+
+    await writer.write(target, new Map([
+      ['prompts/test.md', new TextEncoder().encode('# Test')]
+    ]));
+
+    expect(await fs.readFile('/custom/custom-prompts/test.md')).toBe('# Test');
   });
 });
 
@@ -224,7 +258,7 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
     expect(result.written).toEqual(['/ws/.github/instructions/my-instructions.instructions.md']);
   });
 
-  it('routes chatmode items alongside prompts', async () => {
+  it('routes chatmode items alongside agents', async () => {
     const fs = new InMemoryFileSystem();
     const writer = new FileTreeTargetWriter({ fs, env: {} });
     const files = new Map<string, Uint8Array>([
@@ -236,7 +270,7 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
 
     const result = await writer.writeManifestItems(repoTarget, files, items);
 
-    expect(result.written).toEqual(['/ws/.github/prompts/my-mode.chatmode.md']);
+    expect(result.written).toEqual(['/ws/.github/agents/my-mode.chatmode.md']);
   });
 
   it('routes agent items to the agents/ directory', async () => {

@@ -48,7 +48,7 @@ const FILE_EXTENSIONS: Record<CopilotFileType, string> = {
 const REPOSITORY_DIRECTORIES: Record<CopilotFileType, string> = {
   prompt: '.github/prompts/',
   instructions: '.github/instructions/',
-  chatmode: '.github/prompts/', // Chatmodes go to prompts directory
+  chatmode: '.github/agents/', // Chatmodes are associated with agents
   agent: '.github/agents/',
   skill: '.github/skills/'
 };

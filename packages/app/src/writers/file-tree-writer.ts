@@ -84,15 +84,14 @@ export interface ManifestPlacementItem {
 
 /**
  * Maps a `CopilotFileType` to the `default-layouts.json` kindRoutes key
- * whose *value* (the output subdirectory) applies to it. Deliberately
- * routes `chatmode` through the same key as `prompt`, matching the VS
- * Code Copilot convention (and the extension's own
- * `REPOSITORY_DIRECTORIES` table) that chatmodes ship alongside prompts.
+ * whose *value* (the output subdirectory) applies to it. Chatmodes are
+ * deliberately routed through the agents key because they are associated
+ * with agents at runtime.
  */
 const KIND_TO_ROUTE_KEY: Record<CopilotFileType, string> = {
   prompt: 'prompts/',
   instructions: 'instructions/',
-  chatmode: 'prompts/',
+  chatmode: 'agents/',
   agent: 'agents/',
   skill: 'skills/'
 };
@@ -174,6 +173,8 @@ export interface FileTreeTargetWriterOptions {
   env: Record<string, string | undefined>;
   /** Optional resource transformer for target-specific content transformations. */
   transformer?: ResourceTransformer;
+  /** Optional hierarchical layout loader; built-in defaults are used when omitted. */
+  layoutLoader?: LayoutConfigLoader;
 }
 
 /**
@@ -195,7 +196,7 @@ export class FileTreeTargetWriter implements TargetWriter {
    * @returns TargetWriteResult.
    */
   public async write(target: Target, files: ExtractedFiles): Promise<TargetWriteResult> {
-    const layout = resolveLayout(target);
+    const layout = await this.resolveLayout(target);
     const baseDir = expandPath(layout.baseDir, this.opts.env);
     const skip = new Set(layout.skipPaths);
     const allowed = target.allowedKinds === undefined ? null : new Set(target.allowedKinds);
@@ -273,7 +274,7 @@ export class FileTreeTargetWriter implements TargetWriter {
     files: ExtractedFiles,
     items: readonly ManifestPlacementItem[]
   ): Promise<TargetWriteResult> {
-    const layout = resolveLayout(target);
+    const layout = await this.resolveLayout(target);
     const baseDir = expandPath(layout.baseDir, this.opts.env);
     const allowed = target.allowedKinds === undefined ? null : new Set(target.allowedKinds);
     const written: string[] = [];
@@ -327,6 +328,13 @@ export class FileTreeTargetWriter implements TargetWriter {
     return { written, skipped };
   }
 
+  private async resolveLayout(target: Target): Promise<TargetLayout> {
+    if (this.opts.layoutLoader === undefined) {
+      return resolveLayout(target);
+    }
+    return await resolveLayoutAsync(target, this.opts.layoutLoader);
+  }
+
   /**
    * Copy every bundle file under a skill's `skills/<sourceId>/` prefix
    * into `{baseDir}/{outPrefix}/{normalizedId}/`, preserving each file's
@@ -375,7 +383,7 @@ export class FileTreeTargetWriter implements TargetWriter {
    * @param filePath - Relative file path to remove (from bundle root).
    */
   public async remove(target: Target, filePath: string): Promise<void> {
-    const layout = resolveLayout(target);
+    const layout = await this.resolveLayout(target);
     const baseDir = expandPath(layout.baseDir, this.opts.env);
     const route = pickRoute(filePath, layout.kindRoutes);
     if (route === null) {

@@ -2,11 +2,12 @@
   "layouts": {
     "vscode": {
       "user": {
-        "baseDir": "${HOME}/.config/Code/User",
+        "baseDir": "${HOME}/.copilot",
         "kindRoutes": {
           "prompts/": "prompts/",
-          "chatmodes/": "chatmodes/",
+          "chatmodes/": "agents/",
           "instructions/": "instructions/",
+          "agents/": "agents/",
           "skills/": "skills/",
           "hooks/": "hooks/",
           "plugins/": "plugins/"
@@ -17,7 +18,7 @@
         "baseDir": "${workspaceRoot}",
         "kindRoutes": {
           "prompts/": ".github/prompts/",
-          "chatmodes/": ".github/chatmodes/",
+          "chatmodes/": ".github/agents/",
           "instructions/": ".github/instructions/",
           "agents/": ".github/agents/",
           "skills/": ".github/skills/",
@@ -29,11 +30,12 @@
     },
     "vscode-insiders": {
       "user": {
-        "baseDir": "${HOME}/.config/Code - Insiders/User",
+        "baseDir": "${HOME}/.copilot",
         "kindRoutes": {
           "prompts/": "prompts/",
-          "chatmodes/": "chatmodes/",
+          "chatmodes/": "agents/",
           "instructions/": "instructions/",
+          "agents/": "agents/",
           "skills/": "skills/",
           "hooks/": "hooks/",
           "plugins/": "plugins/"
@@ -44,7 +46,7 @@
         "baseDir": "${workspaceRoot}",
         "kindRoutes": {
           "prompts/": ".github/prompts/",
-          "chatmodes/": ".github/chatmodes/",
+          "chatmodes/": ".github/agents/",
           "instructions/": ".github/instructions/",
           "agents/": ".github/agents/",
           "skills/": ".github/skills/",
@@ -129,7 +131,7 @@
           "prompts/": "commands/",
           "agents/": "agents/",
           "instructions/": "instructions/",
-          "chatmodes/": "modes/",
+          "chatmodes/": "agents/",
           "skills/": "skills/",
           "hooks/": "hooks/",
           "plugins/": "plugins/"
@@ -142,7 +144,7 @@
           "prompts/": ".claude/commands/",
           "agents/": ".claude/agents/",
           "instructions/": ".claude/instructions/",
-          "chatmodes/": ".claude/modes/",
+          "chatmodes/": ".claude/agents/",
           "skills/": ".claude/skills/",
           "hooks/": ".claude/hooks/",
           "plugins/": ".claude/plugins/"
