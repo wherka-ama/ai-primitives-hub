@@ -155,6 +155,8 @@ INTEGRATION_TEST_*.md
 .tmp/
 lib/
 website/
+packages/
+github-actions/
 
 # Test results
 test-results/
