@@ -8,7 +8,7 @@ const config = {
     esModule: false,
     file: "dist/index.cjs",
     format: "cjs",
-    sourcemap: true,
+    sourcemap: false,
   },
   plugins: [commonjs(), nodeResolve({ preferBuiltins: true }), json()],
 };
