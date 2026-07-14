@@ -7,6 +7,7 @@
  * the canonical envelope.
  * @module commands/index-harvest
  */
+import * as path from 'node:path';
 import {
   resolveUserConfigPaths,
 } from '@ai-primitives-hub/app';
@@ -30,6 +31,10 @@ import {
 /**
  * Populate hub source fields on `cmd` from the currently active hub
  * when the user hasn't provided them explicitly.
+ *
+ * Falls back to the legacy `prompt-registry` config directory so the
+ * `ai-primitives-hub` CLI can reuse an active hub configured by the
+ * `gh prompt-registry` extension.
  * @param cmd IndexHarvestCommand instance (mutated).
  * @param cmd.hubRepo
  * @param cmd.hubBranch
@@ -42,25 +47,54 @@ async function autoDetectHubFromActive(
 ): Promise<void> {
   try {
     const userPaths = resolveUserConfigPaths(ctx.env);
-    const activeStore = new ActiveHubStore(userPaths.activeHub, ctx.fs);
-    const activeId = await activeStore.get();
-    if (activeId === null) {
-      return;
-    }
-    const hubStore = new HubStore(userPaths.hubs, ctx.fs);
-    const saved = await hubStore.load(activeId);
-    const ref = saved.reference;
-    if (ref.type === 'github') {
-      cmd.hubRepo = ref.location;
-      if (ref.ref) {
-        cmd.hubBranch = ref.ref;
+
+    // Legacy fallback: `gh prompt-registry` stores active hubs under
+    // `~/.config/prompt-registry`; reuse them when the new CLI has no active hub.
+    const legacyRoot = path.join(path.dirname(userPaths.root), 'prompt-registry');
+    const candidates = [
+      { activeHub: userPaths.activeHub, hubs: userPaths.hubs },
+      { activeHub: path.join(legacyRoot, 'active-hub.json'), hubs: path.join(legacyRoot, 'hubs') }
+    ];
+
+    for (const candidate of candidates) {
+      const activeId = await new ActiveHubStore(candidate.activeHub, ctx.fs).get();
+      if (activeId === null) {
+        continue;
       }
-    } else if (ref.type === 'local' || ref.type === 'url') {
-      cmd.hubConfigFile = ref.location;
+      const saved = await new HubStore(candidate.hubs, ctx.fs).load(activeId);
+      const hubConfigFile = path.join(candidate.hubs, `${activeId}.yml`);
+      applyHubRef(cmd, saved.reference, hubConfigFile);
+      return;
     }
   } catch {
     // If detection fails for any reason, fall through to the explicit error below.
   }
+}
+
+/**
+ * Apply a loaded hub reference to the command's hub source fields.
+ * @param cmd Command instance (mutated).
+ * @param cmd.hubRepo Output GitHub owner/repo.
+ * @param cmd.hubBranch Output Git ref.
+ * @param cmd.hubConfigFile Output local/URL config file path.
+ * @param hubRef Loaded hub reference.
+ * @param hubRef.type Hub source type.
+ * @param hubRef.location Hub location or owner/repo.
+ * @param hubRef.ref Optional Git ref.
+ * @param hubConfigFile Absolute path to the locally cached hub config YAML.
+ */
+function applyHubRef(
+  cmd: { hubRepo?: string; hubBranch?: string; hubConfigFile?: string },
+  hubRef: { type: 'github' | 'local' | 'url'; location: string; ref?: string },
+  hubConfigFile: string
+): void {
+  if (hubRef.type === 'github') {
+    cmd.hubRepo = hubRef.location;
+    if (hubRef.ref) {
+      cmd.hubBranch = hubRef.ref;
+    }
+  }
+  cmd.hubConfigFile = hubConfigFile;
 }
 
 const buildHarvestError = (cause: unknown): RegistryError => new RegistryError({

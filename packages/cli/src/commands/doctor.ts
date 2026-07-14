@@ -493,29 +493,41 @@ const checkActiveHub = async (ctx: Context, verbose: boolean): Promise<DoctorChe
   const logs = createLogger(verbose);
   try {
     const paths = resolveUserConfigPaths(ctx.env);
-    const exists = await ctx.fs.exists(paths.root);
-    log(logs, 'output', `userConfigExists: ${exists ? 'true' : 'false'}`);
-    if (!exists) {
-      return { name: 'active-hub', status: 'warn', detail: 'No user config yet — no active hub.', logs };
+    const legacyRoot = path.join(path.dirname(paths.root), 'prompt-registry');
+    const legacyPaths = {
+      root: legacyRoot,
+      activeHub: path.join(legacyRoot, 'active-hub.json'),
+      hubs: path.join(legacyRoot, 'hubs')
+    };
+
+    const candidates = [paths, legacyPaths];
+    for (const candidate of candidates) {
+      const exists = await ctx.fs.exists(candidate.root);
+      log(logs, 'output', `userConfigExists (${candidate.root}): ${exists ? 'true' : 'false'}`);
+      if (!exists) {
+        continue;
+      }
+      const active = new ActiveHubStore(candidate.activeHub, ctx.fs);
+      const id = await active.get();
+      log(logs, 'output', `activeHubId (${candidate.root}): ${id ?? '<null>'}`);
+      if (id === null) {
+        continue;
+      }
+      const store = new HubStore(candidate.hubs, ctx.fs);
+      const hubExists = await store.has(id);
+      log(logs, 'output', `hubConfigExists (${candidate.root}): ${hubExists ? 'true' : 'false'}`);
+      if (!hubExists) {
+        return {
+          name: 'active-hub',
+          status: 'fail',
+          detail: `Active hub "${id}" pointer is stale (config missing).`,
+          logs
+        };
+      }
+      return { name: 'active-hub', status: 'ok', detail: `Active hub: ${id}`, logs };
     }
-    const active = new ActiveHubStore(paths.activeHub, ctx.fs);
-    const id = await active.get();
-    log(logs, 'output', `activeHubId: ${id ?? '<null>'}`);
-    if (id === null) {
-      return { name: 'active-hub', status: 'warn', detail: 'No active hub. Run `hub use <id>`.', logs };
-    }
-    const store = new HubStore(paths.hubs, ctx.fs);
-    const hubExists = await store.has(id);
-    log(logs, 'output', `hubConfigExists: ${hubExists ? 'true' : 'false'}`);
-    if (!hubExists) {
-      return {
-        name: 'active-hub',
-        status: 'fail',
-        detail: `Active hub "${id}" pointer is stale (config missing).`,
-        logs
-      };
-    }
-    return { name: 'active-hub', status: 'ok', detail: `Active hub: ${id}`, logs };
+
+    return { name: 'active-hub', status: 'warn', detail: 'No active hub. Run `hub use <id>`.', logs };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log(logs, 'error', msg);

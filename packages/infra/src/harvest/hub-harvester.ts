@@ -208,7 +208,7 @@ function resolveHubRepo(
   const resolvedHubRepo = !noHubConfig && hubConfigFile === undefined
     ? hubRepo as string
     : (hubRepo ?? 'local/local');
-  const hubId = noHubConfig || hubConfigFile !== undefined ? 'local' : resolvedHubRepo;
+  const hubId = hubRepo ?? 'local';
   return { hubRepo: resolvedHubRepo, hubId };
 }
 

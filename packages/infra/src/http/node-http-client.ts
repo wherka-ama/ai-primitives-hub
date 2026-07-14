@@ -46,11 +46,12 @@ export class NodeHttpClient implements HttpClient {
   private async fetchOnce(request: HttpRequest, url: string): Promise<HttpResponse> {
     const target = new URL(url);
     const transport = target.protocol === 'http:' ? http : https;
+    const headers = this.ensureUserAgent(request.headers);
 
     return new Promise<HttpResponse>((resolve, reject) => {
       const req = transport.request(
         target,
-        { method: request.method ?? 'GET', headers: request.headers },
+        { method: request.method ?? 'GET', headers },
         (res) => {
           const chunks: Buffer[] = [];
           res.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -74,6 +75,21 @@ export class NodeHttpClient implements HttpClient {
       }
       req.end();
     });
+  }
+
+  /**
+   * Ensure the request headers include a User-Agent. GitHub's API requires
+   * one for authenticated requests; the old fetch-based NodeHttpClient got
+   * one from the runtime, but node:http does not set it by default.
+   * @param headers Request headers (may be undefined).
+   * @returns Headers with a default User-Agent if none was present.
+   */
+  private ensureUserAgent(headers?: Record<string, string>): Record<string, string> {
+    const result = headers ?? {};
+    if (result['User-Agent'] === undefined && result['user-agent'] === undefined) {
+      result['User-Agent'] = 'ai-primitives-hub/1.0';
+    }
+    return result;
   }
 
   public async fetch(request: HttpRequest): Promise<HttpResponse> {

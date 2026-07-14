@@ -10,6 +10,9 @@ yarn-error.log
 .env.test.local
 .env.production.local
 
+# SEA build temporary blob
+packages/cli/sea-prep.blob
+
 # IDE files
 .idea/
 .vscode/*
