@@ -11,11 +11,9 @@
  *   ai-primitives-hub init
  *   ai-primitives-hub init --target-name copilot --target-type copilot-cli --hub owner/repo --yes
  *
- * Unlike the reference branch's wizard, hub choices are not curated from a
- * "default hubs" catalog (no such catalog exists in this port yet) — the
- * wizard offers "Local directory" or "Skip for now" and otherwise expects
- * `--hub`/nonanteractive use. Non-interactive mode (the `--yes` / CI path)
- * is unaffected and fully at parity with the reference.
+ * Curates default hubs (e.g. Amadeus, Prompt Registry Community Hub) in the
+ * hub selector alongside "Local directory" and "Skip for now". Non-interactive
+ * mode (the `--yes` / CI path) is unaffected and fully at parity with the reference.
  */
 import * as path from 'node:path';
 import {
@@ -36,6 +34,7 @@ import {
   addTarget,
   addTargetToPath,
   findProjectConfigPath,
+  getEnabledDefaultHubs,
   readTargets,
   writeTargets,
 } from '@ai-primitives-hub/infra';
@@ -74,6 +73,37 @@ function getTargetTypeDisplayName(type: TargetType): string {
     'claude-code': 'Anthropic Claude Code'
   };
   return displayNames[type];
+}
+
+/**
+ * Build hub choices for the wizard.
+ * Amadeus is always placed first.
+ * @returns Array of hub choices.
+ */
+function buildHubChoices(): { name: string; value: string }[] {
+  const defaultHubs = getEnabledDefaultHubs();
+  const hubChoices: { name: string; value: string }[] = [];
+
+  // Separate Amadeus from other hubs.
+  const amadeusHub = defaultHubs.find((h) => h.name === 'Amadeus');
+  const otherHubs = defaultHubs.filter((h) => h.name !== 'Amadeus');
+
+  // Build choices with Amadeus first.
+  if (amadeusHub) {
+    hubChoices.push({
+      name: `${amadeusHub.icon} ${amadeusHub.name}${amadeusHub.recommended ? ' ⭐' : ''}`,
+      value: amadeusHub.name
+    });
+  }
+
+  for (const hub of otherHubs) {
+    hubChoices.push({
+      name: `${hub.icon} ${hub.name}${hub.recommended ? ' ⭐' : ''}`,
+      value: hub.name
+    });
+  }
+
+  return hubChoices;
 }
 
 /** Options for the init command (programmatic API + test seam). */
@@ -179,6 +209,7 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
   targetScope: TargetScope;
   hubRef?: string;
   hubType?: HubType;
+  hubRefParam?: string;
 }> {
   interface WizardAnswers {
     ide: string;
@@ -190,7 +221,14 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
     newTargetName?: string;
   }
 
+  const defaultHubs = getEnabledDefaultHubs();
+  const hubChoices = buildHubChoices();
+  const baseChoices = hubChoices.length > 0
+    ? hubChoices
+    : [{ name: 'Local directory', value: 'local' }];
+
   const allHubChoices = [
+    ...baseChoices,
     { name: 'Local directory', value: 'local' },
     { name: 'Skip for now', value: 'skip' }
   ];
@@ -227,7 +265,7 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
       name: 'hubChoice',
       message: 'Select hub:',
       choices: allHubChoices,
-      default: 'local',
+      default: baseChoices[0].value,
       when: (a: { connectHub: boolean }) => a.connectHub
     },
     {
@@ -270,13 +308,21 @@ async function runInteractiveWizard(ctx: Context, _opts: InitOptions): Promise<{
 
   let hubRef: string | undefined;
   let hubType: HubType | undefined;
+  let hubRefParam: string | undefined;
 
   if (answers.hubChoice === 'local' && answers.hubPath) {
     hubRef = `file:${answers.hubPath}`;
     hubType = 'local';
+  } else if (answers.hubChoice && answers.hubChoice !== 'skip') {
+    const hub = defaultHubs.find((h) => h.name === answers.hubChoice);
+    if (hub) {
+      hubRef = hub.reference.location;
+      hubType = hub.reference.type;
+      hubRefParam = hub.reference.ref;
+    }
   }
 
-  return { targetType, targetName, targetScope, hubRef, hubType };
+  return { targetType, targetName, targetScope, hubRef, hubType, hubRefParam };
 }
 
 /**
@@ -332,6 +378,7 @@ async function createOrReuseTarget(
  * @param ctx CLI context.
  * @param hubRef Hub reference location.
  * @param hubType Hub reference type.
+ * @param hubRefParam Hub reference branch or tag.
  * @param opts Init options.
  * @returns Hub ID or null.
  */
@@ -339,6 +386,7 @@ async function importAndSyncHub(
   ctx: Context,
   hubRef: string,
   hubType: HubType | undefined,
+  hubRefParam: string | undefined,
   opts: InitOptions
 ): Promise<string | null> {
   const mgr = createHubManager({ ctx, http: opts.http, tokens: opts.tokens });
@@ -347,7 +395,7 @@ async function importAndSyncHub(
     ? path.resolve(ctx.cwd(), hubRef)
     : hubRef;
 
-  const hubId = await mgr.importHub({ type: refType, location });
+  const hubId = await mgr.importHub({ type: refType, location, ref: hubRefParam });
   await mgr.syncHub(hubId);
   return hubId;
 }
@@ -458,6 +506,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
   let hubRef = opts.hub;
   let hubType: HubType | undefined = opts.hubType;
 
+  let hubRefParam: string | undefined;
   if (isInteractive) {
     const wizardResult = await runInteractiveWizard(ctx, opts);
     targetType = wizardResult.targetType;
@@ -465,6 +514,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
     targetScope = wizardResult.targetScope;
     hubRef = wizardResult.hubRef;
     hubType = wizardResult.hubType;
+    hubRefParam = wizardResult.hubRefParam;
   }
 
   if (!TARGET_TYPES.includes(targetType)) {
@@ -496,7 +546,7 @@ async function runInit(ctx: Context, opts: InitOptions): Promise<number> {
 
     let hubId: string | null = null;
     if (hubRef !== undefined && hubRef.length > 0) {
-      hubId = await importAndSyncHub(ctx, hubRef, hubType, opts);
+      hubId = await importAndSyncHub(ctx, hubRef, hubType, hubRefParam, opts);
       steps.push(`hub "${hubId}" imported and synced`);
     }
 
