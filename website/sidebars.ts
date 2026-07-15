@@ -54,6 +54,19 @@ const sidebars: SidebarsConfig = {
             { type: "doc", id: "contributor-guide/architecture/validation", label: "Validation" },
             {
               type: "category",
+              label: "Library-Centric Architecture",
+              items: [
+                { type: "doc", id: "contributor-guide/architecture/library-centric-architecture/clean-architecture", label: "Clean Architecture" },
+                { type: "doc", id: "contributor-guide/architecture/library-centric-architecture/system-context", label: "System Context" },
+                { type: "doc", id: "contributor-guide/architecture/library-centric-architecture/codemap", label: "Codemap" },
+                { type: "doc", id: "contributor-guide/architecture/library-centric-architecture/container", label: "Container" },
+                { type: "doc", id: "contributor-guide/architecture/library-centric-architecture/component", label: "Component" },
+                { type: "doc", id: "contributor-guide/architecture/library-centric-architecture/data-flow", label: "Data Flow" },
+                { type: "doc", id: "contributor-guide/architecture/library-centric-architecture/cli-user-flows", label: "CLI User Flows" },
+              ],
+            },
+            {
+              type: "category",
               label: "Architecture Decision Records",
               items: [
                 { type: "doc", id: "contributor-guide/architecture/adr/adr-index", label: "Overview" },

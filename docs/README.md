@@ -39,6 +39,13 @@ Marketplace and registry for Copilot prompt bundles in VS Code.
   - [MCP Integration](contributor-guide/architecture/mcp-integration.md)
   - [Scaffolding](contributor-guide/architecture/scaffolding.md)
   - [Validation](contributor-guide/architecture/validation.md)
+  - [Library-Centric Architecture](contributor-guide/architecture/library-centric-architecture/clean-architecture.md)
+    - [System Context](contributor-guide/architecture/library-centric-architecture/system-context.md)
+    - [Codemap](contributor-guide/architecture/library-centric-architecture/codemap.md)
+    - [Container](contributor-guide/architecture/library-centric-architecture/container.md)
+    - [Component](contributor-guide/architecture/library-centric-architecture/component.md)
+    - [Data Flow](contributor-guide/architecture/library-centric-architecture/data-flow.md)
+    - [CLI User Flows](contributor-guide/architecture/library-centric-architecture/cli-user-flows.md)
   - [Architecture Decision Records](contributor-guide/architecture/adr/adr-index.md)
 - **[Core Flows](contributor-guide/core-flows.md)** — Key system flows
 - **[Testing](contributor-guide/testing.md)** — Testing strategy

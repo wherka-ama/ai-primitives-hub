@@ -124,3 +124,10 @@ Primitive kinds use `prompts/`, `agents/`, `instructions/`, `skills/`, `hooks/`,
 - [MCP Integration](./architecture/mcp-integration.md) — MCP server management
 - [Scaffolding](./architecture/scaffolding.md) — Project templates
 - [Validation](./architecture/validation.md) — Schema validation
+- [Library-Centric Architecture](./architecture/library-centric-architecture/clean-architecture.md) — Clean Architecture, container, component, and data-flow views for the library and CLI
+  - [System Context](./architecture/library-centric-architecture/system-context.md)
+  - [Codemap](./architecture/library-centric-architecture/codemap.md)
+  - [Container](./architecture/library-centric-architecture/container.md)
+  - [Component](./architecture/library-centric-architecture/component.md)
+  - [Data Flow](./architecture/library-centric-architecture/data-flow.md)
+  - [CLI User Flows](./architecture/library-centric-architecture/cli-user-flows.md)
