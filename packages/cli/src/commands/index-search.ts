@@ -9,6 +9,10 @@
  * with `--index <FILE>`.
  * @module commands/index-search
  */
+import * as path from 'node:path';
+import {
+  resolveUserConfigPaths,
+} from '@ai-primitives-hub/app';
 import {
   generateSourceId,
 } from '@ai-primitives-hub/core';
@@ -19,8 +23,10 @@ import type {
   TokenProvider,
 } from '@ai-primitives-hub/core';
 import {
+  ActiveHubStore,
   defaultIndexFile,
   defaultTokenProvider,
+  HubStore,
   loadIndex,
   NodeHttpClient,
   readTargets,
@@ -47,6 +53,30 @@ import {
 } from './install';
 
 type SearchCandidate = { bundleId: string; version: string; source: RegistrySource };
+
+async function resolveActiveHubSources(
+  ctx: Context,
+  mgr: ReturnType<typeof createHubManager>
+): Promise<RegistrySource[] | null> {
+  const active = await mgr.getActiveHub();
+  if (active !== null) {
+    return active.config.sources;
+  }
+
+  const userPaths = resolveUserConfigPaths(ctx.env);
+  const legacyRoot = path.join(path.dirname(userPaths.root), 'prompt-registry');
+  const legacyActiveStore = new ActiveHubStore(path.join(legacyRoot, 'active-hub.json'), ctx.fs);
+  const legacyHubId = await legacyActiveStore.get();
+  if (legacyHubId === null) {
+    return null;
+  }
+  const legacyStore = new HubStore(path.join(legacyRoot, 'hubs'), ctx.fs);
+  if (!(await legacyStore.has(legacyHubId))) {
+    return null;
+  }
+  const legacyHub = await legacyStore.load(legacyHubId);
+  return legacyHub.config.sources;
+}
 
 function buildSearchCandidates(sources: RegistrySource[], hits: SearchResult['hits']): SearchCandidate[] {
   const sourceById = new Map<string, RegistrySource>();
@@ -132,13 +162,13 @@ async function searchAndInstall(
   const http = opts.http ?? new NodeHttpClient();
   const tokens = opts.tokens ?? defaultTokenProvider(ctx.env);
   const mgr = createHubManager({ ctx, http, tokens });
-  const active = await mgr.getActiveHub();
-  if (active === null) {
+  const activeSources = await resolveActiveHubSources(ctx, mgr);
+  if (activeSources === null) {
     ctx.stderr.write('No active hub found. Run `ai-primitives-hub hub use <id>` first.\n');
     return 1;
   }
 
-  const candidates = buildSearchCandidates(active.config.sources, result.hits);
+  const candidates = buildSearchCandidates(activeSources, result.hits);
 
   if (candidates.length === 0) {
     ctx.stdout.write('No bundles from the active hub matched the search results.\n');
