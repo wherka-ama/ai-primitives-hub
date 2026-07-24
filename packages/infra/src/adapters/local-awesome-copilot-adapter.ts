@@ -257,7 +257,7 @@ export class LocalAwesomeCopilotAdapter extends BaseSourceAdapter {
       }
 
       const filename = item.path.split('/').pop() ?? 'unknown';
-      const id = filename.replace(/\.(prompt|instructions|chatmode|agent)\.md$/, '');
+      const id = filename.replace(/\.(prompt|instructions|chatmode|agent)\.md$/, '').replace(/\.md$/, '');
       return {
         id,
         name: titleCase(id.replace(/-/g, ' ')),

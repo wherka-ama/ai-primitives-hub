@@ -18,6 +18,11 @@ import {
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  resolveUserConfigPaths,
+} from '@ai-primitives-hub/app';
+import {
+  ActiveHubStore,
+  HubStore,
   NodeFileSystem,
 } from '@ai-primitives-hub/infra';
 import {
@@ -164,6 +169,59 @@ describe('index commands', () => {
       expect(result.exitCode).toBe(0);
       const envelope = parseJson<{ hits: unknown[] }>(result.stdout);
       expect(envelope.data.hits).toEqual([]);
+    });
+
+    it('uses legacy prompt-registry active hub when installing from search results', async () => {
+      const userPaths = resolveUserConfigPaths({
+        HOME: workspace,
+        USERPROFILE: workspace,
+        XDG_CONFIG_HOME: path.join(workspace, 'xdg-config'),
+        XDG_CACHE_HOME: path.join(workspace, 'xdg-cache')
+      });
+      const legacyRoot = path.join(path.dirname(userPaths.root), 'prompt-registry');
+      const legacyHubsDir = path.join(legacyRoot, 'hubs');
+      const legacyActiveHubPath = path.join(legacyRoot, 'active-hub.json');
+      const fs = new NodeFileSystem();
+      const hubId = 'legacy-hub';
+
+      const hubStore = new HubStore(legacyHubsDir, fs);
+      await hubStore.save(hubId, {
+        version: '1.0.0',
+        metadata: {
+          name: 'Legacy Hub',
+          description: 'Legacy hub for regression test',
+          maintainer: 'tests',
+          updatedAt: new Date().toISOString()
+        },
+        sources: [
+          {
+            id: 'local-foo-src',
+            name: 'Local Foo Source',
+            description: 'Source matching indexed bundle source id',
+            type: 'local',
+            url: 'file:///tmp/local-foo',
+            repository: 'local/foo',
+            branch: 'main',
+            path: '/',
+            hubId
+          }
+        ],
+        profiles: []
+      }, {
+        type: 'local',
+        location: legacyRoot
+      });
+
+      const activeHubStore = new ActiveHubStore(legacyActiveHubPath, fs);
+      await activeHubStore.set(hubId);
+
+      const result = await run([
+        'index', 'search', '--query', 'hello', '--index', indexFile, '--install'
+      ]);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('No target found. Run `ai-primitives-hub target add` first.');
+      expect(result.stderr).not.toContain('No active hub found');
     });
   });
 
