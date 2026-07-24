@@ -54,6 +54,7 @@ import {
   RepositoryCommitMode,
 } from '../types/registry';
 import {
+  CopilotFileType,
   determineFileType,
   getRepositoryTargetDirectory,
   getSkillName,
@@ -240,7 +241,7 @@ export class BundleInstaller {
       // Collect files from .github/ directories based on manifest
       for (const promptDef of manifest.prompts) {
         const promptId = normalizePromptId(promptDef.id);
-        const fileType = determineFileType(promptDef.file, promptDef.tags);
+        const fileType = (promptDef.type as CopilotFileType) || determineFileType(promptDef.file, promptDef.tags);
         const targetDir = getRepositoryTargetDirectory(fileType);
 
         if (fileType === 'skill') {
