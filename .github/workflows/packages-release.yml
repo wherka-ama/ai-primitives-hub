@@ -194,6 +194,8 @@ jobs:
             echo "The requested release did not change any package versions." >&2
             exit 1
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "chore(release): prepare @ai-primitives-hub packages"
 
       - name: Lint and test release packages
