@@ -46,13 +46,18 @@ The prepare job:
    `package.json` `packageManager` field.
 2. Bumps the selected package manifests with `pnpm version` and updates
    `pnpm-lock.yaml`.
-3. Runs lint and tests unless `skip_checks` is enabled, then builds the selected
-   packages once.
+3. Builds the selected packages and their workspace dependencies once so all
+   package declarations are available to type-aware linting, then runs lint and
+   tests unless `skip_checks` is enabled.
 4. Uploads the resulting `dist` directories and a release manifest as a
    workflow artifact.
 5. Creates and pushes a branch named
    `release/packages/<packages>/<npm-tag>/<workflow-run-id>`, then opens a pull
    request into `main`.
+
+The build must precede linting on a clean checkout: package metadata points to
+generated declarations under ignored `dist` directories. A previous local build
+can hide this requirement by leaving those declarations on disk.
 
 Review the package versions and lockfile changes in the pull request. The
 generated release branch and pull request make the version change auditable and

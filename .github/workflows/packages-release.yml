@@ -139,7 +139,7 @@ jobs:
           case "$PACKAGES" in
             all)
               selector='@ai-primitives-hub/*'
-              build_selector='@ai-primitives-hub/*'
+              build_selector='@ai-primitives-hub/*...'
               names='core infra app cli'
               ;;
             core|infra|app|cli)
@@ -198,6 +198,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "chore(release): prepare @ai-primitives-hub packages"
 
+      - name: Build release packages
+        env:
+          BUILD_SELECTOR: ${{ steps.selector.outputs.build_selector }}
+        run: pnpm --filter "$BUILD_SELECTOR" build
+
       - name: Lint and test release packages
         if: ${{ !inputs.skip_checks }}
         env:
@@ -206,11 +211,6 @@ jobs:
           set -euo pipefail
           pnpm --filter "$BUILD_SELECTOR" lint
           pnpm --filter "$BUILD_SELECTOR" test
-
-      - name: Build release packages
-        env:
-          BUILD_SELECTOR: ${{ steps.selector.outputs.build_selector }}
-        run: pnpm --filter "$BUILD_SELECTOR" build
 
       - name: Stage release build artifact
         if: ${{ !inputs.dry_run }}
