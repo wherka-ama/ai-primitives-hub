@@ -21,6 +21,7 @@ import {
 import {
   InstallPipeline,
   InstallPipelineError,
+  ProcessAidlcPluginActivator,
 } from '@ai-primitives-hub/app';
 import type {
   BundleDownloader,
@@ -29,12 +30,17 @@ import type {
   BundleSpec,
   ExtractedFiles,
   Installable,
+  ReleaseDeploymentManifest,
   Target,
   TargetType,
   TargetWriter,
   TargetWriteResult,
 } from '@ai-primitives-hub/core';
 import {
+  validateAidlcPluginBundleForTarget,
+} from '@ai-primitives-hub/core';
+import {
+  NodeProcessExecutor,
   ZipBundleExtractor,
 } from '@ai-primitives-hub/infra';
 import * as yaml from 'js-yaml';
@@ -687,11 +693,13 @@ export class BundleInstaller {
       bundleId: bundle.id,
       bundleVersion: bundle.version
     };
+    const workspaceRoot = getWorkspaceRoot();
     const target: Target = {
-      name: 'vscode',
-      type: 'vscode',
+      name: this.targetType,
+      type: this.targetType,
       scope: options.scope,
-      commitMode: options.commitMode
+      commitMode: options.commitMode,
+      rootPath: options.scope === 'user' ? undefined : workspaceRoot
     };
 
     const resolver: BundleResolver = {
@@ -719,10 +727,12 @@ export class BundleInstaller {
     };
 
     const zipExtractor = new ZipBundleExtractor();
+    let extractedFiles: ExtractedFiles = new Map();
     const extractor: BundleExtractor = {
       extract: async (bytes: Uint8Array): Promise<ExtractedFiles> => {
         const files = await zipExtractor.extract(bytes);
         if (files.has('deployment-manifest.yml')) {
+          extractedFiles = files;
           return files;
         }
 
@@ -757,6 +767,7 @@ export class BundleInstaller {
         };
         const augmented = new Map(files);
         augmented.set('deployment-manifest.yml', new TextEncoder().encode(yaml.dump(fallbackManifest)));
+        extractedFiles = augmented;
         return augmented;
       }
     };
@@ -875,10 +886,19 @@ export class BundleInstaller {
 
         // Step 10: Sync to appropriate scope directory (skills for repository scope must run through this)
         const scopeService = this.getScopeService(options.scope);
-        // Pass commitMode explicitly to syncBundle to avoid timing issues:
-        // The installation record hasn't been saved to RegistryStorage yet at this point,
-        // so RepositoryScopeService can't look up commitMode from storage.
-        await scopeService.syncBundle(bundle.id, installDir, { commitMode: options.commitMode });
+        const releaseManifest = outcome.manifest.formatVersion === 1
+          ? outcome.manifest as ReleaseDeploymentManifest
+          : undefined;
+        const aidlcPlugins = releaseManifest === undefined
+          ? []
+          : validateAidlcPluginBundleForTarget(releaseManifest, extractedFiles, target);
+        const activator = new ProcessAidlcPluginActivator(new NodeProcessExecutor());
+        // Run activation inside repository sync's rollback boundary, before
+        // lockfile persistence or local-only ignore updates.
+        await scopeService.syncBundle(bundle.id, installDir, {
+          commitMode: options.commitMode,
+          afterWrite: () => activator.activate(target, aidlcPlugins)
+        });
         this.logger.debug(`Synced to ${options.scope} scope`);
 
         // Step 11: Update lockfile for repository scope

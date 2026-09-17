@@ -51,6 +51,7 @@ export function loadItemKindsFromSchema(schemaDir?: string): string[] {
     'agent',
     'skill',
     'plugin',
+    'aidlc-plugin',
     'hook',
     'mcp-server',
     'steering',

@@ -7,6 +7,9 @@
  * reached yet). Written fresh against the five-stage pipeline
  * (resolve -> download -> extract -> validate -> write).
  */
+import {
+  createHash,
+} from 'node:crypto';
 import type {
   BundleDownloader,
   BundleExtractor,
@@ -16,6 +19,10 @@ import type {
   Installable,
   Target,
 } from '@ai-primitives-hub/core';
+import {
+  dump as dumpYaml,
+  load as loadYaml,
+} from 'js-yaml';
 import {
   describe,
   expect,
@@ -55,6 +62,30 @@ const okExtractor: BundleExtractor = {
 const okWriter: TargetWriter = {
   write: async () => ({ written: ['/out/deployment-manifest.yml'], skipped: [] }),
   remove: async () => {}
+};
+
+const createAidlcArchive = (): ExtractedFiles => {
+  const files = new Map(createGovernedReleaseArchive({ id: 'my-bundle' }));
+  const projectionPath = 'aidlc-plugins/example/.aidlc-plugin-projection.json';
+  const projection = new TextEncoder().encode(JSON.stringify({
+    schema: 1,
+    producer: 'aidlc-plugin-build',
+    plugin: 'example',
+    harness: 'kiro-ide'
+  }));
+  const manifest = loadYaml(new TextDecoder().decode(files.get('deployment-manifest.yml'))) as Record<string, unknown>;
+  const items = manifest.items as Record<string, unknown>[];
+  const inventory = manifest.files as Record<string, unknown>[];
+  items.push({ id: 'example', path: projectionPath, kind: 'aidlc-plugin' });
+  inventory.push({
+    path: projectionPath,
+    role: 'installable',
+    size: projection.byteLength,
+    sha256: `sha256:${createHash('sha256').update(projection).digest('hex')}`
+  });
+  files.set(projectionPath, projection);
+  files.set('deployment-manifest.yml', new TextEncoder().encode(dumpYaml(manifest, { lineWidth: -1 })));
+  return files;
 };
 
 describe('InstallPipeline', () => {
@@ -272,5 +303,33 @@ describe('InstallPipeline', () => {
       stage: 'validate'
     });
     expect(writerFactoryCalls).toBe(0);
+  });
+
+  it('rolls back target files when AIDLC activation fails', async () => {
+    const rollbackCalls: string[][] = [];
+    const pipeline = new InstallPipeline({
+      resolver: okResolver,
+      downloader: okDownloader,
+      extractor: { extract: async () => createAidlcArchive() },
+      writerFactory: () => ({
+        preflight: async (_target, files) => ({ writable: [...files.keys()], skipped: [] }),
+        write: async () => ({ written: ['/workspace/.kiro/aidlc-plugins/example/plugin.js'], skipped: [] }),
+        rollback: async (_target, written) => {
+          rollbackCalls.push([...written]);
+        },
+        remove: async () => {}
+      }),
+      aidlcPluginActivator: {
+        activate: async () => {
+          throw new Error('AIDLC sync failed');
+        }
+      }
+    });
+
+    await expect(pipeline.run(
+      { bundleId: 'my-bundle' },
+      { name: 'kiro', type: 'kiro', scope: 'repository', rootPath: '/workspace' }
+    )).rejects.toMatchObject({ code: 'AIDLC_PLUGIN.ACTIVATION_FAILED', stage: 'write' });
+    expect(rollbackCalls).toEqual([['/workspace/.kiro/aidlc-plugins/example/plugin.js']]);
   });
 });

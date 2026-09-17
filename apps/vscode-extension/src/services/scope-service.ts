@@ -20,6 +20,8 @@ export interface SyncBundleOptions {
    * Only applicable for RepositoryScopeService.
    */
   commitMode?: 'commit' | 'local-only';
+  /** Runs after file placement while repository rollback tracking is still active. */
+  afterWrite?: () => Promise<void>;
 }
 
 /**

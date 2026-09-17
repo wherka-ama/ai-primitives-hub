@@ -15,6 +15,9 @@ import type {
   Target,
   TargetWriter,
 } from '@ai-primitives-hub/core';
+import type {
+  AidlcPluginActivator,
+} from './aidlc-plugin-activator';
 import {
   type InstallOutcome,
   InstallPipeline,
@@ -31,6 +34,7 @@ export interface InstallBundleOptions {
   downloader: BundleDownloader;
   extractor: BundleExtractor;
   writerFactory: (target: Target) => TargetWriter;
+  aidlcPluginActivator?: AidlcPluginActivator;
   onEvent?: (event: PipelineEvent) => void;
 }
 
@@ -50,6 +54,7 @@ export const installBundle = (
     downloader: opts.downloader,
     extractor: opts.extractor,
     writerFactory: opts.writerFactory,
+    aidlcPluginActivator: opts.aidlcPluginActivator,
     onEvent: opts.onEvent
   });
   return pipeline.run(input.spec, input.target);

@@ -27,6 +27,14 @@ export {
 } from './pipeline';
 
 export {
+  ProcessAidlcPluginActivator,
+} from './aidlc-plugin-activator';
+
+export type {
+  AidlcPluginActivator,
+} from './aidlc-plugin-activator';
+
+export {
   TargetWriteRejectedError,
   writeTargetSafely,
 } from './target-write';

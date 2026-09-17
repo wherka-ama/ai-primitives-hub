@@ -122,6 +122,7 @@
             "agent",
             "skill",
             "plugin",
+            "aidlc-plugin",
             "hook",
             "mcp-server",
             "steering",

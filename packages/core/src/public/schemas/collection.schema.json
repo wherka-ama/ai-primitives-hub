@@ -71,7 +71,8 @@
               ".opencode/tools/database.py",
               "powers/stripe/POWER.md",
               "knowledge/onboarding.md",
-              "playbooks/bug-fix.md"
+              "playbooks/bug-fix.md",
+              "aidlc-plugins/amadeus-enterprise/.aidlc-plugin-projection.json"
             ]
           },
           "kind": {
@@ -84,6 +85,7 @@
               "agent",
               "skill",
               "plugin",
+              "aidlc-plugin",
               "hook",
               "mcp-server",
               "steering",
@@ -113,6 +115,23 @@
             }
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": { "const": "aidlc-plugin" }
+              },
+              "required": ["kind"]
+            },
+            "then": {
+              "properties": {
+                "path": {
+                  "pattern": "^aidlc-plugins/[A-Za-z0-9][A-Za-z0-9._-]*/\\.aidlc-plugin-projection\\.json$"
+                }
+              }
+            }
+          }
+        ],
         "additionalProperties": false
       }
     },

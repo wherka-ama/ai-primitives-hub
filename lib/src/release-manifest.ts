@@ -23,7 +23,7 @@ import {
 
 /** Canonical primitive values accepted by governed release manifests. */
 const PRIMITIVE_KINDS = new Set([
-  'prompt', 'instruction', 'chat-mode', 'agent', 'skill', 'plugin', 'hook',
+  'prompt', 'instruction', 'chat-mode', 'agent', 'skill', 'plugin', 'aidlc-plugin', 'hook',
   'mcp-server', 'steering', 'spec', 'command', 'rule', 'output-style', 'tool',
   'power', 'knowledge', 'playbook'
 ]);
@@ -360,7 +360,7 @@ const collectItemEntries = (sourceTree: GitSourceTree, items: CollectionItem[]):
   const entries = new Map<string, ReleaseArchiveEntry>();
   for (const item of items) {
     const itemPath = normalizeRepoRelativePath(item.path);
-    const paths = item.kind === 'skill' || item.kind === 'plugin'
+    const paths = item.kind === 'skill' || item.kind === 'plugin' || item.kind === 'aidlc-plugin'
       ? listInstallableSkillFiles(sourceTree, path.posix.dirname(itemPath))
       : [itemPath];
     for (const entryPath of paths) {
@@ -454,6 +454,7 @@ const normalizeKind = (value: string): string => {
     agents: 'agent',
     skills: 'skill',
     plugins: 'plugin',
+    'aidlc-plugins': 'aidlc-plugin',
     hooks: 'hook',
     mcp: 'mcp-server',
     specs: 'spec',
@@ -478,7 +479,7 @@ const legacyType = (kind: string): string => ({
 
 const generateItemId = (itemPath: string, kind: string): string => {
   const extension = path.extname(itemPath);
-  if (kind === 'skill' || kind === 'plugin') {
+  if (kind === 'skill' || kind === 'plugin' || kind === 'aidlc-plugin') {
     const parts = itemPath.split('/');
     return parts.length >= 2 ? (parts.at(-2) ?? path.basename(itemPath, extension)) : path.basename(itemPath, extension);
   }
@@ -515,7 +516,7 @@ const readWorkingTreeFile = (repoRoot: string, repositoryPath: string): Buffer =
 };
 
 const resolveLegacyItemPaths = (repoRoot: string, itemPath: string, kind: string): string[] => {
-  if (kind !== 'skill' && kind !== 'plugin') {
+  if (kind !== 'skill' && kind !== 'plugin' && kind !== 'aidlc-plugin') {
     return [itemPath];
   }
 

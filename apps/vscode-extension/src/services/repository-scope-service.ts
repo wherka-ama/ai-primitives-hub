@@ -200,12 +200,14 @@ export class RepositoryScopeService implements IScopeService {
    * @param bundlePath - Path to bundle directory
    * @param manifest - Deployment manifest
    * @param commitMode - Whether to track in git or exclude
+   * @param afterWrite
    * @returns Array of installed file paths (relative to workspace)
    */
   private async installFiles(
     bundlePath: string,
     manifest: DeploymentManifest,
-    commitMode: RepositoryCommitMode
+    commitMode: RepositoryCommitMode,
+    afterWrite?: () => Promise<void>
   ): Promise<string[]> {
     const tracker: InstallationTracker = {
       relativePaths: [],
@@ -216,6 +218,10 @@ export class RepositoryScopeService implements IScopeService {
     try {
       // Copy all bundle files to target directories
       await this.copyBundleFiles(bundlePath, manifest, tracker);
+
+      if (afterWrite !== undefined) {
+        await afterWrite();
+      }
 
       // Handle git exclude for local-only mode
       if (commitMode === 'local-only' && tracker.relativePaths.length > 0) {
@@ -252,9 +258,13 @@ export class RepositoryScopeService implements IScopeService {
     for (const promptDef of manifest.prompts || []) {
       const promptId = normalizePromptId(promptDef.id);
 
-      await (promptDef.type === 'skill'
-        ? this.installSkillAndTrack(writer, target, bundlePath, promptDef.file, promptId, tracker)
-        : this.installFileAndTrack(writer, target, bundlePath, promptDef, promptId, tracker));
+      if (promptDef.type === 'skill') {
+        await this.installSkillAndTrack(writer, target, bundlePath, promptDef.file, promptId, tracker);
+      } else if ((promptDef.type as string) === 'aidlc-plugin') {
+        await this.installAidlcPluginAndTrack(writer, target, bundlePath, promptDef.file, tracker);
+      } else {
+        await this.installFileAndTrack(writer, target, bundlePath, promptDef, promptId, tracker);
+      }
     }
   }
 
@@ -307,6 +317,29 @@ export class RepositoryScopeService implements IScopeService {
     }
 
     this.logger.debug(`[RepositoryScopeService] Installed skill ${skillId}: ${result.written.length} files`);
+  }
+
+  private async installAidlcPluginAndTrack(
+    writer: FileTreeTargetWriter,
+    target: Target,
+    bundlePath: string,
+    projectionFile: string,
+    tracker: InstallationTracker
+  ): Promise<void> {
+    const sourceDir = path.join(bundlePath, path.dirname(projectionFile));
+    if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
+      throw new Error(`AIDLC plugin directory not found: ${sourceDir}`);
+    }
+
+    const files = await this.readDirectoryIntoMap(sourceDir, path.dirname(projectionFile));
+    const result = await writer.write(target, files);
+    if (result.skipped.length > 0) {
+      throw new Error(`AIDLC plugin files could not be placed: ${result.skipped.join(', ')}`);
+    }
+
+    tracker.relativePaths.push(...result.written.map((entry) => this.getRelativePath(entry)));
+    tracker.absolutePaths.push(...result.written);
+    this.logger.debug(`[RepositoryScopeService] Installed AIDLC plugin: ${result.written.length} files`);
   }
 
   /**
@@ -830,7 +863,7 @@ export class RepositoryScopeService implements IScopeService {
       }
 
       // Install files (handles empty prompts array gracefully)
-      const installedPaths = await this.installFiles(bundlePath, manifest, commitMode);
+      const installedPaths = await this.installFiles(bundlePath, manifest, commitMode, options?.afterWrite);
 
       this.logger.info(`[RepositoryScopeService] ✅ Synced ${installedPaths.length} files for bundle: ${bundleId}`);
     } catch (error) {

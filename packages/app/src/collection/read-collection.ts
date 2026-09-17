@@ -51,7 +51,7 @@ export function loadItemKindsFromSchema(schemaDir?: string): string[] {
   } catch {
     // Schema unavailable or malformed, use fallback
   }
-  return ['prompt', 'instruction', 'agent', 'skill'];
+  return ['prompt', 'instruction', 'agent', 'skill', 'aidlc-plugin'];
 }
 
 /**
@@ -287,8 +287,8 @@ export function resolveCollectionItemPaths(repoRoot: string, collection: Collect
 
     const normalizedPath = normalizeRepoRelativePath(item.path);
 
-    if (item.kind === 'skill') {
-      // For skills, the path points to SKILL.md but we need the entire directory
+    if (item.kind === 'skill' || item.kind === 'aidlc-plugin') {
+      // Directory primitives use an entrypoint file but include their entire directory
       const skillDir = path.dirname(path.join(repoRoot, normalizedPath));
       if (fs.existsSync(skillDir) && fs.statSync(skillDir).isDirectory()) {
         const skillFiles = listFilesRecursively(skillDir, repoRoot);

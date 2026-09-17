@@ -23,7 +23,9 @@ import {
   type BundleSpec,
   getInstallableBundleFiles,
   type Installable,
+  type ReleaseDeploymentManifest,
   type Target,
+  validateAidlcPluginBundleForTarget,
   type ValidatedManifest,
   validateManifest,
 } from '@ai-primitives-hub/core';
@@ -31,6 +33,9 @@ import type {
   TargetWriter,
   TargetWriteResult,
 } from '../writers/file-tree-writer';
+import type {
+  AidlcPluginActivator,
+} from './aidlc-plugin-activator';
 import {
   TargetWriteRejectedError,
   writeTargetSafely,
@@ -61,6 +66,7 @@ export interface InstallPipelineOptions {
   extractor: BundleExtractor;
   /** Factory that returns the appropriate writer for a given target. */
   writerFactory: (target: Target) => TargetWriter;
+  aidlcPluginActivator?: AidlcPluginActivator;
   onEvent?: (event: PipelineEvent) => void;
 }
 
@@ -174,13 +180,22 @@ export class InstallPipeline {
         'validate'
       );
     }
+    let aidlcPlugins;
+    try {
+      aidlcPlugins = manifest.formatVersion === 1
+        ? validateAidlcPluginBundleForTarget(manifest as ReleaseDeploymentManifest, files, target)
+        : [];
+    } catch (validateError) {
+      const e = validateError as { code?: string; message: string };
+      throw new InstallPipelineError(e.message, e.code ?? 'AIDLC_PLUGIN.INVALID', 'validate');
+    }
     emit({ kind: 'validate.done', manifestId: manifest.id, manifestVersion: manifest.version });
 
     // 5. Write to target.
     emit({ kind: 'write.start', target: target.name });
+    const writer = this.opts.writerFactory(target);
     let writeResult;
     try {
-      const writer = this.opts.writerFactory(target);
       const targetFiles = getInstallableBundleFiles(files, manifest);
       writeResult = await writeTargetSafely(writer, target, targetFiles);
     } catch (writeError) {
@@ -192,6 +207,20 @@ export class InstallPipeline {
         code,
         'write'
       );
+    }
+    if (this.opts.aidlcPluginActivator !== undefined) {
+      try {
+        await this.opts.aidlcPluginActivator.activate(target, aidlcPlugins);
+      } catch (activationError) {
+        if (writer.rollback !== undefined && writeResult.written.length > 0) {
+          await writer.rollback(target, writeResult.written);
+        }
+        throw new InstallPipelineError(
+          `AIDLC plugin activation failed: ${(activationError as Error).message}`,
+          'AIDLC_PLUGIN.ACTIVATION_FAILED',
+          'write'
+        );
+      }
     }
     emit({
       kind: 'write.done',

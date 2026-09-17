@@ -23,6 +23,7 @@ import {
   type Lockfile,
   type LockfileBundleEntry,
   type LockfileSourceEntry,
+  ProcessAidlcPluginActivator,
   readLockfile,
   resolveUserConfigPaths,
   type TargetWriter,
@@ -40,12 +41,14 @@ import type {
   HttpClient,
   HubSourceSpec,
   RegistrySource,
+  ReleaseDeploymentManifest,
   Target,
   TokenProvider,
 } from '@ai-primitives-hub/core';
 import {
   getInstallableBundleFiles,
   parseBundleSpec,
+  validateAidlcPluginBundleForTarget,
   validateManifest,
 } from '@ai-primitives-hub/core';
 import {
@@ -61,6 +64,7 @@ import {
   HubStore,
   isGitHubAppAuthEnabled,
   NodeHttpClient,
+  NodeProcessExecutor,
   parseGitHubRepositoryTarget,
   readLocalBundle,
   readTargets,
@@ -864,6 +868,9 @@ async function performLocalInstall(
       expectedId: opts.bundle ?? '',
       expectedVersion: undefined
     });
+    const aidlcPlugins = manifest.formatVersion === 1
+      ? validateAidlcPluginBundleForTarget(manifest as ReleaseDeploymentManifest, files, effectiveTarget)
+      : [];
     if (opts.dryRun === true) {
       formatOutput({
         ctx,
@@ -885,6 +892,14 @@ async function performLocalInstall(
     const writer = writerFactory(effectiveTarget);
     const targetFiles = getInstallableBundleFiles(files, manifest);
     const result = await writeTargetSafely(writer, effectiveTarget, targetFiles);
+    try {
+      await new ProcessAidlcPluginActivator(new NodeProcessExecutor()).activate(effectiveTarget, aidlcPlugins);
+    } catch (activationError) {
+      if (writer.rollback !== undefined) {
+        await writer.rollback(effectiveTarget, result.written);
+      }
+      throw activationError;
+    }
 
     const scope = effectiveTarget.scope;
     const commitMode = effectiveTarget.commitMode ?? 'commit';
@@ -1095,6 +1110,9 @@ async function performRemoteInstall(
       expectedId: opts.sourceConfig === undefined ? spec.bundleId : undefined,
       expectedVersion: spec.bundleVersion === 'latest' ? undefined : spec.bundleVersion
     });
+    const aidlcPlugins = manifest.formatVersion === 1
+      ? validateAidlcPluginBundleForTarget(manifest as ReleaseDeploymentManifest, files, effectiveTarget)
+      : [];
     if (opts.dryRun === true) {
       formatOutput({
         ctx,
@@ -1119,6 +1137,14 @@ async function performRemoteInstall(
     const writer = writerFactory(effectiveTarget);
     const targetFiles = getInstallableBundleFiles(files, manifest);
     const result = await writeTargetSafely(writer, effectiveTarget, targetFiles);
+    try {
+      await new ProcessAidlcPluginActivator(new NodeProcessExecutor()).activate(effectiveTarget, aidlcPlugins);
+    } catch (activationError) {
+      if (writer.rollback !== undefined) {
+        await writer.rollback(effectiveTarget, result.written);
+      }
+      throw activationError;
+    }
     const scope = effectiveTarget.scope;
     const commitMode = effectiveTarget.commitMode ?? 'commit';
     const lockPath = lockfilePathForTarget(ctx, effectiveTarget);
@@ -1454,7 +1480,18 @@ async function validateAndWrite(
     expectedId: bundleId,
     expectedVersion: entry.version
   });
-  await writeTargetSafely(writer, target, getInstallableBundleFiles(files, manifest));
+  const aidlcPlugins = manifest.formatVersion === 1
+    ? validateAidlcPluginBundleForTarget(manifest as ReleaseDeploymentManifest, files, target)
+    : [];
+  const result = await writeTargetSafely(writer, target, getInstallableBundleFiles(files, manifest));
+  try {
+    await new ProcessAidlcPluginActivator(new NodeProcessExecutor()).activate(target, aidlcPlugins);
+  } catch (activationError) {
+    if (writer.rollback !== undefined) {
+      await writer.rollback(target, result.written);
+    }
+    throw activationError;
+  }
   if (verbose) {
     ctx.stdout.write(`[verbose] Successfully installed ${bundleId}\n`);
   }

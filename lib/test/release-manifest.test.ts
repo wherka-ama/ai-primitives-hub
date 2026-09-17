@@ -149,6 +149,40 @@ items:
     assert.deepStrictEqual(legacy.prompts.find((item) => item.file === 'skills/example/SKILL.md')?.tags, ['orchestration']);
   });
 
+  it('packages an AIDLC plugin projection directory byte-for-byte', () => {
+    writeFile(tempDir, 'aidlc-plugins/example/.aidlc-plugin-projection.json', JSON.stringify({
+      schema: 1,
+      producer: 'aidlc-plugin-build',
+      plugin: 'example',
+      harness: 'kiro-ide'
+    }));
+    writeFile(tempDir, 'aidlc-plugins/example/hooks/compose.ts', 'export const compose = true;\n');
+    writeFile(tempDir, 'collections/example.collection.yml', `id: example
+name: Example
+items:
+  - path: aidlc-plugins/example/.aidlc-plugin-projection.json
+    kind: aidlc-plugin
+`);
+    runGit(tempDir, ['add', '.']);
+    runGit(tempDir, ['commit', '-m', 'Add AIDLC plugin']);
+
+    const plan = createReleaseManifestPlan({
+      repoRoot: tempDir,
+      collectionFile: 'collections/example.collection.yml',
+      version: '1.2.3',
+      revision: runGit(tempDir, ['rev-parse', 'HEAD'])
+    });
+
+    assert.deepStrictEqual((plan.manifest as { items: { id: string; kind: string }[] }).items, [{
+      id: 'example',
+      path: 'aidlc-plugins/example/.aidlc-plugin-projection.json',
+      kind: 'aidlc-plugin',
+      name: 'example',
+      description: ''
+    }]);
+    assert.ok(plan.entries.some((entry) => entry.path === 'aidlc-plugins/example/hooks/compose.ts'));
+  });
+
   it('uses exact committed source bytes instead of later working-tree changes', () => {
     const revision = runGit(tempDir, ['rev-parse', 'HEAD']);
     writeFile(tempDir, 'prompts/hello.prompt.md', '# Changed only in the worktree\n');

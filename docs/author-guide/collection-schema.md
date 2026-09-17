@@ -26,6 +26,9 @@ items:                              # Required. List of resources (max 50)
 
   - path: agents/runner.agent.md
     kind: agent
+
+  - path: aidlc-plugins/amadeus-enterprise/.aidlc-plugin-projection.json
+    kind: aidlc-plugin
 readme:                                   # Optional. Documentation for the collection.
   path: docs/python-development/readme.md 
 
@@ -72,6 +75,22 @@ display:                            # Optional. UI preferences
   ordering: manual                  # manual or alphabetical
   show_badge: true                  # Show badge in UI
 ```
+
+## AIDLC plugins
+
+Use `kind: aidlc-plugin` for a built AIDLC plugin projection. The item path must be
+`aidlc-plugins/<plugin-id>/.aidlc-plugin-projection.json`; packaging includes the
+entire plugin directory byte-for-byte.
+
+AIDLC plugins are repository-scoped. Supported targets are VS Code, VS Code
+Insiders, Copilot CLI, Kiro, Kiro CLI, Claude Code, Cursor, and OpenCode. The
+projection's `harness` must match the selected target. After placement, AI
+Primitives Hub runs the fixed command `aidlc engine plugin sync --project-dir
+<workspace>`; collection content cannot supply commands or arguments.
+
+Uninstall removes files managed by AI Primitives Hub, but deterministic reversal
+of already-composed AIDLC output depends on future upstream AIDLC de-composition
+support.
 
 ## MCP Input Definitions
 

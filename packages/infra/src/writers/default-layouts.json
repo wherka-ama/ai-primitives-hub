@@ -28,7 +28,8 @@
           "agents/": "agents/",
           "skills/": "skills/",
           "hooks/": "hooks/",
-          "plugins/": "plugins/"
+          "plugins/": "plugins/",
+          "aidlc-plugins/": "aidlc-plugins/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"],
         "mcpConfig": {
@@ -66,7 +67,8 @@
           "agents/": "agents/",
           "skills/": "skills/",
           "hooks/": "hooks/",
-          "plugins/": "plugins/"
+          "plugins/": "plugins/",
+          "aidlc-plugins/": "aidlc-plugins/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"],
         "mcpConfig": {
@@ -101,7 +103,8 @@
           "skills/": "skills/",
           "instructions/": "instructions/",
           "hooks/": "hooks/",
-          "plugins/": "plugins/"
+          "plugins/": "plugins/",
+          "aidlc-plugins/": "aidlc-plugins/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md", "collections/"],
         "mcpConfig": {
@@ -139,7 +142,8 @@
           "instructions/": "steering/",
           "chat-modes/": "agents/",
           "agents/": "agents/",
-          "skills/": "skills/"
+          "skills/": "skills/",
+          "aidlc-plugins/": "aidlc-plugins/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"],
         "mcpConfig": {
@@ -181,7 +185,8 @@
           "agents/": "agents/",
           "skills/": "skills/",
           "hooks/": "hooks/",
-          "plugins/": "plugins/"
+          "plugins/": "plugins/",
+          "aidlc-plugins/": "aidlc-plugins/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"],
         "mcpConfig": {
@@ -253,7 +258,8 @@
           "agents/": "agents/",
           "skills/": "skills/",
           "hooks/": "hooks/",
-          "plugins/": "plugins/"
+          "plugins/": "plugins/",
+          "aidlc-plugins/": "aidlc-plugins/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"],
         "mcpConfig": {
@@ -297,7 +303,8 @@
           "agents/": ".cursor/agents/",
           "skills/": ".cursor/skills/",
           "hooks/": ".cursor/hooks/",
-          "plugins/": ".cursor/plugins/"
+          "plugins/": ".cursor/plugins/",
+          "aidlc-plugins/": ".cursor/aidlc-plugins/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"],
         "mcpConfig": {
@@ -347,7 +354,8 @@
           "agents/": ".opencode/agents/",
           "skills/": ".opencode/skills/",
           "hooks/": ".opencode/hooks/",
-          "plugins/": ".opencode/plugins/"
+          "plugins/": ".opencode/plugins/",
+          "aidlc-plugins/": ".opencode/aidlc-plugins/"
         },
         "skipPaths": ["deployment-manifest.yml", "README.md"],
         "mcpConfig": {

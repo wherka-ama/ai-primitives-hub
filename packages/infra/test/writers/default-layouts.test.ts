@@ -59,6 +59,27 @@ describe('built-in default layouts', () => {
     }
   });
 
+  it('routes AIDLC plugins only for supported repository targets', () => {
+    const expected: Record<string, string> = {
+      vscode: 'aidlc-plugins/',
+      'vscode-insiders': 'aidlc-plugins/',
+      'copilot-cli': 'aidlc-plugins/',
+      kiro: 'aidlc-plugins/',
+      'kiro-cli': 'aidlc-plugins/',
+      'claude-code': 'aidlc-plugins/',
+      cursor: '.cursor/aidlc-plugins/',
+      opencode: '.opencode/aidlc-plugins/'
+    };
+
+    for (const [target, route] of Object.entries(expected)) {
+      expect(defaultLayouts.layouts[target].repository?.kindRoutes['aidlc-plugins/']).toBe(route);
+      expect(defaultLayouts.layouts[target].user.kindRoutes['aidlc-plugins/']).toBeUndefined();
+    }
+    for (const target of ['windsurf', 'devin', 'devin-cli']) {
+      expect(defaultLayouts.layouts[target].repository?.kindRoutes['aidlc-plugins/']).toBeUndefined();
+    }
+  });
+
   it('leaves no unresolved token style other than the supported ones', () => {
     const supported = new Set(['HOME', 'workspaceRoot', 'vscodeUserDir']);
     for (const [type, def] of Object.entries(defaultLayouts.layouts)) {
