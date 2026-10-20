@@ -1,5 +1,5 @@
 import {
-  getBundleRefKey,
+  buildInstalledBundleLookupKeys,
 } from '@ai-primitives-hub/core';
 import {
   AppStoragePrimitiveIndexStore,
@@ -150,7 +150,40 @@ import {
   McpConfigLocator,
 } from './utils/mcp-config-locator';
 
-// Module-level variable to store the extension instance for deactivation
+export interface PrimitiveIndexLifecycleEvents {
+  onSourceAdded: vscode.Event<unknown>;
+  onSourceRemoved: vscode.Event<unknown>;
+  onSourceUpdated: vscode.Event<unknown>;
+  onSourceSynced: vscode.Event<unknown>;
+}
+
+/**
+ * Subscribe primitive index rebuild scheduling to source-composition and
+ * source-sync events only. Bundle install/uninstall/update events must not
+ * trigger index rebuilds because installation state is applied at query time.
+ * @param events
+ * @param scheduleRebuild
+ * @param isReady
+ */
+export function bindPrimitiveIndexLifecycle(
+  events: PrimitiveIndexLifecycleEvents,
+  scheduleRebuild: (reason: string) => void,
+  isReady: () => boolean
+): vscode.Disposable[] {
+  const scheduleWhenReady = (reason: string): void => {
+    if (!isReady()) {
+      return;
+    }
+    scheduleRebuild(reason);
+  };
+
+  return [
+    events.onSourceAdded(() => scheduleWhenReady('source added')),
+    events.onSourceRemoved(() => scheduleWhenReady('source removed')),
+    events.onSourceUpdated(() => scheduleWhenReady('source updated')),
+    events.onSourceSynced(() => scheduleWhenReady('source synced'))
+  ];
+}
 let extensionInstance: PromptRegistryExtension | undefined;
 
 interface UnavailableHub {
@@ -380,14 +413,16 @@ export class PromptRegistryExtension {
       profile: 'ternlight-dual-v1',
       indexStore: new AppStoragePrimitiveIndexStore(sharedIndexStorage),
       indexKeyProvider: () => this.registryManager.getPrimitiveIndexKey('ternlight-dual-v1'),
+      sourceRevisionsProvider: () => this.registryManager.getPrimitiveIndexSourceRevisions('ternlight-dual-v1'),
       installedBundleKeysProvider: async () => {
         const installed = await this.registryManager.listInstalledBundles();
         return installed
           .filter((bundle) => bundle.sourceId !== undefined)
-          .map((bundle) => getBundleRefKey({
+          .flatMap((bundle) => buildInstalledBundleLookupKeys({
             sourceId: bundle.sourceId!,
             bundleId: bundle.bundleId,
-            bundleVersion: bundle.version
+            bundleVersion: bundle.version,
+            sourceType: bundle.sourceType
           }));
       },
       providerFactory: () => this.registryManager.createPrimitiveBundleProvider(),
@@ -454,26 +489,14 @@ export class PromptRegistryExtension {
     }
   }
 
-  /** Rebuild the shared primitive index when registry data or install state changes. */
+  /** Rebuild the shared primitive index when hub/source composition or upstream revisions change. */
   private registerPrimitiveIndexLifecycle(): void {
-    const schedule = (reason: string) => this.primitiveIndexService.scheduleRebuild(reason);
-    const scheduleWhenReady = (reason: string) => {
-      if (!this.initialSourceSyncReadyResolved) {
-        return;
-      }
-      schedule(reason);
-    };
-
     this.disposables.push(
-      this.registryManager.onSourceAdded(() => scheduleWhenReady('source added')),
-      this.registryManager.onSourceRemoved(() => scheduleWhenReady('source removed')),
-      this.registryManager.onSourceUpdated(() => scheduleWhenReady('source updated')),
-      this.registryManager.onSourceSynced(() => scheduleWhenReady('source synced')),
-      this.registryManager.onBundleInstalled(() => scheduleWhenReady('bundle installed')),
-      this.registryManager.onBundleUninstalled(() => scheduleWhenReady('bundle uninstalled')),
-      this.registryManager.onBundleUpdated(() => scheduleWhenReady('bundle updated')),
-      this.registryManager.onBundlesInstalled(() => scheduleWhenReady('bundles installed')),
-      this.registryManager.onBundlesUninstalled(() => scheduleWhenReady('bundles uninstalled'))
+      ...bindPrimitiveIndexLifecycle(
+        this.registryManager,
+        (reason) => this.primitiveIndexService.scheduleRebuild(reason),
+        () => this.initialSourceSyncReadyResolved
+      )
     );
   }
 

@@ -262,4 +262,41 @@ suite('PrimitiveIndexService', () => {
     const result = await service.search({ q: 'hello', limit: 5 });
     assert.strictEqual(result.hits.length, 1);
   });
+
+  test('passes sourceRevisions to buildIndex and short-circuits non-forced rebuilds when snapshot exists', async () => {
+    const indexPath = path.join(tempDir, 'shared', 'primitive-index.v2.json');
+    let providerCalls = 0;
+    const service = new PrimitiveIndexService(context, {
+      profile: 'bm25-v1',
+      indexStore: {
+        getIndexPath: () => indexPath
+      },
+      indexKeyProvider: async () => ({
+        hubId: 'local-hub',
+        sourceRevision: 'rev-1',
+        searchProfileId: 'bm25-v1'
+      }),
+      sourceRevisionsProvider: async () => ({ local: 'sha-1' }),
+      providerFactory: () => {
+        providerCalls += 1;
+        return new LocalFolderBundleProvider({ root: tempDir, sourceId: 'local' });
+      }
+    });
+
+    const first = await service.rebuild({ force: false });
+    assert.strictEqual(first.primitives, 1);
+    assert.strictEqual(first.report.shortCircuited, undefined);
+    assert.strictEqual(providerCalls, 1);
+
+    // A scheduled/non-forced rebuild with the same (hubId, sourceRevision, profile)
+    // short-circuits in buildIndex without reading any bundle files.
+    const second = await service.rebuild({ force: false });
+    assert.strictEqual(second.primitives, 1);
+    assert.strictEqual(second.report.shortCircuited, true);
+
+    // An explicit rebuild() (force=true by default) forces a fresh harvest.
+    const third = await service.rebuild();
+    assert.strictEqual(third.primitives, 1);
+    assert.strictEqual(third.report.shortCircuited, undefined);
+  });
 });

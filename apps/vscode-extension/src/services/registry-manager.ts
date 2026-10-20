@@ -175,8 +175,16 @@ export class RegistryManager {
   private readonly adapters = new Map<string, IRepositoryAdapter>();
   private readonly versionConsolidator: VersionConsolidator;
   private sourcesCache: RegistrySource[] = [];
-  private readonly primitiveIndexKeyCache = new Map<string, { key: PrimitiveIndexKey; expiresAt: number }>();
-  private readonly primitiveIndexKeyRequests = new Map<string, Promise<PrimitiveIndexKey>>();
+  private readonly primitiveIndexKeyCache = new Map<string, {
+    key: PrimitiveIndexKey;
+    sourceRevisions: Readonly<Record<string, string>>;
+    expiresAt: number;
+  }>();
+
+  private readonly primitiveIndexKeyRequests = new Map<string, Promise<{
+    key: PrimitiveIndexKey;
+    sourceRevisions: Readonly<Record<string, string>>;
+  }>>();
 
   // Event emitters
   private readonly _onBundleInstalled = new vscode.EventEmitter<InstalledBundle>();
@@ -237,10 +245,10 @@ export class RegistryManager {
     this.primitiveIndexKeyCache.clear();
   }
 
-  private async buildPrimitiveIndexKey(
+  private async buildPrimitiveIndexSnapshot(
     searchProfileId: string,
     resolveRemoteRevision = true
-  ): Promise<PrimitiveIndexKey> {
+  ): Promise<{ key: PrimitiveIndexKey; sourceRevisions: Readonly<Record<string, string>> }> {
     const sources = (await this.storage.getSources()).filter((source) => source.enabled);
     const blobCache = new BlobCache(path.join(new XdgAppStorage().getPaths().cache, 'primitive-index-blobs'));
     const snapshot = await Promise.all(sources.map(async (source) => {
@@ -297,11 +305,48 @@ export class RegistryManager {
       branch: typeof source.config?.branch === 'string' ? source.config.branch : 'main',
       revision: source.revision
     })));
+    const sourceRevisions = Object.fromEntries(snapshot.map((source) => [source.id, source.revision]));
     return {
-      hubId: canonicalizeIndexHubId(hubId ?? 'registry'),
-      sourceRevision,
-      searchProfileId
+      key: {
+        hubId: canonicalizeIndexHubId(hubId ?? 'registry'),
+        sourceRevision,
+        searchProfileId
+      },
+      sourceRevisions
     };
+  }
+
+  private async resolvePrimitiveIndexSnapshot(
+    searchProfileId: string,
+    resolveRemoteRevision = true
+  ): Promise<{ key: PrimitiveIndexKey; sourceRevisions: Readonly<Record<string, string>> }> {
+    const cacheKey = resolveRemoteRevision ? searchProfileId : `${searchProfileId}:cached`;
+    const cached = this.primitiveIndexKeyCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return { key: cached.key, sourceRevisions: cached.sourceRevisions };
+    }
+
+    const pending = this.primitiveIndexKeyRequests.get(cacheKey);
+    if (pending) {
+      return pending;
+    }
+
+    const request = this.buildPrimitiveIndexSnapshot(searchProfileId, resolveRemoteRevision);
+    this.primitiveIndexKeyRequests.set(cacheKey, request);
+    try {
+      const snapshot = await request;
+      this.primitiveIndexKeyCache.set(cacheKey, {
+        ...snapshot,
+        // Coalesce repeated search/rebuild calls without allowing a source
+        // change to remain visible after the explicit invalidations above.
+        expiresAt: Date.now() + 30_000
+      });
+      return snapshot;
+    } finally {
+      if (this.primitiveIndexKeyRequests.get(cacheKey) === request) {
+        this.primitiveIndexKeyRequests.delete(cacheKey);
+      }
+    }
   }
 
   /**
@@ -1018,32 +1063,16 @@ export class RegistryManager {
    * @param searchProfileId
    */
   public async getPrimitiveIndexKey(searchProfileId: string): Promise<PrimitiveIndexKey> {
-    const cached = this.primitiveIndexKeyCache.get(searchProfileId);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.key;
-    }
+    return (await this.resolvePrimitiveIndexSnapshot(searchProfileId, true)).key;
+  }
 
-    const pending = this.primitiveIndexKeyRequests.get(searchProfileId);
-    if (pending) {
-      return pending;
-    }
-
-    const request = this.buildPrimitiveIndexKey(searchProfileId);
-    this.primitiveIndexKeyRequests.set(searchProfileId, request);
-    try {
-      const key = await request;
-      this.primitiveIndexKeyCache.set(searchProfileId, {
-        key,
-        // Coalesce repeated search/rebuild calls without allowing a source
-        // change to remain visible after the explicit invalidations above.
-        expiresAt: Date.now() + 30_000
-      });
-      return key;
-    } finally {
-      if (this.primitiveIndexKeyRequests.get(searchProfileId) === request) {
-        this.primitiveIndexKeyRequests.delete(searchProfileId);
-      }
-    }
+  /**
+   * Return the per-source revision hashes for the currently searchable source
+   * snapshot, enabling source-level incremental index builds.
+   * @param searchProfileId
+   */
+  public async getPrimitiveIndexSourceRevisions(searchProfileId: string): Promise<Readonly<Record<string, string>>> {
+    return (await this.resolvePrimitiveIndexSnapshot(searchProfileId, true)).sourceRevisions;
   }
 
   /**
@@ -1056,31 +1085,7 @@ export class RegistryManager {
    * @param searchProfileId
    */
   public async getCachedPrimitiveIndexKey(searchProfileId: string): Promise<PrimitiveIndexKey> {
-    const cacheKey = `${searchProfileId}:cached`;
-    const cached = this.primitiveIndexKeyCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.key;
-    }
-
-    const pending = this.primitiveIndexKeyRequests.get(cacheKey);
-    if (pending) {
-      return pending;
-    }
-
-    const request = this.buildPrimitiveIndexKey(searchProfileId, false);
-    this.primitiveIndexKeyRequests.set(cacheKey, request);
-    try {
-      const key = await request;
-      this.primitiveIndexKeyCache.set(cacheKey, {
-        key,
-        expiresAt: Date.now() + 30_000
-      });
-      return key;
-    } finally {
-      if (this.primitiveIndexKeyRequests.get(cacheKey) === request) {
-        this.primitiveIndexKeyRequests.delete(cacheKey);
-      }
-    }
+    return (await this.resolvePrimitiveIndexSnapshot(searchProfileId, false)).key;
   }
 
   /**
