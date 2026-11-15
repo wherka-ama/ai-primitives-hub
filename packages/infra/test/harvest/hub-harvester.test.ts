@@ -741,6 +741,7 @@ items:
       await expect(harvestHub({
         hubConfigFile: configFile,
         dryRun: true,
+        unresolvedSources: 'fail',
         httpClient: new SourceAwareHarvestHttpClient(404),
         outFile: path.join(tmp, 'private-index.json'),
         progressFile: path.join(tmp, 'private-progress.jsonl'),
@@ -760,6 +761,42 @@ items:
       });
     });
 
+    it('records unresolved sources as failed and keeps harvesting by default', async () => {
+      const configFile = path.join(tmp, 'record-unresolved-config.yml');
+      fs.writeFileSync(configFile, [
+        'sources:',
+        '  - id: private-source',
+        '    type: github',
+        '    url: https://github.com/owner/repo',
+        'profiles: []',
+        ''
+      ].join('\n'));
+
+      const result = await harvestHub({
+        hubConfigFile: configFile,
+        dryRun: true,
+        httpClient: new SourceAwareHarvestHttpClient(404),
+        outFile: path.join(tmp, 'record-unresolved-index.json'),
+        progressFile: path.join(tmp, 'record-unresolved-progress.jsonl'),
+        cacheDir: path.join(tmp, 'record-unresolved-cache')
+      }, {
+        AI_PRIMITIVES_HUB_GH_APP_AUTH_ENABLED: 'true',
+        GH_TOKEN: 'generic-token'
+      });
+
+      expect(result.sourceCoverage).toEqual([expect.objectContaining({
+        sourceId: 'private-source',
+        state: 'failed',
+        message: expect.stringContaining('GH_APP_AUTH_CONFIG_MISSING')
+      })]);
+    });
+
+    it('rejects an invalid unresolved-source policy from the environment', async () => {
+      await expect(harvestHub({ noHubConfig: true, dryRun: true }, {
+        AI_PRIMITIVES_HUB_UNRESOLVED_SOURCES: 'ignore'
+      })).rejects.toThrow('AI_PRIMITIVES_HUB_UNRESOLVED_SOURCES');
+    });
+
     it('preserves the complete source preflight report on a fail-closed harvest error', async () => {
       const configFile = path.join(tmp, 'structured-preflight-config.yml');
       fs.writeFileSync(configFile, [
@@ -774,6 +811,7 @@ items:
       await expect(harvestHub({
         hubConfigFile: configFile,
         dryRun: true,
+        unresolvedSources: 'fail',
         httpClient: new SourceAwareHarvestHttpClient(404, true),
         outFile: path.join(tmp, 'structured-preflight-index.json'),
         progressFile: path.join(tmp, 'structured-preflight-progress.jsonl'),

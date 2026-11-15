@@ -64,6 +64,12 @@ export class GitHubSourcePreflightError extends Error {
   }
 }
 
+/** Outcome of App preparation when only some routes could be set up. */
+export interface GitHubAppPreparationResult {
+  /** Routes (as derived by {@link deriveGitHubAppRoutes}) that could not be set up. */
+  unavailableRoutes: readonly string[];
+}
+
 export interface GitHubSourcePreflightOptions {
   /** Build a client for the requested category and credential provider. */
   clientFactory: (
@@ -75,11 +81,15 @@ export interface GitHubSourcePreflightOptions {
   genericTokenProvider?: TokenProvider;
   /** Provider used only for sources whose generic checks require App auth. */
   appTokenProvider?: TokenProvider;
-  /** Optional setup hook called after generic checks and before App checks. */
+  /**
+   * Optional setup hook called after generic checks and before App checks.
+   * It may report routes it could not set up; their candidates are
+   * unresolved with `GH_APP_AUTH_SETUP_FAILED` and are not probed.
+   */
   prepareAppAuthentication?: (
     routes: readonly string[],
     targets: readonly GitHubRepositoryTarget[]
-  ) => Promise<void>;
+  ) => Promise<void | GitHubAppPreparationResult>;
   /** Public credential policy. `auto` and `generic` are authenticated; `anonymous` is rejected. */
   publicAuthMode?: GitHubPublicAuthMode;
   /** Include release metadata in the required operation set for install/update callers. */
@@ -156,11 +166,13 @@ export async function preflightGitHubSources(
   }
 
   const appRoutes = deriveGitHubAppRoutes(appCandidates.map((candidate) => candidate.target));
+  let unavailableRoutes = new Set<string>();
   if (appCandidates.length > 0 && options.prepareAppAuthentication !== undefined) {
-    await options.prepareAppAuthentication(
+    const preparation = await options.prepareAppAuthentication(
       appRoutes,
       appCandidates.map((candidate) => candidate.target)
     );
+    unavailableRoutes = new Set(preparation?.unavailableRoutes);
   }
   // App setup/preparation runs after the authenticated generic checks. Re-run
   // the App-only checks for those candidates now that routes/configuration are
@@ -168,12 +180,14 @@ export async function preflightGitHubSources(
   if (appCandidates.length > 0) {
     for (const candidate of appCandidates) {
       const resultIndex = results.findIndex((result) => result.sourceId === candidate.source.id);
-      const appResult = await validateAppCandidate(
-        candidate.source,
-        candidate.target,
-        candidate.operations,
-        options
-      );
+      const appResult = unavailableRoutes.has(deriveGitHubAppRoutes([candidate.target])[0])
+        ? unresolved(candidate.source, candidate.target, candidate.operations, 'GH_APP_AUTH_SETUP_FAILED')
+        : await validateAppCandidate(
+          candidate.source,
+          candidate.target,
+          candidate.operations,
+          options
+        );
       if (resultIndex !== -1) {
         results[resultIndex] = appResult;
       }

@@ -36,6 +36,18 @@ class SessionExecutor implements ProcessExecutor {
   }
 }
 
+/** Setup fails whenever the requested routes include an organization without an installation. */
+class PartialInstallExecutor extends SessionExecutor {
+  public override async execFile(file: string, args: readonly string[], options?: ProcessRunOptions): Promise<ProcessResult> {
+    const routes = args[args.indexOf('--patterns') + 1] ?? '';
+    if (args.includes('setup') && routes.includes('missing-org')) {
+      this.calls.push({ file, args, options });
+      throw new Error('no installation found');
+    }
+    return super.execFile(file, args, options);
+  }
+}
+
 class SessionHttpClient implements HttpClient {
   public async fetch(request: HttpRequest): Promise<HttpResponse> {
     const authenticated = request.headers?.Authorization !== undefined;
@@ -86,5 +98,47 @@ describe('createGitHubSourceAuthSession', () => {
     await access(session.configPath);
     await session.cleanup();
     await expect(access(session.configPath)).rejects.toThrow();
+  });
+
+  it('continues with the routes that can be set up when partial setup is allowed', async () => {
+    const executor = new PartialInstallExecutor();
+    const missing: HubSourceSpec = { ...source, id: 'missing-source', url: 'https://github.com/missing-org/repo', owner: 'missing-org', repo: 'repo' };
+    const session = await createGitHubSourceAuthSession({
+      env: {},
+      http: new SessionHttpClient(),
+      appId: '123',
+      keyFile: '/tmp/input-private-key.pem',
+      processExecutor: executor,
+      genericTokenProvider: { getToken: async () => 'generic-token' },
+      allowPartialAppSetup: true
+    });
+
+    const report = await session.preflight([source, missing]);
+    await session.cleanup();
+
+    expect(report.results.map((result) => [result.sourceId, result.category, result.errorCode])).toEqual([
+      ['missing-source', 'unresolved', 'GH_APP_AUTH_SETUP_FAILED'],
+      ['private-source', 'app-authenticated', undefined]
+    ]);
+    const setups = executor.calls.filter((call) => call.args.includes('setup'));
+    expect(setups.at(-1)?.args).toContain('github.com/org/*');
+    expect(setups.at(-1)?.options?.env?.GH_APP_AUTH_CONFIG).toBe(session.configPath);
+    expect(executor.calls.filter((call) => call.args.includes('token')).map((call) => call.args.at(-1)))
+      .toEqual(['github.com/org/private-repo']);
+  });
+
+  it('keeps setup all-or-nothing by default', async () => {
+    const missing: HubSourceSpec = { ...source, id: 'missing-source', url: 'https://github.com/missing-org/repo', owner: 'missing-org', repo: 'repo' };
+    const session = await createGitHubSourceAuthSession({
+      env: {},
+      http: new SessionHttpClient(),
+      appId: '123',
+      keyFile: '/tmp/input-private-key.pem',
+      processExecutor: new PartialInstallExecutor(),
+      genericTokenProvider: { getToken: async () => 'generic-token' }
+    });
+
+    await expect(session.preflight([source, missing])).rejects.toMatchObject({ code: 'GH_APP_AUTH_SETUP_FAILED' });
+    await session.cleanup();
   });
 });

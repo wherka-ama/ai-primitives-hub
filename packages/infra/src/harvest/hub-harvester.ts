@@ -235,6 +235,14 @@ export interface HubHarvestPipelineOptions {
   contentState?: HarvestContentState;
   /** In `released` mode, consider prereleases when selecting versions. */
   includePrereleases?: boolean;
+  /**
+   * Source-aware mode only: what to do with sources the GitHub source
+   * preflight cannot resolve (for example, private repositories the App cannot
+   * read). `record` (default) records them as failed sources and harvests the
+   * rest; `fail` stops the whole harvest. A generic rate limit always stops it.
+   * Falls back to `AI_PRIMITIVES_HUB_UNRESOLVED_SOURCES`.
+   */
+  unresolvedSources?: UnresolvedSourcePolicy;
   /** Observer for harvester progress events. */
   onEvent?: (ev: HubHarvestEvent) => void;
   /** Observer for diagnostic messages (one per source-config decision). */
@@ -394,6 +402,7 @@ export const harvestHub = async (
   env: NodeJS.ProcessEnv = process.env
 ): Promise<HubHarvestPipelineResult> => {
   validateHarvestOptions(opts);
+  const unresolvedSources = resolveUnresolvedSourcePolicy(opts, env);
   const appBootstrapRequested = opts.githubAppId !== undefined
     || opts.githubAppClientId !== undefined
     || opts.githubAppKeyFile !== undefined
@@ -407,11 +416,12 @@ export const harvestHub = async (
       clientId: opts.githubAppClientId ?? env[GITHUB_APP_CLIENT_ID],
       keyFile: opts.githubAppKeyFile ?? env[GITHUB_APP_AUTH_KEY_FILE] ?? '',
       installationId: opts.githubAppInstallationId ?? env[GITHUB_APP_INSTALLATION_ID],
-      setupTimeoutMs: opts.githubAppSetupTimeoutMs
+      setupTimeoutMs: opts.githubAppSetupTimeoutMs,
+      allowPartialAppSetup: unresolvedSources === 'record'
     })
     : undefined;
   try {
-    return await harvestHubWithAuth(opts, env, appSession);
+    return await harvestHubWithAuth({ ...opts, unresolvedSources }, env, appSession);
   } finally {
     await appSession?.cleanup();
   }
@@ -496,13 +506,18 @@ async function harvestHubWithAuth(
       onLog: (message) => opts.onLog?.(`[github preflight] ${message}`)
     });
     sourcePreflight = preflight;
-    if (!preflight.valid) {
+    const rateLimited = preflight.results.some((sourceResult) => sourceResult.errorCode === 'GH_PUBLIC_GENERIC_RATE_LIMIT_UNSAFE');
+    if (!preflight.valid && (opts.unresolvedSources === 'fail' || rateLimited)) {
       throw new GitHubSourcePreflightError(preflight);
     }
     const decisions = new Map(preflight.results.map((sourceResult) => [sourceResult.sourceId, sourceResult]));
     sourceClientFactory = (source) => {
       const decision = decisions.get(source.id);
-      if (decision === undefined || decision.target === undefined || decision.category === 'unresolved') {
+      if (decision?.category === 'unresolved') {
+        // Recorded as a failed source by the harvester (`unresolvedSources: record`).
+        throw new Error(`GitHub source preflight could not resolve this source (${decision.errorCode ?? 'unknown'}).`);
+      }
+      if (decision === undefined || decision.target === undefined) {
         throw new Error(`GitHub source ${source.id} has no usable preflight decision.`);
       }
       return sourceAuth!.clientFor(decision.target, decision.category);
@@ -821,6 +836,20 @@ export interface HubHarvesterOptions {
  *     `unsupported` and contribute no primitives.
  */
 export type HarvestContentState = 'branch' | 'released';
+
+/** Handling of sources the source-aware preflight cannot resolve. */
+export type UnresolvedSourcePolicy = 'record' | 'fail';
+
+/** Environment fallback for {@link HubHarvestPipelineOptions.unresolvedSources}. */
+export const UNRESOLVED_SOURCES_ENV = 'AI_PRIMITIVES_HUB_UNRESOLVED_SOURCES';
+
+function resolveUnresolvedSourcePolicy(opts: HubHarvestPipelineOptions, env: NodeJS.ProcessEnv): UnresolvedSourcePolicy {
+  const value = opts.unresolvedSources ?? env[UNRESOLVED_SOURCES_ENV]?.trim().toLowerCase() ?? 'record';
+  if (value !== 'record' && value !== 'fail') {
+    throw new Error(`Invalid ${UNRESOLVED_SOURCES_ENV}: expected "record" or "fail".`);
+  }
+  return value;
+}
 
 /** Outcome of one configured source in a harvest lifecycle operation. */
 export interface HarvestSourceCoverage {

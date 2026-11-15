@@ -143,6 +143,10 @@ export class IndexHarvestCommand extends Command {
                              of every collection; github sources only)
         --include-prereleases
                              With --content-state released, also consider prereleases
+        --unresolved-sources With GitHub App source-aware auth: record (default)
+                             records sources the preflight cannot resolve as
+                             failed and harvests the rest; fail stops the
+                             harvest. Env: AI_PRIMITIVES_HUB_UNRESOLVED_SOURCES
         --embed              Embed primitive text using the local ternlight model
         --embed-strategy     Embedding strategy: single (default) or dual
         --github-app-id      GitHub App ID for automatic source-aware setup
@@ -176,6 +180,7 @@ export class IndexHarvestCommand extends Command {
   public dryRun = Option.Boolean('--dry-run');
   public contentState = Option.String('--content-state');
   public includePrereleases = Option.Boolean('--include-prereleases');
+  public unresolvedSources = Option.String('--unresolved-sources');
   public embed = Option.Boolean('--embed', false);
   public embedStrategy = Option.String('--embed-strategy');
   public githubAppId = Option.String('--github-app-id');
@@ -220,6 +225,13 @@ export class IndexHarvestCommand extends Command {
       }));
     }
 
+    if (this.unresolvedSources !== undefined && this.unresolvedSources !== 'record' && this.unresolvedSources !== 'fail') {
+      return failWith(ctx, fmt, 'index.harvest', new RegistryError({
+        code: 'USAGE.INVALID_FLAG',
+        message: `index harvest: --unresolved-sources must be "record" or "fail" (got "${this.unresolvedSources}")`
+      }));
+    }
+
     const explicitToken = this.tokenEnv === undefined
       ? undefined
       : ctx.env[this.tokenEnv];
@@ -243,6 +255,7 @@ export class IndexHarvestCommand extends Command {
       dryRun: this.dryRun,
       contentState: this.contentState,
       includePrereleases: this.includePrereleases,
+      unresolvedSources: this.unresolvedSources,
       onEvent: this.verbose === true
         ? (ev): void => {
           ctx.stderr.write(`[${ev.kind}] ${JSON.stringify(ev)}\n`);

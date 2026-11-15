@@ -31,6 +31,7 @@ import {
   type GitHubApiClientOptions,
 } from '../http';
 import {
+  type GitHubAppPreparationResult,
   type GitHubPublicAuthMode,
   GitHubSourceAuthPolicyError,
   type GitHubSourcePreflightOptions,
@@ -84,6 +85,12 @@ export interface GitHubSourceAuthSessionOptions extends Omit<GitHubSourceAuthRun
   tempRoot?: string;
   /** Timeout for the explicit setup process. */
   setupTimeoutMs?: number;
+  /**
+   * When setup for all routes fails, retry route by route and continue with
+   * the routes that can be set up (for example, organizations where the App
+   * is installed), reporting the others as unavailable. Default: fail.
+   */
+  allowPartialAppSetup?: boolean;
 }
 
 export interface GitHubSourceAuthSession extends GitHubSourceAuthRuntime {
@@ -271,20 +278,48 @@ export async function createGitHubSourceAuthSession(
       env: runtimeEnv,
       appTokenProvider: undefined
     });
+    const setup = (routes: readonly string[], targetConfigPath: string): Promise<void> => new GhAppAuthSetupManager({
+      appId,
+      clientId,
+      keyFile: options.keyFile,
+      configPath: targetConfigPath,
+      routes,
+      installationId,
+      processExecutor: options.processExecutor,
+      timeoutMs: options.setupTimeoutMs
+    }).setup();
     const prepareAppAuthentication = async (
       routes: readonly string[],
       _targets: readonly GitHubRepositoryTarget[]
-    ): Promise<void> => {
-      await new GhAppAuthSetupManager({
-        appId,
-        clientId,
-        keyFile: options.keyFile,
-        configPath,
-        routes,
-        installationId,
-        processExecutor: options.processExecutor,
-        timeoutMs: options.setupTimeoutMs
-      }).setup();
+    ): Promise<void | GitHubAppPreparationResult> => {
+      try {
+        await setup(routes, configPath);
+        return;
+      } catch (error) {
+        if (options.allowPartialAppSetup !== true || routes.length < 2) {
+          if (options.allowPartialAppSetup === true) {
+            return { unavailableRoutes: [...routes] };
+          }
+          throw error;
+        }
+      }
+      // `gh app-auth setup` is all-or-nothing. Probe each route in a scratch
+      // config, then configure the shared config once with the usable routes,
+      // so the App keeps a single configuration entry.
+      const available: string[] = [];
+      const unavailable: string[] = [];
+      for (const [index, route] of routes.entries()) {
+        try {
+          await setup([route], path.join(tempDirectory, `probe-${index}.yml`));
+          available.push(route);
+        } catch {
+          unavailable.push(route);
+        }
+      }
+      if (available.length > 0) {
+        await setup(available, configPath);
+      }
+      return { unavailableRoutes: unavailable };
     };
     let cleaned = false;
     return {
