@@ -568,9 +568,15 @@ items:
       const [prim] = first.index.all();
       expect(prim.bundle).toMatchObject({ bundleId: 'o1-r1-pack', bundleVersion: '1.2.0', provenance: { tag: 'pack-v1.2.0' } });
 
+      expect(first.sourceCoverage[0].bundles).toMatchObject([{ bundleId: 'o1-r1-pack', bundleVersion: '1.2.0', primitives: 1 }]);
+
       const second = await releasedHarvester(client, sources).run();
-      expect(second.sourceCoverage[0].state).toBe('skipped');
+      expect(second.sourceCoverage[0]).toMatchObject({ state: 'skipped', bundles: first.sourceCoverage[0].bundles });
       expect(second.index.all().map((p) => p.id)).toEqual([prim.id]);
+
+      fs.rmSync(path.join(tmp, 'released-bundles.json'));
+      const third = await releasedHarvester(client, sources).run();
+      expect(third.sourceCoverage[0]).toMatchObject({ state: 'indexed', bundles: first.sourceCoverage[0].bundles });
     });
 
     it('does not resurrect primitives of a source that fails in a later run', async () => {

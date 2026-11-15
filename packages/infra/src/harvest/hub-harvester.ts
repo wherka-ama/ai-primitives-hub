@@ -35,6 +35,7 @@ import {
 } from 'node:fs/promises';
 import * as path from 'node:path';
 import type {
+  BundleReleaseProvenance,
   GitHubApi,
   GitHubSourceAuthCategory,
   HttpClient,
@@ -828,6 +829,19 @@ export interface HarvestSourceCoverage {
   revision?: string;
   message?: string;
   authenticationCategory?: GitHubSourceAuthCategory;
+  /**
+   * Released mode only: every bundle resolved for the source, including
+   * bundles that contribute no primitives (the index cannot show those).
+   */
+  bundles?: HarvestedBundle[];
+}
+
+/** One bundle resolved by a released-state harvest. */
+export interface HarvestedBundle {
+  bundleId: string;
+  bundleVersion: string;
+  primitives: number;
+  provenance?: BundleReleaseProvenance;
 }
 
 export interface HubHarvestResult extends ProgressSummary {
@@ -847,6 +861,8 @@ export interface HubHarvestResult extends ProgressSummary {
 
 /* eslint-disable @typescript-eslint/member-ordering -- public API kept at top. */
 export class HubHarvester {
+  private releasedBundles = new Map<string, HarvestedBundle[]>();
+
   public constructor(private readonly opts: HubHarvesterOptions) {}
 
   private clientFor(source: HubSourceSpec): GitHubApi {
@@ -857,6 +873,9 @@ export class HubHarvester {
     const startedAt = Date.now();
     const log = await HarvestProgressLog.open(this.opts.progressFile);
     const snapshot = await loadSnapshot(this.snapshotFile());
+    this.releasedBundles = this.contentState() === 'released'
+      ? await loadReleasedBundles(this.releasedBundlesFile())
+      : new Map<string, HarvestedBundle[]>();
     const primitives: Primitive[] = [];
     const sourceRevisions = new Map<string, SourceRevisionEntry>();
     const sourceCoverage = new Map<string, HarvestSourceCoverage>();
@@ -904,6 +923,15 @@ export class HubHarvester {
       fresh.set(sourceId, currentBySource.get(sourceId) ?? carryOver ?? []);
     }
     await saveSnapshot(this.snapshotFile(), fresh);
+    if (this.contentState() === 'released') {
+      const kept = new Map<string, HarvestedBundle[]>();
+      for (const coverage of sourceCoverage.values()) {
+        if (coverage.bundles !== undefined) {
+          kept.set(coverage.sourceId, coverage.bundles);
+        }
+      }
+      await saveReleasedBundles(this.releasedBundlesFile(), kept);
+    }
 
     const indexPrimitives = [...fresh.values()].flat();
     const sourceRevision = createSourceRevision([...sourceRevisions.values()]);
@@ -939,6 +967,10 @@ export class HubHarvester {
 
   private contentState(): HarvestContentState {
     return this.opts.contentState ?? 'branch';
+  }
+
+  private releasedBundlesFile(): string {
+    return path.join(path.dirname(this.opts.progressFile), 'released-bundles.json');
   }
 
   private snapshotFile(): string {
@@ -983,28 +1015,34 @@ export class HubHarvester {
         branch: spec.branch,
         revision: commitSha
       });
-      const skipReason = await this.checkSkipConditions(spec, bundleId, commitSha, log, snapshot, out);
+      // A released source can only be skipped when its bundle list survived the previous run.
+      const forceSource = releaseProvider !== undefined && !this.releasedBundles.has(spec.id);
+      const skipReason = await this.checkSkipConditions(spec, bundleId, commitSha, log, snapshot, out, forceSource);
       if (skipReason !== undefined) {
         sourceCoverage.set(spec.id, {
           sourceId: spec.id,
           state: 'skipped',
           revision: commitSha,
           message: skipReason,
+          ...(releaseProvider === undefined ? {} : { bundles: this.releasedBundles.get(spec.id) }),
           ...this.authenticationCoverage(spec.id)
         });
         this.opts.onLog?.(`source ${spec.id} skipped`);
         return;
       }
-      const primsTotal = releaseProvider === undefined
-        ? await this.harvestSource(spec, bundleId, commitSha, log, out, client)
+      const released = releaseProvider === undefined
+        ? undefined
         : await this.harvestReleasedSource(releaseProvider, spec, bundleId, commitSha, log, out);
-      const noRelease = releaseProvider !== undefined && (await releaseProvider.getSelection()).selected.length === 0;
+      const primsTotal = released === undefined
+        ? await this.harvestSource(spec, bundleId, commitSha, log, out, client)
+        : released.reduce((n, b) => n + b.primitives, 0);
       sourceCoverage.set(spec.id, {
         sourceId: spec.id,
         state: 'indexed',
         primitives: primsTotal,
         revision: commitSha,
-        ...(noRelease ? { message: 'no published release with one deployment manifest and one ZIP asset' } : {}),
+        ...(released?.length === 0 ? { message: 'no published release with one deployment manifest and one ZIP asset' } : {}),
+        ...(released === undefined ? {} : { bundles: released }),
         ...this.authenticationCoverage(spec.id)
       });
       this.opts.onLog?.(`source ${spec.id} done: ${String(primsTotal)} primitive${primsTotal === 1 ? '' : 's'}`);
@@ -1061,9 +1099,10 @@ export class HubHarvester {
     commitSha: string,
     log: HarvestProgressLog,
     snapshot: Map<string, Primitive[]>,
-    out: Primitive[]
+    out: Primitive[],
+    forceSource = false
   ): Promise<string | undefined> {
-    if (!this.opts.force && !log.shouldResume(spec.id, bundleId, commitSha)) {
+    if (!this.opts.force && !forceSource && !log.shouldResume(spec.id, bundleId, commitSha)) {
       await log.recordSkip({
         sourceId: spec.id, bundleId, commitSha,
         reason: 'already-harvested'
@@ -1113,19 +1152,26 @@ export class HubHarvester {
     revision: string,
     log: HarvestProgressLog,
     out: Primitive[]
-  ): Promise<number> {
+  ): Promise<HarvestedBundle[]> {
     const startedRepo = Date.now();
     const { ignored } = await provider.getSelection();
     for (const entry of ignored.filter((e) => e.reason !== 'superseded')) {
       this.opts.onLog?.(`source ${spec.id}: ignoring release ${entry.tag}: ${entry.reason}`);
     }
     const refs = await this.collectRefs(provider);
-    const primsTotal = await this.harvestBatches(provider, refs, spec.id, revision, log, out, 1);
+    const produced: Primitive[] = [];
+    await this.harvestBatches(provider, refs, spec.id, revision, log, produced, 1);
+    out.push(...produced);
     await log.recordDone({
       sourceId: spec.id, bundleId, commitSha: revision,
       primitives: 0, ms: Date.now() - startedRepo
     });
-    return primsTotal;
+    return refs.map((ref) => ({
+      bundleId: ref.bundleId,
+      bundleVersion: ref.bundleVersion,
+      primitives: produced.filter((p) => p.bundle.bundleId === ref.bundleId).length,
+      provenance: ref.provenance
+    }));
   }
 
   private async harvestPluginSource(
@@ -1257,6 +1303,25 @@ async function loadSnapshot(file: string): Promise<Map<string, Primitive[]>> {
     // index on one run, which the next run will repopulate.
     return new Map();
   }
+}
+
+async function loadReleasedBundles(file: string): Promise<Map<string, HarvestedBundle[]>> {
+  try {
+    const raw = await (await import('node:fs/promises')).readFile(file, 'utf8');
+    const obj = JSON.parse(raw) as { bundlesBySource?: Record<string, HarvestedBundle[]> };
+    return new Map(Object.entries(obj.bundlesBySource ?? {}));
+  } catch {
+    // Missing or corrupt: skipped sources then report no bundle list until re-harvested.
+    return new Map();
+  }
+}
+
+async function saveReleasedBundles(file: string, bundles: Map<string, HarvestedBundle[]>): Promise<void> {
+  const fsPromises = await import('node:fs/promises');
+  await fsPromises.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  await fsPromises.writeFile(tmp, JSON.stringify({ bundlesBySource: Object.fromEntries(bundles) }), 'utf8');
+  await fsPromises.rename(tmp, file);
 }
 
 async function saveSnapshot(file: string, snapshot: Map<string, Primitive[]>): Promise<void> {
