@@ -78,6 +78,9 @@ import {
   IndexExportCommand,
 } from '../commands/index-export';
 import {
+  IndexPullCommand,
+} from '../commands/index-pull';
+import {
   IndexReportCommand,
 } from '../commands/index-report';
 import {
@@ -1429,6 +1432,7 @@ export const getDiagnosticCommandClasses = (): CommandClass[] => [
   ProfileDeactivateCommand,
   IndexBenchCommand,
   IndexBuildCommand,
+  IndexPullCommand,
   IndexSearchCommand,
   IndexStatsCommand,
   IndexReportCommand,

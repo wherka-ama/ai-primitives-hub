@@ -87,6 +87,9 @@ import {
   IndexHarvestCommand,
 } from './index-harvest';
 import {
+  IndexPullCommand,
+} from './index-pull';
+import {
   IndexReportCommand,
 } from './index-report';
 import {
@@ -206,6 +209,7 @@ export const ALL_COMMAND_CLASSES: CommandClass[] = [
   TargetTypesCommand,
   IndexBuildCommand,
   IndexExportCommand,
+  IndexPullCommand,
   IndexSearchCommand,
   IndexShortlistNewCommand,
   IndexShortlistAddCommand,

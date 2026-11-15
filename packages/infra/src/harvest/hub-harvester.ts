@@ -61,7 +61,11 @@ import type {
   IndexStats,
   Primitive,
 } from '../search/types';
+import type {
+  VectorEncoding,
+} from '../search/vector-codec';
 import {
+  loadIndex,
   saveIndex,
   tryLoadIndex,
 } from '../stores/json-index-store';
@@ -254,6 +258,13 @@ export interface HubHarvestPipelineOptions {
   embeddings?: EmbeddingProvider;
   /** Embedding strategy when `embeddings` is supplied. Default: `single`. */
   embeddingStrategy?: 'single' | 'dual';
+  /** Persisted vector encoding of the written index. Default: `json`. */
+  vectorEncoding?: VectorEncoding;
+  /**
+   * Index file whose embeddings are reused for unchanged primitives (for
+   * example a Hub-published index), instead of the previous local index.
+   */
+  reuseEmbeddingsFrom?: string;
   /** Stable app-level search profile that produced the persisted index. */
   searchProfileId?: string;
   /** Stable hub identity used by the shared namespaced index store. */
@@ -555,7 +566,13 @@ async function harvestHubWithAuth(
   logHarvestStart(opts, hubRepo, hubBranch, resolvedToken, tokenSource, sources.length, concurrency);
   const searchProfileId = opts.searchProfileId ?? 'bm25-v1';
   let previousIndex: PrimitiveIndex | undefined;
-  if (opts.force !== true) {
+  if (opts.reuseEmbeddingsFrom !== undefined) {
+    try {
+      previousIndex = loadIndex(opts.reuseEmbeddingsFrom);
+    } catch (cause) {
+      opts.onLog?.(`cannot reuse embeddings from ${opts.reuseEmbeddingsFrom}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  } else if (opts.force !== true) {
     const existingCandidate = opts.outFile
       ?? (opts.indexStore?.findLatestIndexPath
         ? await opts.indexStore.findLatestIndexPath(hubId, searchProfileId, sources.map((s) => s.id))
@@ -725,6 +742,7 @@ async function runHarvester(
     onLog: opts.onLog,
     embeddings: opts.embeddings,
     embeddingStrategy: opts.embeddingStrategy,
+    vectorEncoding: opts.vectorEncoding,
     searchProfileId: opts.searchProfileId,
     hubId,
     sourcePreflightRevisions,
@@ -816,6 +834,8 @@ export interface HubHarvesterOptions {
   embeddings?: EmbeddingProvider;
   /** Embedding strategy when `embeddings` is supplied. Default: `single`. */
   embeddingStrategy?: 'single' | 'dual';
+  /** Persisted vector encoding of the built index. */
+  vectorEncoding?: VectorEncoding;
   /** Stable app-level search profile that produced the persisted index. */
   searchProfileId?: string;
   /** Stable hub identity stored in index metadata. */
@@ -977,6 +997,7 @@ export class HubHarvester {
       previousIndex: this.opts.force ? undefined : this.opts.previousIndex,
       embeddings: this.opts.embeddings,
       embeddingStrategy: this.opts.embeddingStrategy,
+      vectorEncoding: this.opts.vectorEncoding,
       searchProfileId: this.opts.searchProfileId,
       onLog: this.opts.onLog
     });

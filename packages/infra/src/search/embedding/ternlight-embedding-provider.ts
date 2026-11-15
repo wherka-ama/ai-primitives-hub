@@ -25,10 +25,18 @@ function prepare(text: string): string {
 }
 
 /**
+ * Model identity recorded in embedded indexes. Keep it equal to the exact
+ * `@ternlight/mini` dependency version: a different model produces vectors
+ * that are not comparable with indexes built by this one.
+ */
+export const TERNLIGHT_MODEL = '@ternlight/mini@0.1.1';
+
+/**
  * Local embedding provider powered by `@ternlight/mini`.
  */
 export class TernlightEmbeddingProvider implements EmbeddingProvider {
   public readonly name = 'ternlight-mini';
+  public readonly model = TERNLIGHT_MODEL;
   public readonly dim = 384;
 
   /**

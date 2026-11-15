@@ -99,6 +99,18 @@ describe('searchIndex', () => {
     })).rejects.toBeInstanceOf(SearchIndexError);
   });
 
+  it('rejects semantic ranking on an index embedded with another model', async () => {
+    const json = JSON.parse(await fs.promises.readFile(embeddedIndex, 'utf8')) as { embeddingsMeta: { model?: string } };
+    expect(json.embeddingsMeta.model).toMatch(/^@ternlight\/mini@/u);
+    json.embeddingsMeta.model = '@ternlight/mini@9.9.9';
+    await fs.promises.writeFile(embeddedIndex, JSON.stringify(json));
+    await expect(searchIndex({
+      indexPath: embeddedIndex,
+      query: { q: 'diagnostic prompt', limit: 5 },
+      ranking: 'hybrid'
+    })).rejects.toMatchObject({ code: 'EMBEDDING_MODEL_MISMATCH' });
+  });
+
   it('rejects hybrid ranking without a text query', async () => {
     await expect(searchIndex({
       indexPath: embeddedIndex,

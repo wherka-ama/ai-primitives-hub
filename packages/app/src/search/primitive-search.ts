@@ -120,6 +120,7 @@ export interface SearchPrimitivesOptions {
 }
 
 const INCOMPATIBLE_INDEX_CODES = new Set([
+  'EMBEDDING_MODEL_MISMATCH',
   'EMBEDDING_UNAVAILABLE',
   'HUB_MISMATCH',
   'NO_EMBEDDINGS',

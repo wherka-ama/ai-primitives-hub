@@ -52,6 +52,25 @@ import type {
 import {
   PRIMITIVE_KINDS,
 } from './types';
+import {
+  decodeVector,
+  encodeVector,
+  isLossyVectorEncoding,
+  type PersistedVectorEncoding,
+  toPersistedVectorEncoding,
+} from './vector-codec';
+
+/** Embedding metadata persisted with an embedded index. */
+interface IndexEmbeddingsMeta {
+  provider: string;
+  dim: number;
+  strategy?: string;
+  embeddingStrategy?: string;
+  /** Exact embedding model identity; absent in indexes written before it was recorded. */
+  model?: string;
+}
+
+const PERSISTED_VECTOR_ENCODINGS = new Set<string>(['f32-base64', 'i8-base64']);
 
 /**
  * Internal record for indexed primitives.
@@ -147,7 +166,8 @@ export class PrimitiveIndex {
     sourceRevision?: string;
     sourceRevisions?: Record<string, string>;
     searchProfileId?: string;
-    embeddingsMeta?: { provider: string; dim: number; strategy?: string; embeddingStrategy?: string };
+    embeddingsMeta?: IndexEmbeddingsMeta;
+    vectorEncoding?: PersistedVectorEncoding;
   } = { schemaVersion: 1, builtAt: new Date().toISOString(), hubId: 'my-hub-id' };
 
   /**
@@ -172,9 +192,28 @@ export class PrimitiveIndex {
     }
     const prevMeta = prev.meta.embeddingsMeta;
     const prevStrategy = prevMeta.embeddingStrategy ?? 'single';
+    // Vectors from another (or an unrecorded) model are not comparable.
+    if (opts.embeddings.model !== undefined && prevMeta.model !== opts.embeddings.model) {
+      return false;
+    }
+    // Quantized vectors are only reused into an index persisted the same way.
+    if (isLossyVectorEncoding(prev.meta.vectorEncoding)
+      && prev.meta.vectorEncoding !== this.persistedVectorEncoding(opts)) {
+      return false;
+    }
     return prevMeta.provider === requestedProvider
       && prevMeta.dim === opts.embeddings.dim
       && prevStrategy === requestedStrategy;
+  }
+
+  /**
+   * Persisted vector encoding requested by `opts`, else the current one.
+   * @param opts Build options.
+   */
+  private persistedVectorEncoding(opts: BuildOptions): PersistedVectorEncoding | undefined {
+    return opts.vectorEncoding === undefined
+      ? this.meta.vectorEncoding
+      : toPersistedVectorEncoding(opts.vectorEncoding);
   }
 
   /**
@@ -386,7 +425,8 @@ export class PrimitiveIndex {
         provider,
         dim: opts.embeddings.dim,
         strategy: 'summary',
-        embeddingStrategy: strategy
+        embeddingStrategy: strategy,
+        ...(opts.embeddings.model === undefined ? {} : { model: opts.embeddings.model })
       };
     }
   }
@@ -465,7 +505,8 @@ export class PrimitiveIndex {
       sourceRevision: opts.sourceRevision ?? this.meta.sourceRevision,
       sourceRevisions: opts.sourceRevisions ? { ...opts.sourceRevisions } : this.meta.sourceRevisions,
       searchProfileId: opts.searchProfileId ?? (opts.embeddings ? inferSearchProfileId(opts) : 'bm25-v1'),
-      embeddingsMeta: opts.embeddings ? this.meta.embeddingsMeta : undefined
+      embeddingsMeta: opts.embeddings ? this.meta.embeddingsMeta : undefined,
+      vectorEncoding: this.persistedVectorEncoding(opts)
     };
     log?.(`built BM25 index and facet maps in ${Date.now() - startedAt}ms`);
   }
@@ -1020,23 +1061,28 @@ export class PrimitiveIndex {
    * @returns JSON-serializable object.
    */
   public toJSON(): unknown {
+    const encoding = this.meta.embeddingsMeta ? this.meta.vectorEncoding : undefined;
+    const vector = (v: Float32Array): number[] | string => (encoding ? encodeVector(v, encoding) : Array.from(v));
     return {
-      schemaVersion: this.meta.schemaVersion,
+      schemaVersion: encoding ? 2 : 1,
       builtAt: this.meta.builtAt,
       hubId: this.meta.hubId,
       sourceRevision: this.meta.sourceRevision ?? null,
       ...(this.meta.sourceRevisions ? { sourceRevisions: this.meta.sourceRevisions } : {}),
       searchProfileId: this.meta.searchProfileId ?? null,
       embeddingsMeta: this.meta.embeddingsMeta ?? null,
+      ...(encoding ? { vectorEncoding: encoding } : {}),
       primitives: this.records.map((r) => {
         const entry: Record<string, unknown> = { ...r.primitive };
         if (r.embeddings && Object.keys(r.embeddings).length > 0) {
           entry.embeddings = Object.fromEntries(
-            Object.entries(r.embeddings).map(([k, v]) => [k, Array.from(v)])
+            Object.entries(r.embeddings).map(([k, v]) => [k, vector(v)])
           );
         }
-        if (r.embedding) {
-          entry.embedding = Array.from(r.embedding);
+        // In schema 2 the legacy field would duplicate `embeddings.combined`; readers restore it.
+        // Schema 1 keeps it for older readers.
+        if (r.embedding && !(encoding && r.embeddings?.combined)) {
+          entry.embedding = vector(r.embedding);
         }
         return entry;
       }),
@@ -1058,13 +1104,28 @@ export class PrimitiveIndex {
       sourceRevision?: string | null;
       sourceRevisions?: Record<string, string> | null;
       searchProfileId?: string | null;
-      embeddingsMeta?: { provider: string; dim: number; strategy?: string; embeddingStrategy?: string } | null;
-      primitives: (Primitive & { embedding?: number[]; embeddings?: Record<string, number[]> })[];
+      embeddingsMeta?: IndexEmbeddingsMeta | null;
+      vectorEncoding?: string | null;
+      primitives: (Primitive & { embedding?: number[] | string; embeddings?: Record<string, number[] | string> })[];
       shortlists?: Shortlist[];
     };
-    if (!data?.schemaVersion || data.schemaVersion !== 1) {
+    if (data?.schemaVersion !== 1 && data?.schemaVersion !== 2) {
       throw new Error(`Unsupported primitive-index schemaVersion: ${String(data?.schemaVersion)}`);
     }
+    const encoding = data.schemaVersion === 2 ? data.vectorEncoding : undefined;
+    if (data.schemaVersion === 2 && (typeof encoding !== 'string' || !PERSISTED_VECTOR_ENCODINGS.has(encoding))) {
+      throw new Error(`Unsupported primitive-index vectorEncoding: ${String(data.vectorEncoding)}`);
+    }
+    const vectorEncoding = encoding as PersistedVectorEncoding | undefined;
+    const readVector = (v: number[] | string): Float32Array => {
+      if (vectorEncoding) {
+        if (typeof v !== 'string') {
+          throw new TypeError(`Expected ${vectorEncoding} vectors`);
+        }
+        return decodeVector(v, vectorEncoding);
+      }
+      return new Float32Array(v as number[]);
+    };
     const primitives = data.primitives.map((p) => {
       // Runtime validation: kind must be recognised.
       if (!PRIMITIVE_KINDS.includes(p.kind)) {
@@ -1076,10 +1137,10 @@ export class PrimitiveIndex {
       const embeddings: Record<string, Float32Array> = {};
       if (p.embeddings) {
         for (const [k, v] of Object.entries(p.embeddings)) {
-          embeddings[k] = new Float32Array(v);
+          embeddings[k] = readVector(v);
         }
       }
-      const embedding = p.embedding ? new Float32Array(p.embedding) : undefined;
+      const embedding = p.embedding ? readVector(p.embedding) : embeddings.combined;
       if (embedding && !embeddings.combined) {
         embeddings.combined = embedding;
       }
@@ -1117,7 +1178,8 @@ export class PrimitiveIndex {
       sourceRevision: data.sourceRevision ?? undefined,
       sourceRevisions: data.sourceRevisions ?? undefined,
       searchProfileId: data.searchProfileId ?? undefined,
-      embeddingsMeta: data.embeddingsMeta ?? undefined
+      embeddingsMeta: data.embeddingsMeta ?? undefined,
+      vectorEncoding
     };
     for (const sl of data.shortlists ?? []) {
       idx.shortlists.set(sl.id, { ...sl });

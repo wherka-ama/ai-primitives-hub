@@ -91,7 +91,8 @@ function streamNames(strategy: string | undefined, hasEmbeddings: boolean): stri
  * Load a primitive index and run a search.
  * @param options Search options.
  * @returns Search result.
- * @throws {SearchIndexError} if hybrid/multi ranking is requested on a non-embedded index.
+ * @throws {SearchIndexError} if hybrid/multi ranking is requested on a non-embedded index,
+ *   or on an index embedded with a different model.
  */
 export async function searchIndex(options: SearchIndexOptions): Promise<SearchResult> {
   const indexPath = resolveIndexPath(options);
@@ -100,7 +101,7 @@ export async function searchIndex(options: SearchIndexOptions): Promise<SearchRe
     hubId?: string;
     sourceRevision?: string | null;
     searchProfileId?: string | null;
-    embeddingsMeta?: { provider: string; dim: number; embeddingStrategy?: string } | null;
+    embeddingsMeta?: { provider: string; dim: number; embeddingStrategy?: string; model?: string } | null;
   };
   validateIndexKey(options.indexKey, {
     hubId: indexMetadata.hubId,
@@ -147,6 +148,13 @@ export async function searchIndex(options: SearchIndexOptions): Promise<SearchRe
     );
     if (!provider) {
       throw new SearchIndexError('EMBEDDING_UNAVAILABLE', `No embedding provider is registered for ${String(ranking)} ranking`);
+    }
+    const indexModel = meta.embeddingsMeta.model;
+    if (indexModel !== undefined && provider.model !== undefined && indexModel !== provider.model) {
+      throw new SearchIndexError(
+        'EMBEDDING_MODEL_MISMATCH',
+        `The index was embedded with ${indexModel}, but queries are embedded with ${provider.model}. Rebuild the index or pull one built with ${provider.model}.`
+      );
     }
 
     if (ranking === 'hybrid') {

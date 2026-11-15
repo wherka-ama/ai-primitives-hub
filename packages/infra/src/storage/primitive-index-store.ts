@@ -14,6 +14,27 @@ import type {
 } from '@ai-primitives-hub/core';
 
 const INDEX_FILENAME = 'primitive-index.v2.json';
+const PUBLISHED_STATE_FILENAME = 'published-index.json';
+
+/** One search profile of an index installed from a Hub publication (`index pull`). */
+export interface PublishedIndexEntry {
+  /** Content digest from the publication manifest (`sha256:<hex>`). */
+  indexDigest: string;
+  /** Publication timestamp (ISO 8601); used to refuse rollbacks. */
+  generation: string;
+  /** Revision directory the index was installed under. */
+  sourceRevision: string;
+  /** When true, `findLatestIndexPath` returns this index before any locally harvested one. */
+  pinned: boolean;
+  installedAt: string;
+  /** Where the index was pulled from (directory, URL or `github:OWNER/REPO@TAG`). */
+  from: string;
+}
+
+/** Per-hub record of indexes installed from Hub publications, keyed by search profile. */
+export interface PublishedIndexState {
+  profiles: Record<string, PublishedIndexEntry>;
+}
 
 /**
  * Convert an external identity into one safe, deterministic path segment.
@@ -60,7 +81,48 @@ export class AppStoragePrimitiveIndexStore implements PrimitiveIndexStore {
   }
 
   /**
+   * Path of the per-hub publication state (`published-index.json`).
+   * @param hubId Stable (canonical) hub identity.
+   */
+  public getPublishedStatePath(hubId: string): string {
+    return path.join(this.cacheRoot, 'indexes', safeSegment(hubId), PUBLISHED_STATE_FILENAME);
+  }
+
+  /**
+   * Read the publication state of a hub; an absent or unreadable file is an empty state.
+   * @param hubId Stable (canonical) hub identity.
+   */
+  public async readPublishedState(hubId: string): Promise<PublishedIndexState> {
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.getPublishedStatePath(hubId), 'utf8')) as Partial<PublishedIndexState>;
+      return { profiles: parsed.profiles && typeof parsed.profiles === 'object' ? parsed.profiles : {} };
+    } catch {
+      return { profiles: {} };
+    }
+  }
+
+  /**
+   * Resolve the pinned published index of a hub/profile pair, when it is still on disk.
+   * @param hubId Stable (canonical) hub identity.
+   * @param searchProfileId Search profile to load.
+   */
+  public async findPinnedIndexPath(hubId: string, searchProfileId: string): Promise<string | undefined> {
+    const entry = (await this.readPublishedState(hubId)).profiles[searchProfileId];
+    if (!entry?.pinned || typeof entry.sourceRevision !== 'string') {
+      return undefined;
+    }
+    const file = this.getIndexPath({ hubId, sourceRevision: entry.sourceRevision, searchProfileId });
+    try {
+      await fs.access(file);
+      return file;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Find the best persisted revision for a hub/profile pair.
+   * A pinned published index (see `index pull`) wins over harvested ones.
    * @param hubId Stable hub identity.
    * @param searchProfileId Search profile to load.
    * @param sourceIds Locally known source IDs used to reject incompatible snapshots.
@@ -71,6 +133,10 @@ export class AppStoragePrimitiveIndexStore implements PrimitiveIndexStore {
     searchProfileId: string,
     sourceIds?: readonly string[]
   ): Promise<string | undefined> {
+    const pinned = await this.findPinnedIndexPath(hubId.trim().replace(/-\d{6}$/u, ''), searchProfileId);
+    if (pinned !== undefined) {
+      return pinned;
+    }
     const indexesRoot = path.join(this.cacheRoot, 'indexes');
     let hubNamespaces: Dirent[];
     try {

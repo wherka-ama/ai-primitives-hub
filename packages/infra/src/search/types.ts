@@ -39,6 +39,11 @@ export {
 export interface EmbeddingProvider {
   /** Human-readable provider name stored in index metadata. */
   readonly name?: string;
+  /**
+   * Exact model identity (for example `@ternlight/mini@0.1.1`), stored in index
+   * metadata. Query and document vectors are comparable only for the same model.
+   */
+  readonly model?: string;
   readonly dim: number;
   embed(texts: string[]): Promise<Float32Array[]>;
 }
@@ -179,6 +184,11 @@ export interface BuildOptions {
   embeddings?: EmbeddingProvider;
   /** Embedding strategy: `single` keeps one combined vector per primitive; `dual` stores separate metadata and body vectors. Default: `single`. */
   embeddingStrategy?: 'single' | 'dual';
+  /**
+   * Persisted vector encoding: `json` (default, schema 1 number arrays), `f32`
+   * (lossless base64) or `i8` (quantized base64). Base64 encodings write schema 2.
+   */
+  vectorEncoding?: import('./vector-codec').VectorEncoding;
   /** Cap per-bundle file count to bound runaway sources. Default: 500. */
   maxFilesPerBundle?: number;
   /** Optional progress/diagnostic log sink. */

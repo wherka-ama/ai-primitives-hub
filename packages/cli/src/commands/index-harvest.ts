@@ -22,6 +22,8 @@ import {
   type HubHarvestPipelineOptions,
   type HubHarvestPipelineResult,
   HubStore,
+  isVectorEncoding,
+  VECTOR_ENCODINGS,
   XdgAppStorage,
 } from '@ai-primitives-hub/infra';
 import {
@@ -149,6 +151,12 @@ export class IndexHarvestCommand extends Command {
                              harvest. Env: AI_PRIMITIVES_HUB_UNRESOLVED_SOURCES
         --embed              Embed primitive text using the local ternlight model
         --embed-strategy     Embedding strategy: single (default) or dual
+        --vector-encoding    How embeddings are written: json (default, number
+                             arrays), f32 (lossless base64) or i8 (int8
+                             quantized, about 4x smaller than f32)
+        --reuse-embeddings-from
+                             Earlier index file whose embeddings are reused for
+                             unchanged primitives (same model and encoding rules)
         --github-app-id      GitHub App ID for automatic source-aware setup
         --github-app-key-file
                              PEM path for automatic source-aware setup
@@ -183,6 +191,8 @@ export class IndexHarvestCommand extends Command {
   public unresolvedSources = Option.String('--unresolved-sources');
   public embed = Option.Boolean('--embed', false);
   public embedStrategy = Option.String('--embed-strategy');
+  public vectorEncoding = Option.String('--vector-encoding');
+  public reuseEmbeddingsFrom = Option.String('--reuse-embeddings-from');
   public githubAppId = Option.String('--github-app-id');
   public githubAppClientId = Option.String('--github-app-client-id');
   public githubAppKeyFile = Option.String('--github-app-key-file');
@@ -232,6 +242,19 @@ export class IndexHarvestCommand extends Command {
       }));
     }
 
+    if (this.vectorEncoding !== undefined && !isVectorEncoding(this.vectorEncoding)) {
+      return failWith(ctx, fmt, 'index.harvest', new RegistryError({
+        code: 'USAGE.INVALID_FLAG',
+        message: `index harvest: --vector-encoding must be one of ${VECTOR_ENCODINGS.join(', ')} (got "${this.vectorEncoding}")`
+      }));
+    }
+    if ((this.vectorEncoding !== undefined || this.reuseEmbeddingsFrom !== undefined) && !this.embed) {
+      return failWith(ctx, fmt, 'index.harvest', new RegistryError({
+        code: 'USAGE.INVALID_FLAG',
+        message: 'index harvest: --vector-encoding and --reuse-embeddings-from require --embed'
+      }));
+    }
+
     const explicitToken = this.tokenEnv === undefined
       ? undefined
       : ctx.env[this.tokenEnv];
@@ -256,6 +279,8 @@ export class IndexHarvestCommand extends Command {
       contentState: this.contentState,
       includePrereleases: this.includePrereleases,
       unresolvedSources: this.unresolvedSources,
+      vectorEncoding: this.vectorEncoding,
+      reuseEmbeddingsFrom: this.reuseEmbeddingsFrom === undefined ? undefined : path.resolve(this.reuseEmbeddingsFrom),
       onEvent: this.verbose === true
         ? (ev): void => {
           ctx.stderr.write(`[${ev.kind}] ${JSON.stringify(ev)}\n`);

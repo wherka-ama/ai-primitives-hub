@@ -268,3 +268,82 @@ describe('PrimitiveIndex embeddings', () => {
     expect(prunedIndex.getSourceRevisions()).toEqual({ 'github-abc': 'rev-1' });
   });
 });
+
+describe('PrimitiveIndex persisted vectors and model', () => {
+  type Json = {
+    schemaVersion: number;
+    vectorEncoding?: string;
+    embeddingsMeta?: { model?: string } | null;
+    primitives: { embedding?: unknown; embeddings?: Record<string, unknown> }[];
+  };
+
+  const countingEmbedder = (model?: string): { provider: TernlightEmbeddingProvider & { model?: string }; count: () => number } => {
+    const base = new TernlightEmbeddingProvider();
+    let count = 0;
+    const provider = {
+      name: base.name,
+      dim: base.dim,
+      model: model ?? base.model,
+      embed: async (texts: string[]): Promise<Float32Array[]> => {
+        count += texts.length;
+        return base.embed(texts);
+      }
+    } as unknown as TernlightEmbeddingProvider;
+    return { provider, count: () => count };
+  };
+
+  it('records the embedding model and writes compact vectors without the duplicate legacy vector', async () => {
+    const provider = new FakeBundleProvider(createFixtureBundles());
+    const plain = await PrimitiveIndex.buildFrom(provider, { embeddings: new TernlightEmbeddingProvider(), embeddingStrategy: 'dual' });
+    const compact = await PrimitiveIndex.buildFrom(provider, {
+      embeddings: new TernlightEmbeddingProvider(), embeddingStrategy: 'dual', vectorEncoding: 'i8'
+    });
+    const plainJson = plain.toJSON() as Json;
+    const json = compact.toJSON() as Json;
+    expect(plainJson.schemaVersion).toBe(1);
+    expect(plainJson.embeddingsMeta?.model).toBe(new TernlightEmbeddingProvider().model);
+    expect(json.schemaVersion).toBe(2);
+    expect(json.vectorEncoding).toBe('i8-base64');
+    expect(json.primitives.every((p) => p.embedding === undefined && typeof p.embeddings?.metadata === 'string')).toBe(true);
+    expect(JSON.stringify(json).length).toBeLessThan(JSON.stringify(plainJson).length / 3);
+
+    const file = path.join(os.tmpdir(), `pi-i8-${Date.now()}.json`);
+    try {
+      saveIndex(compact, file);
+      const loaded = loadIndex(file);
+      const embedder = new TernlightEmbeddingProvider();
+      const [metadata] = await embedder.embed(['terraform']);
+      const [body] = await embedder.embed(['infrastructure provisioning']);
+      const query = { q: 'terraform infrastructure', ranking: 'multi' as const, queryEmbeddings: { metadata, body }, limit: 5 };
+      expect(loaded.search(query).hits.map((h) => h.primitive.id)).toEqual(plain.search(query).hits.map((h) => h.primitive.id));
+      expect((loaded.toJSON() as Json).vectorEncoding).toBe('i8-base64');
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
+
+  it('refuses an index with an unknown vector encoding', async () => {
+    const idx = await buildEmbeddedIndex();
+    const json = { ...(idx.toJSON() as Json), schemaVersion: 2, vectorEncoding: 'f16-base64' };
+    expect(() => PrimitiveIndex.fromJSON(json as never)).toThrow(/vectorEncoding|encoding/i);
+  });
+
+  it('reuses embeddings only from the same model, and from i8 only into i8', async () => {
+    const prims = await harvest(new FakeBundleProvider(createFixtureBundles()));
+    const first = countingEmbedder();
+    const i8 = await PrimitiveIndex.buildFromPrimitives(prims, { embeddings: first.provider, vectorEncoding: 'i8' });
+    expect(first.count()).toBe(prims.length);
+
+    const sameModelI8 = countingEmbedder();
+    await PrimitiveIndex.buildFromPrimitives(prims, { embeddings: sameModelI8.provider, vectorEncoding: 'i8', previousIndex: i8 });
+    expect(sameModelI8.count()).toBe(0);
+
+    const lossless = countingEmbedder();
+    await PrimitiveIndex.buildFromPrimitives(prims, { embeddings: lossless.provider, vectorEncoding: 'f32', previousIndex: i8 });
+    expect(lossless.count()).toBe(prims.length);
+
+    const otherModel = countingEmbedder('@ternlight/mini@9.9.9');
+    await PrimitiveIndex.buildFromPrimitives(prims, { embeddings: otherModel.provider, vectorEncoding: 'i8', previousIndex: i8 });
+    expect(otherModel.count()).toBe(prims.length);
+  });
+});
