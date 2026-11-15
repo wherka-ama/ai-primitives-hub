@@ -194,6 +194,35 @@ describe('preflightGitHubSources', () => {
     expect(report.results.find((result) => result.sourceId === 'z-public')?.revision).toBe('preflight-commit-sha');
   });
 
+  it('checks release metadata instead of branch content for released-state callers', async () => {
+    const publicSource = source('public', 'org', 'master-default');
+    const privateSource = source('private', 'org', 'private');
+    const branchMissing = Object.assign(new Error('GitHub API error: 422'), { statusCode: 422 });
+    const publicApi = new ScenarioApi('/repos/org/master-default/commits/main', branchMissing, { private: false });
+    const appApi = new ScenarioApi('/repos/org/private/commits/main', branchMissing);
+
+    const report = await preflightGitHubSources([publicSource, privateSource], {
+      contentState: 'released',
+      clientFactory: (target, category) => {
+        if (category === 'app-authenticated') {
+          return appApi;
+        }
+        return target.repository === 'private'
+          ? new ScenarioApi('/repos/org/private', Object.assign(new Error('GitHub API error: 404'), { statusCode: 404 }))
+          : publicApi;
+      },
+      genericTokenProvider: new StubTokenProvider(),
+      appTokenProvider: { getToken: async () => 'app-token' }
+    });
+
+    expect(report.valid).toBe(true);
+    expect(report.results.map((result) => [result.sourceId, result.category, result.operations])).toEqual([
+      ['public', 'public-generic', ['repository metadata', 'release metadata']],
+      ['private', 'app-authenticated', ['repository metadata', 'repository metadata', 'release metadata']]
+    ]);
+    expect([...publicApi.calls, ...appApi.calls].some((call) => call.includes('/commits/') || call.includes('/git/trees/'))).toBe(false);
+  });
+
   it('derives App routes before invoking the setup hook', async () => {
     const privateSource = source('private', 'Org', 'repo');
     const order: string[] = [];

@@ -492,6 +492,7 @@ async function harvestHubWithAuth(
   let sourceClientFactory: ((source: HubSourceSpec) => GitHubApi) | undefined;
   if (sourceAwareAuthentication) {
     const preflight = await sourceAuth!.preflight(sources, {
+      contentState: opts.contentState ?? 'branch',
       onLog: (message) => opts.onLog?.(`[github preflight] ${message}`)
     });
     sourcePreflight = preflight;

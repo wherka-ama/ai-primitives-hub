@@ -84,6 +84,12 @@ export interface GitHubSourcePreflightOptions {
   publicAuthMode?: GitHubPublicAuthMode;
   /** Include release metadata in the required operation set for install/update callers. */
   includeReleases?: boolean;
+  /**
+   * Content the caller will read. `released` checks release metadata instead
+   * of branch content, so sources are not rejected for branch-only problems
+   * (for example a default branch other than the configured one).
+   */
+  contentState?: 'branch' | 'released';
   /** Safe diagnostic sink; never receives credential values. */
   onLog?: (message: string) => void;
 }
@@ -250,7 +256,7 @@ async function classifySource(
     return unresolved(source, target, visibility.operations, 'GH_SOURCE_VISIBILITY_AMBIGUOUS');
   }
 
-  const generic = await probeSource(source, genericClient, options.includeReleases === true, true);
+  const generic = await probeSource(source, genericClient, probeScope(options), true);
   if (!generic.ok) {
     return unresolved(
       source,
@@ -284,7 +290,7 @@ async function validateAppCandidate(
   } catch {
     return unresolved(source, target, genericOperations, 'GH_SOURCE_PREFLIGHT_UNRESOLVED');
   }
-  const authenticated = await probeSource(source, appClient, options.includeReleases === true);
+  const authenticated = await probeSource(source, appClient, probeScope(options));
   if (!authenticated.ok) {
     return unresolved(source, target, [...genericOperations, ...authenticated.operations], errorCode(authenticated.error));
   }
@@ -338,10 +344,19 @@ async function probeRepositoryMetadata(source: HubSourceSpec, client: GitHubApi)
   }
 }
 
+type ProbeScope = 'branch' | 'branch-and-releases' | 'releases';
+
+function probeScope(options: GitHubSourcePreflightOptions): ProbeScope {
+  if (options.contentState === 'released') {
+    return 'releases';
+  }
+  return options.includeReleases === true ? 'branch-and-releases' : 'branch';
+}
+
 async function probeSource(
   source: HubSourceSpec,
   client: GitHubApi,
-  includeReleases: boolean,
+  scope: ProbeScope,
   skipRepositoryMetadata = false
 ): Promise<ProbeResult> {
   const operations: string[] = [];
@@ -368,6 +383,10 @@ async function probeSource(
     if (failedRepository !== undefined) {
       return failedRepository;
     }
+  }
+  if (scope === 'releases') {
+    const failedReleases = await run('release metadata', () => client.getJson(`${repositoryPath}/releases?per_page=1`));
+    return failedReleases ?? { ok: true, operations, authenticationRequired: false, rateLimitExceeded: false };
   }
   const commitPath = `${repositoryPath}/commits/${encodeURIComponent(source.branch)}`;
   operations.push('default branch commit');
@@ -408,7 +427,7 @@ async function probeSource(
       return failedPlugins;
     }
   }
-  if (includeReleases) {
+  if (scope === 'branch-and-releases') {
     const failedReleases = await run('release metadata', () => client.getJson(`${repositoryPath}/releases`));
     if (failedReleases !== undefined) {
       return failedReleases;
