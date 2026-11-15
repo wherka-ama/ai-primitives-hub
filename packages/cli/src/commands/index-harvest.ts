@@ -138,6 +138,11 @@ export class IndexHarvestCommand extends Command {
       Usage: ai-primitives-hub index harvest [options]
 
       Options:
+        --content-state      Content to index: branch (default, tip of each source
+                             branch) or released (latest published release archive
+                             of every collection; github sources only)
+        --include-prereleases
+                             With --content-state released, also consider prereleases
         --embed              Embed primitive text using the local ternlight model
         --embed-strategy     Embedding strategy: single (default) or dual
         --github-app-id      GitHub App ID for automatic source-aware setup
@@ -149,6 +154,7 @@ export class IndexHarvestCommand extends Command {
         ai-primitives-hub index harvest --hub-repo OWNER/REPO --embed
         ai-primitives-hub index harvest --hub-repo OWNER/REPO --embed --embed-strategy dual
         ai-primitives-hub index harvest --hub-config-file hub-config.yml
+        ai-primitives-hub index harvest --hub-config-file hub-config.yml --content-state released
         ai-primitives-hub index harvest --no-hub-config --extra-source 'local:/path/to/bundles'
     `
   });
@@ -168,6 +174,8 @@ export class IndexHarvestCommand extends Command {
   public extraSources = Option.Array('--extra-source');
   public force = Option.Boolean('--force');
   public dryRun = Option.Boolean('--dry-run');
+  public contentState = Option.String('--content-state');
+  public includePrereleases = Option.Boolean('--include-prereleases');
   public embed = Option.Boolean('--embed', false);
   public embedStrategy = Option.String('--embed-strategy');
   public githubAppId = Option.String('--github-app-id');
@@ -199,6 +207,19 @@ export class IndexHarvestCommand extends Command {
       }));
     }
 
+    if (this.contentState !== undefined && this.contentState !== 'branch' && this.contentState !== 'released') {
+      return failWith(ctx, fmt, 'index.harvest', new RegistryError({
+        code: 'USAGE.INVALID_FLAG',
+        message: `index harvest: --content-state must be "branch" or "released" (got "${this.contentState}")`
+      }));
+    }
+    if (this.includePrereleases === true && this.contentState !== 'released') {
+      return failWith(ctx, fmt, 'index.harvest', new RegistryError({
+        code: 'USAGE.INVALID_FLAG',
+        message: 'index harvest: --include-prereleases requires --content-state released'
+      }));
+    }
+
     const explicitToken = this.tokenEnv === undefined
       ? undefined
       : ctx.env[this.tokenEnv];
@@ -220,6 +241,8 @@ export class IndexHarvestCommand extends Command {
       extraSources: this.extraSources,
       force: this.force,
       dryRun: this.dryRun,
+      contentState: this.contentState,
+      includePrereleases: this.includePrereleases,
       onEvent: this.verbose === true
         ? (ev): void => {
           ctx.stderr.write(`[${ev.kind}] ${JSON.stringify(ev)}\n`);

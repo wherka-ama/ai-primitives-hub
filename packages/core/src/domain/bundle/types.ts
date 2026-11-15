@@ -92,6 +92,33 @@ export interface BundleRef {
   bundleId: string;
   bundleVersion: string;
   installed: boolean;
+  /** Immutable publication coordinates, present when harvested from a released archive. */
+  provenance?: BundleReleaseProvenance;
+}
+
+/**
+ * Coordinates of the published release a {@link BundleRef} was harvested
+ * from. The archive digest binds the indexed primitives to the exact bytes
+ * a client downloads for that bundle version.
+ */
+export interface BundleReleaseProvenance {
+  kind: 'github-release';
+  /** `owner/repo` of the release. */
+  repository: string;
+  /** Collection id declared by the bundle's deployment manifest. */
+  collectionId: string;
+  tag: string;
+  releaseId: number;
+  publishedAt: string;
+  prerelease: boolean;
+  archive: {
+    assetId: number;
+    name: string;
+    size: number;
+    /** Lowercase hex SHA-256 of the downloaded archive bytes. */
+    sha256: string;
+  };
+  manifestAssetId: number;
 }
 
 /**

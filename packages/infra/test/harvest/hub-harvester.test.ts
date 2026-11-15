@@ -25,6 +25,9 @@ import {
   HubHarvester,
 } from '../../src/harvest/hub-harvester';
 import {
+  buildZip,
+} from '../../src/writers/zip-writer';
+import {
   FakeGitHubApi,
 } from '../helpers/fake-github-api';
 import {
@@ -525,6 +528,65 @@ items:
     // Should still succeed despite corrupt snapshot
     expect(r.done).toBe(1);
     expect(r.error).toBe(0);
+  });
+
+  describe('released content state', () => {
+    const seedRelease = (client: FakeGitHubApi, owner: string, repo: string, version: string): void => {
+      const manifest = `id: pack\nversion: ${version}\nprompts:\n  - file: prompts/a.prompt.md\n    type: prompt\n`;
+      const zip = buildZip([
+        { path: 'deployment-manifest.yml', bytes: new TextEncoder().encode(manifest) },
+        { path: 'prompts/a.prompt.md', bytes: new TextEncoder().encode(`# A ${version}\n`) }
+      ]);
+      client.seedBytes(`/repos/${owner}/${repo}/releases/assets/2`, zip);
+      client.seedJson(`/repos/${owner}/${repo}/releases?per_page=100&page=1`, [{
+        id: 1, tag_name: `pack-v${version}`, draft: false, prerelease: false, published_at: '2026-01-01T00:00:00Z',
+        assets: [
+          { id: 3, name: 'deployment-manifest.yml', size: manifest.length, url: '' },
+          { id: 2, name: 'pack.bundle.zip', size: zip.byteLength, url: '' }
+        ]
+      }]);
+    };
+
+    const releasedHarvester = (client: FakeGitHubApi, sources: HubSourceSpec[]): HubHarvester => new HubHarvester({
+      sources, client, contentState: 'released',
+      cache: new BlobCache(path.join(tmp, 'cache')),
+      progressFile: path.join(tmp, 'progress.jsonl')
+    });
+
+    it('indexes release archives, marks sources without a released state unsupported, and skips unchanged releases', async () => {
+      const client = new FakeGitHubApi();
+      seedRelease(client, 'o1', 'r1', '1.2.0');
+      const sources = [spec('src-1', 'o1', 'r1'), { ...spec('ac', 'o2', 'r2'), type: 'awesome-copilot' as const }];
+
+      const first = await releasedHarvester(client, sources).run();
+
+      expect(first.contentState).toBe('released');
+      expect(first.sourceCoverage.map((c) => [c.sourceId, c.state, c.primitives])).toEqual([
+        ['src-1', 'indexed', 1],
+        ['ac', 'unsupported', 0]
+      ]);
+      const [prim] = first.index.all();
+      expect(prim.bundle).toMatchObject({ bundleId: 'o1-r1-pack', bundleVersion: '1.2.0', provenance: { tag: 'pack-v1.2.0' } });
+
+      const second = await releasedHarvester(client, sources).run();
+      expect(second.sourceCoverage[0].state).toBe('skipped');
+      expect(second.index.all().map((p) => p.id)).toEqual([prim.id]);
+    });
+
+    it('does not resurrect primitives of a source that fails in a later run', async () => {
+      const client = new FakeGitHubApi();
+      seedRelease(client, 'o1', 'r1', '1.0.0');
+      await releasedHarvester(client, [spec('src-1', 'o1', 'r1')]).run();
+
+      client.seedJson('/repos/o1/r1/releases?per_page=100&page=1', [{
+        id: 9, tag_name: 'pack-v1.0.1', draft: false, prerelease: false, published_at: '2026-02-01T00:00:00Z',
+        assets: [{ id: 8, name: 'deployment-manifest.yml', size: 1, url: '' }, { id: 7, name: 'pack.bundle.zip', size: 1, url: '' }]
+      }]);
+      const result = await releasedHarvester(client, [spec('src-1', 'o1', 'r1')]).run();
+
+      expect(result.sourceCoverage[0].state).toBe('failed');
+      expect(result.index.all()).toEqual([]);
+    });
   });
 
   describe('harvestHub pipeline', () => {

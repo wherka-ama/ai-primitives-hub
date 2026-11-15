@@ -74,6 +74,9 @@ import {
   GitHubSingleBundleProvider,
 } from './bundle-providers/github-bundle-provider';
 import {
+  GitHubReleaseBundleProvider,
+} from './bundle-providers/github-release-bundle-provider';
+import {
   AwesomeCopilotPluginBundleProvider,
 } from './bundle-providers/plugin-bundle-provider';
 import {
@@ -227,6 +230,10 @@ export interface HubHarvestPipelineOptions {
   force?: boolean;
   /** Walk sources but don't write the index. */
   dryRun?: boolean;
+  /** Which content state to index. Default `branch`. See {@link HarvestContentState}. */
+  contentState?: HarvestContentState;
+  /** In `released` mode, consider prereleases when selecting versions. */
+  includePrereleases?: boolean;
   /** Observer for harvester progress events. */
   onEvent?: (ev: HubHarvestEvent) => void;
   /** Observer for diagnostic messages (one per source-config decision). */
@@ -286,6 +293,7 @@ export interface HubHarvestPipelineResult {
   sourcePreflight?: GitHubSourcePreflightReport;
   /** Per-source outcomes used by lifecycle adapters to expose index coverage. */
   sourceCoverage: HarvestSourceCoverage[];
+  contentState: HarvestContentState;
 }
 
 function resolveHubRepo(
@@ -703,7 +711,9 @@ async function runHarvester(
     searchProfileId: opts.searchProfileId,
     hubId,
     sourcePreflightRevisions,
-    previousIndex
+    previousIndex,
+    contentState: opts.contentState,
+    includePrereleases: opts.includePrereleases
   });
   const result = await harvester.run();
   await etagStore.save();
@@ -743,7 +753,8 @@ function buildHarvestResult(params: BuildHarvestResultParams): HubHarvestPipelin
     sourceRevision: params.sourceRevision,
     hubId: params.hubId,
     ...(params.sourcePreflight === undefined ? {} : { sourcePreflight: params.sourcePreflight }),
-    sourceCoverage: params.result.sourceCoverage
+    sourceCoverage: params.result.sourceCoverage,
+    contentState: params.result.contentState
   };
 }
 
@@ -794,7 +805,20 @@ export interface HubHarvesterOptions {
   hubId?: string;
   /** Optional prior index instance used to reuse embeddings on warm runs. */
   previousIndex?: PrimitiveIndex;
+  /** Which content state to index. Default `branch`. */
+  contentState?: HarvestContentState;
+  /** In `released` mode, consider prereleases when selecting versions. */
+  includePrereleases?: boolean;
 }
+
+/**
+ * Content state a harvest indexes:
+ *   - `branch`: the tip of each source's branch (development state);
+ *   - `released`: the latest published release archive of every collection
+ *     of `github` sources. Sources without a released state are reported
+ *     `unsupported` and contribute no primitives.
+ */
+export type HarvestContentState = 'branch' | 'released';
 
 /** Outcome of one configured source in a harvest lifecycle operation. */
 export interface HarvestSourceCoverage {
@@ -818,6 +842,7 @@ export interface HubHarvestResult extends ProgressSummary {
   sourceRevision: string;
   /** One deterministic record for every configured source. */
   sourceCoverage: HarvestSourceCoverage[];
+  contentState: HarvestContentState;
 }
 
 /* eslint-disable @typescript-eslint/member-ordering -- public API kept at top. */
@@ -870,7 +895,13 @@ export class HubHarvester {
     const activeSourceIds = new Set(this.opts.sources.map((source) => source.id));
     const fresh = new Map<string, Primitive[]>();
     for (const sourceId of activeSourceIds) {
-      fresh.set(sourceId, currentBySource.get(sourceId) ?? snapshot.get(sourceId) ?? []);
+      // Released indexes only hold content verified in this run or skipped
+      // at an identical release revision; never resurrect a failed or
+      // unsupported source from an earlier run.
+      const carryOver = this.contentState() === 'released' && sourceCoverage.get(sourceId)?.state !== 'skipped'
+        ? undefined
+        : snapshot.get(sourceId);
+      fresh.set(sourceId, currentBySource.get(sourceId) ?? carryOver ?? []);
     }
     await saveSnapshot(this.snapshotFile(), fresh);
 
@@ -901,12 +932,18 @@ export class HubHarvester {
         sourceId: source.id,
         state: 'failed',
         message: 'Source did not produce a harvest outcome.'
-      })
+      }),
+      contentState: this.contentState()
     };
   }
 
+  private contentState(): HarvestContentState {
+    return this.opts.contentState ?? 'branch';
+  }
+
   private snapshotFile(): string {
-    return path.join(path.dirname(this.opts.progressFile), 'primitives-snapshot.json');
+    const name = this.contentState() === 'released' ? 'primitives-snapshot.released.json' : 'primitives-snapshot.json';
+    return path.join(path.dirname(this.opts.progressFile), name);
   }
 
   private async processSource(
@@ -921,9 +958,25 @@ export class HubHarvester {
     this.opts.onLog?.(`processing source ${spec.id}...`);
     this.opts.onEvent?.({ kind: 'source-start', sourceId: spec.id });
     let commitSha: string | undefined;
+    if (this.contentState() === 'released' && spec.type !== 'github') {
+      sourceCoverage.set(spec.id, {
+        sourceId: spec.id,
+        state: 'unsupported',
+        primitives: 0,
+        message: `${spec.type} sources have no released state to index`,
+        ...this.authenticationCoverage(spec.id)
+      });
+      this.opts.onLog?.(`source ${spec.id} unsupported in released mode`);
+      return;
+    }
     try {
       const client = this.clientFor(spec);
-      commitSha = await this.resolveCommitShaForSource(spec, client);
+      const releaseProvider = this.contentState() === 'released'
+        ? new GitHubReleaseBundleProvider({ spec, client, includePrereleases: this.opts.includePrereleases })
+        : undefined;
+      commitSha = releaseProvider === undefined
+        ? await this.resolveCommitShaForSource(spec, client)
+        : await releaseProvider.getRevision();
       sourceRevisions.set(spec.id, {
         sourceId: spec.id,
         url: spec.url,
@@ -942,12 +995,16 @@ export class HubHarvester {
         this.opts.onLog?.(`source ${spec.id} skipped`);
         return;
       }
-      const primsTotal = await this.harvestSource(spec, bundleId, commitSha, log, out, client);
+      const primsTotal = releaseProvider === undefined
+        ? await this.harvestSource(spec, bundleId, commitSha, log, out, client)
+        : await this.harvestReleasedSource(releaseProvider, spec, bundleId, commitSha, log, out);
+      const noRelease = releaseProvider !== undefined && (await releaseProvider.getSelection()).selected.length === 0;
       sourceCoverage.set(spec.id, {
         sourceId: spec.id,
         state: 'indexed',
         primitives: primsTotal,
         revision: commitSha,
+        ...(noRelease ? { message: 'no published release with one deployment manifest and one ZIP asset' } : {}),
         ...this.authenticationCoverage(spec.id)
       });
       this.opts.onLog?.(`source ${spec.id} done: ${String(primsTotal)} primitive${primsTotal === 1 ? '' : 's'}`);
@@ -1047,6 +1104,28 @@ export class HubHarvester {
       return this.harvestAwesomeCopilotSource(spec, bundleId, commitSha, log, out, startedRepo, client);
     }
     return this.harvestGitHubSource(spec, bundleId, commitSha, log, out, startedRepo, client);
+  }
+
+  private async harvestReleasedSource(
+    provider: GitHubReleaseBundleProvider,
+    spec: HubSourceSpec,
+    bundleId: string,
+    revision: string,
+    log: HarvestProgressLog,
+    out: Primitive[]
+  ): Promise<number> {
+    const startedRepo = Date.now();
+    const { ignored } = await provider.getSelection();
+    for (const entry of ignored.filter((e) => e.reason !== 'superseded')) {
+      this.opts.onLog?.(`source ${spec.id}: ignoring release ${entry.tag}: ${entry.reason}`);
+    }
+    const refs = await this.collectRefs(provider);
+    const primsTotal = await this.harvestBatches(provider, refs, spec.id, revision, log, out, 1);
+    await log.recordDone({
+      sourceId: spec.id, bundleId, commitSha: revision,
+      primitives: 0, ms: Date.now() - startedRepo
+    });
+    return primsTotal;
   }
 
   private async harvestPluginSource(
