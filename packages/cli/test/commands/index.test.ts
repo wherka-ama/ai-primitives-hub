@@ -9,6 +9,7 @@
  * already-proven bundle fixture.
  */
 import {
+  access,
   copyFile,
   mkdir,
   mkdtemp,
@@ -458,6 +459,33 @@ describe('index commands', () => {
       expect(result.exitCode).toBe(0);
       const envelope = parseJson<{ tokenSource: string }>(result.stdout);
       expect(envelope.data.tokenSource).toBe('source-aware');
+    });
+
+    it('--app-coverage reports coverage without harvesting', async () => {
+      const outFile = path.join(workspace, 'coverage-index.json');
+      const result = await run([
+        'index', 'harvest', '--no-hub-config', '--app-coverage',
+        '--github-app-id', '123',
+        '--github-app-key-file', '/tmp/app-key.pem',
+        '--out-file', outFile,
+        '-o', 'json'
+      ]);
+      expect(result.exitCode).toBe(0);
+      const envelope = parseJson<{ complete: boolean; totals: { sources: number }; scopeRequest: unknown[] }>(result.stdout);
+      expect(envelope.data).toMatchObject({ complete: true, totals: { sources: 0 }, scopeRequest: [] });
+      await expect(access(outFile)).rejects.toThrow();
+    });
+
+    it('--app-coverage fails without GitHub App source authentication', async () => {
+      const result = await run(['index', 'harvest', '--no-hub-config', '--app-coverage', '-o', 'json']);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain('App coverage needs GitHub App source authentication');
+    });
+
+    it('--app-coverage cannot be combined with --embed', async () => {
+      const result = await run(['index', 'harvest', '--no-hub-config', '--app-coverage', '--embed', '-o', 'json']);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).toContain('USAGE.INVALID_FLAG');
     });
   });
 });

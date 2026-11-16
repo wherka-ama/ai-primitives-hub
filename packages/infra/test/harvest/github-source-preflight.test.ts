@@ -410,4 +410,37 @@ describe('preflightGitHubSources', () => {
     expect(apis).toHaveLength(1);
     expect(apis[0].calls).toEqual(['/repos/org/first']);
   });
+
+  it('probes sources in parallel up to the concurrency limit and keeps the sorted result order', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    class SlowApi extends ScenarioApi {
+      public override async getJson<T>(path: string): Promise<T> {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return super.getJson<T>(path);
+      }
+    }
+    const sources = ['e', 'd', 'c', 'b', 'a'].map((name) => source(name, 'org', name));
+
+    const report = await preflightGitHubSources(sources, {
+      genericTokenProvider: new StubTokenProvider(),
+      clientFactory: (target, category) => category === 'public-generic' && target.repository !== 'c'
+        ? new SlowApi(undefined, undefined, { private: false })
+        : new SlowApi(undefined, undefined, { private: true }),
+      appTokenProvider: { getToken: async () => 'app-token' },
+      concurrency: 2
+    });
+
+    expect(report.results.map((result) => [result.sourceId, result.category])).toEqual([
+      ['a', 'public-generic'],
+      ['b', 'public-generic'],
+      ['c', 'app-authenticated'],
+      ['d', 'public-generic'],
+      ['e', 'public-generic']
+    ]);
+    expect(peak).toBe(2);
+  });
 });

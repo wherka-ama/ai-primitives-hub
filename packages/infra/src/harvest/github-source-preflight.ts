@@ -100,6 +100,11 @@ export interface GitHubSourcePreflightOptions {
    * (for example a default branch other than the configured one).
    */
   contentState?: 'branch' | 'released';
+  /**
+   * Sources probed in parallel. Defaults to 1 (serial). After a generic rate
+   * limit, sources not yet started are not probed.
+   */
+  concurrency?: number;
   /** Safe diagnostic sink; never receives credential values. */
   onLog?: (message: string) => void;
 }
@@ -143,14 +148,22 @@ export async function preflightGitHubSources(
     throw new GitHubSourceAuthPolicyError();
   }
 
-  for (const source of [...sources].toSorted(compareSources)) {
+  const concurrency = Math.max(1, Math.floor(options.concurrency ?? 1));
+  const sortedSources = [...sources].toSorted(compareSources);
+  const classified = await mapWithConcurrency(sortedSources, concurrency, async (source) => {
     if (genericRateLimitDetected) {
-      results.push(unresolvedForRateLimit(source));
-      continue;
+      return { result: unresolvedForRateLimit(source) };
     }
-    const result = await classifySource(source, options, appCandidates, genericVisibility);
-    results.push(result);
-    genericRateLimitDetected = result.errorCode === 'GH_PUBLIC_GENERIC_RATE_LIMIT_UNSAFE';
+    const candidates: typeof appCandidates = [];
+    const result = await classifySource(source, options, candidates, genericVisibility);
+    if (result.errorCode === 'GH_PUBLIC_GENERIC_RATE_LIMIT_UNSAFE') {
+      genericRateLimitDetected = true;
+    }
+    return { result, candidates };
+  });
+  for (const entry of classified) {
+    results.push(entry.result);
+    appCandidates.push(...(entry.candidates ?? []));
   }
 
   // A generic rate-limit response makes visibility evidence unavailable for
@@ -178,18 +191,14 @@ export async function preflightGitHubSources(
   // the App-only checks for those candidates now that routes/configuration are
   // available.
   if (appCandidates.length > 0) {
-    for (const candidate of appCandidates) {
+    const appResults = await mapWithConcurrency(appCandidates, concurrency, (candidate) =>
+      unavailableRoutes.has(deriveGitHubAppRoutes([candidate.target])[0])
+        ? Promise.resolve(unresolved(candidate.source, candidate.target, candidate.operations, 'GH_APP_AUTH_SETUP_FAILED'))
+        : validateAppCandidate(candidate.source, candidate.target, candidate.operations, options));
+    for (const [index, candidate] of appCandidates.entries()) {
       const resultIndex = results.findIndex((result) => result.sourceId === candidate.source.id);
-      const appResult = unavailableRoutes.has(deriveGitHubAppRoutes([candidate.target])[0])
-        ? unresolved(candidate.source, candidate.target, candidate.operations, 'GH_APP_AUTH_SETUP_FAILED')
-        : await validateAppCandidate(
-          candidate.source,
-          candidate.target,
-          candidate.operations,
-          options
-        );
       if (resultIndex !== -1) {
-        results[resultIndex] = appResult;
+        results[resultIndex] = appResults[index];
       }
     }
   }
@@ -204,6 +213,30 @@ export async function preflightGitHubSources(
     results,
     appRoutes
   };
+}
+
+/**
+ * Map items with at most `limit` actions in flight, keeping input order.
+ * @param items Items to map.
+ * @param limit Maximum parallel actions.
+ * @param action Mapping action.
+ * @returns Results in input order.
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  action: (item: T) => Promise<R>
+): Promise<R[]> {
+  const output: R[] = [];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++;
+      output[index] = await action(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return output;
 }
 
 async function classifySource(

@@ -37,6 +37,7 @@ import * as path from 'node:path';
 import type {
   BundleReleaseProvenance,
   GitHubApi,
+  GitHubRepositoryTarget,
   GitHubSourceAuthCategory,
   HttpClient,
   HubSourceSpec,
@@ -94,6 +95,11 @@ import {
 import {
   parseExtraSource,
 } from './extra-source';
+import {
+  type AppInstallationScope,
+  buildAppCoverageReport,
+  type HubAppCoverageReport,
+} from './github-app-coverage';
 import {
   createGitHubSourceAuthRuntime,
   createGitHubSourceAuthSession,
@@ -414,29 +420,112 @@ export const harvestHub = async (
 ): Promise<HubHarvestPipelineResult> => {
   validateHarvestOptions(opts);
   const unresolvedSources = resolveUnresolvedSourcePolicy(opts, env);
-  const appBootstrapRequested = opts.githubAppId !== undefined
-    || opts.githubAppClientId !== undefined
-    || opts.githubAppKeyFile !== undefined
-    || env[GITHUB_APP_AUTH_KEY_FILE] !== undefined;
-  const appSession = appBootstrapRequested
-    ? await createGitHubSourceAuthSession({
-      env,
-      http: opts.httpClient ?? new NodeHttpClient(),
-      processExecutor: opts.processExecutor,
-      appId: opts.githubAppId ?? env[GITHUB_APP_ID],
-      clientId: opts.githubAppClientId ?? env[GITHUB_APP_CLIENT_ID],
-      keyFile: opts.githubAppKeyFile ?? env[GITHUB_APP_AUTH_KEY_FILE] ?? '',
-      installationId: opts.githubAppInstallationId ?? env[GITHUB_APP_INSTALLATION_ID],
-      setupTimeoutMs: opts.githubAppSetupTimeoutMs,
-      allowPartialAppSetup: unresolvedSources === 'record'
-    })
-    : undefined;
+  const appSession = await createAppSession(opts, env, unresolvedSources === 'record');
   try {
     return await harvestHubWithAuth({ ...opts, unresolvedSources }, env, appSession);
   } finally {
     await appSession?.cleanup();
   }
 };
+
+/**
+ * Provision the ephemeral App session when App options or the key file are given.
+ * @param opts Pipeline options.
+ * @param env Process env.
+ * @param allowPartialAppSetup Continue with the organizations the App is installed on.
+ * @returns The session, or `undefined` when no App bootstrap is requested.
+ */
+async function createAppSession(
+  opts: HubHarvestPipelineOptions,
+  env: NodeJS.ProcessEnv,
+  allowPartialAppSetup: boolean
+): Promise<GitHubSourceAuthSession | undefined> {
+  const appBootstrapRequested = opts.githubAppId !== undefined
+    || opts.githubAppClientId !== undefined
+    || opts.githubAppKeyFile !== undefined
+    || env[GITHUB_APP_AUTH_KEY_FILE] !== undefined;
+  if (!appBootstrapRequested) {
+    return undefined;
+  }
+  return createGitHubSourceAuthSession({
+    env,
+    http: opts.httpClient ?? new NodeHttpClient(),
+    processExecutor: opts.processExecutor,
+    appId: opts.githubAppId ?? env[GITHUB_APP_ID],
+    clientId: opts.githubAppClientId ?? env[GITHUB_APP_CLIENT_ID],
+    keyFile: opts.githubAppKeyFile ?? env[GITHUB_APP_AUTH_KEY_FILE] ?? '',
+    installationId: opts.githubAppInstallationId ?? env[GITHUB_APP_INSTALLATION_ID],
+    setupTimeoutMs: opts.githubAppSetupTimeoutMs,
+    allowPartialAppSetup
+  });
+}
+
+interface LoadedHubSources {
+  sources: HubSourceSpec[];
+  client: GitHubApi | undefined;
+  resolvedToken: string | undefined;
+  tokenSource: string;
+}
+
+/**
+ * Load the Hub's sources, reading `hub-config.yml` with the source-aware
+ * clients when App mode is on (retrying with the App for a private Hub).
+ * @param opts Pipeline options.
+ * @param env Process env.
+ * @param hubRepo Hub repository.
+ * @param hubBranch Hub branch.
+ * @param sourceAuth Source-aware runtime, when App mode is on.
+ * @returns Sources and the client used to read the Hub.
+ */
+async function loadHubSources(
+  opts: HubHarvestPipelineOptions,
+  env: NodeJS.ProcessEnv,
+  hubRepo: string,
+  hubBranch: string,
+  sourceAuth: GitHubSourceAuthRuntime | undefined
+): Promise<LoadedHubSources> {
+  const requiresHubConfig = opts.noHubConfig !== true && opts.hubConfigFile === undefined;
+  const sourceAwareAuthentication = sourceAuth !== undefined;
+  let client: GitHubApi | undefined;
+  let resolvedToken: string | undefined;
+  let tokenSource = 'none';
+  if (requiresHubConfig) {
+    if (sourceAwareAuthentication) {
+      const hubTarget = parseGitHubRepositoryTarget(`https://github.com/${hubRepo}`);
+      client = sourceAuth.clientFor(hubTarget, 'public-generic');
+    } else {
+      ({ resolvedToken, client, tokenSource } = await createGitHubClient(hubRepo, opts, env, undefined, opts.httpClient));
+    }
+  } else {
+    client = opts.githubApi ?? createUnauthenticatedClient(opts.httpClient);
+  }
+  const load = (hubClient: GitHubApi | undefined): Promise<HubSourceSpec[]> => resolveHubSources({
+    noHubConfig: opts.noHubConfig === true,
+    hubConfigFile: opts.hubConfigFile,
+    hubRepo,
+    hubBranch,
+    client: hubClient,
+    extraSources: opts.extraSources,
+    onLog: opts.onLog,
+    sourcesInclude: opts.sourcesInclude,
+    sourcesExclude: opts.sourcesExclude,
+    strictSourceParsing: sourceAwareAuthentication
+  });
+  try {
+    return { sources: await load(client), client, resolvedToken, tokenSource };
+  } catch (error) {
+    if (!sourceAwareAuthentication || !requiresHubConfig || sourceAuth.appTokenProvider === undefined || !isAuthenticationFailure(error)) {
+      throw error;
+    }
+    // The hub configuration itself is a runtime input. Retry it with the
+    // repository-scoped App only when authenticated generic loading indicates
+    // that this hub requires authentication; public hubs never receive App
+    // credentials.
+    const hubTarget = parseGitHubRepositoryTarget(`https://github.com/${hubRepo}`);
+    client = sourceAuth.clientFor(hubTarget, 'app-authenticated');
+    return { sources: await load(client), client, resolvedToken, tokenSource };
+  }
+}
 
 async function harvestHubWithAuth(
   opts: HubHarvestPipelineOptions,
@@ -448,9 +537,6 @@ async function harvestHubWithAuth(
 
   const requiresHubConfig = opts.noHubConfig !== true && opts.hubConfigFile === undefined;
   const sourceAwareAuthentication = appSession !== undefined || isGitHubAppAuthEnabled(env);
-  let client: GitHubApi | undefined;
-  let resolvedToken: string | undefined;
-  let tokenSource = 'none';
   let sourcePreflight: GitHubSourcePreflightReport | undefined;
   let sourcePreflightRevisions: ReadonlyMap<string, string> | undefined;
   let sourceAuthenticationCategories: ReadonlyMap<string, GitHubSourceAuthCategory> | undefined;
@@ -461,55 +547,9 @@ async function harvestHubWithAuth(
       processExecutor: opts.processExecutor
     })
     : undefined);
-
-  if (requiresHubConfig) {
-    if (sourceAwareAuthentication) {
-      const hubTarget = parseGitHubRepositoryTarget(`https://github.com/${hubRepo}`);
-      client = sourceAuth!.clientFor(hubTarget, 'public-generic');
-    } else {
-      ({ resolvedToken, client, tokenSource } = await createGitHubClient(hubRepo, opts, env, undefined, opts.httpClient));
-    }
-  } else {
-    client = opts.githubApi ?? createUnauthenticatedClient(opts.httpClient);
-  }
-
-  let sources: HubSourceSpec[];
-  try {
-    sources = await resolveHubSources({
-      noHubConfig: opts.noHubConfig === true,
-      hubConfigFile: opts.hubConfigFile,
-      hubRepo,
-      hubBranch,
-      client,
-      extraSources: opts.extraSources,
-      onLog: opts.onLog,
-      sourcesInclude: opts.sourcesInclude,
-      sourcesExclude: opts.sourcesExclude,
-      strictSourceParsing: sourceAwareAuthentication
-    });
-  } catch (error) {
-    if (!sourceAwareAuthentication || !requiresHubConfig || sourceAuth?.appTokenProvider === undefined || !isAuthenticationFailure(error)) {
-      throw error;
-    }
-    // The hub configuration itself is a runtime input. Retry it with the
-    // repository-scoped App only when authenticated generic loading indicates
-    // that this hub requires authentication; public hubs never receive App
-    // credentials.
-    const hubTarget = parseGitHubRepositoryTarget(`https://github.com/${hubRepo}`);
-    client = sourceAuth.clientFor(hubTarget, 'app-authenticated');
-    sources = await resolveHubSources({
-      noHubConfig: opts.noHubConfig === true,
-      hubConfigFile: opts.hubConfigFile,
-      hubRepo,
-      hubBranch,
-      client,
-      extraSources: opts.extraSources,
-      onLog: opts.onLog,
-      sourcesInclude: opts.sourcesInclude,
-      sourcesExclude: opts.sourcesExclude,
-      strictSourceParsing: sourceAwareAuthentication
-    });
-  }
+  const loaded = await loadHubSources(opts, env, hubRepo, hubBranch, sourceAuth);
+  const { sources } = loaded;
+  let { client, resolvedToken, tokenSource } = loaded;
   let sourceClientFactory: ((source: HubSourceSpec) => GitHubApi) | undefined;
   if (sourceAwareAuthentication) {
     const preflight = await sourceAuth!.preflight(sources, {
@@ -622,6 +662,101 @@ async function harvestHubWithAuth(
     hubId,
     sourcePreflight
   });
+}
+
+/**
+ * Report which Hub sources the configured GitHub App cannot read, without
+ * harvesting: only the Hub sources and the source preflight are read, plus
+ * one installation lookup per organization the App is installed on.
+ * Requires source-aware authentication (App options or
+ * `AI_PRIMITIVES_HUB_GH_APP_AUTH_ENABLED`).
+ * @param opts Pipeline options; harvest, index and embedding options are ignored.
+ * @param env Process env to read from. Defaults to `process.env`.
+ * @returns The App coverage report.
+ */
+/** Sources probed in parallel by the App coverage check. */
+const APP_COVERAGE_CONCURRENCY = 8;
+
+export const checkHubAppCoverage = async (
+  opts: HubHarvestPipelineOptions,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<HubAppCoverageReport> => {
+  validateHarvestOptions(opts);
+  // Every organization is set up on its own, so one missing installation
+  // does not hide the others.
+  const appSession = await createAppSession(opts, env, true);
+  try {
+    const sourceAuth: GitHubSourceAuthRuntime | undefined = appSession ?? (isGitHubAppAuthEnabled(env)
+      ? createGitHubSourceAuthRuntime({ env, http: opts.httpClient ?? new NodeHttpClient(), processExecutor: opts.processExecutor })
+      : undefined);
+    if (sourceAuth === undefined) {
+      throw new Error('App coverage needs GitHub App source authentication: pass the App ID or Client ID and key file, or set AI_PRIMITIVES_HUB_GH_APP_AUTH_ENABLED=1.');
+    }
+    const { hubRepo, hubBranch } = resolveHarvestPaths(opts, env);
+    const hubId = opts.hubId ?? (opts.noHubConfig === true || opts.hubConfigFile !== undefined ? 'local' : hubRepo);
+    const { sources } = await loadHubSources(opts, env, hubRepo, hubBranch, sourceAuth);
+    const contentState = opts.contentState ?? 'branch';
+    const preflight = await sourceAuth.preflight(sources, {
+      contentState,
+      concurrency: APP_COVERAGE_CONCURRENCY,
+      onLog: (message) => opts.onLog?.(`[github preflight] ${message}`)
+    });
+    if (preflight.results.some((result) => result.errorCode === 'GH_PUBLIC_GENERIC_RATE_LIMIT_UNSAFE')) {
+      throw new GitHubSourcePreflightError(preflight);
+    }
+    return buildAppCoverageReport({
+      hubId,
+      contentState,
+      app: {
+        ...(opts.githubAppId ?? env[GITHUB_APP_ID] ? { appId: opts.githubAppId ?? env[GITHUB_APP_ID] } : {}),
+        ...(opts.githubAppClientId ?? env[GITHUB_APP_CLIENT_ID] ? { clientId: opts.githubAppClientId ?? env[GITHUB_APP_CLIENT_ID] } : {})
+      },
+      preflight,
+      installations: await readInstallationScopes(preflight, sourceAuth, opts.onLog)
+    });
+  } finally {
+    await appSession?.cleanup();
+  }
+};
+
+/**
+ * Read the repository selection of each installation the preflight used.
+ * Organizations whose lookup fails are left out of the result.
+ * @param preflight Source preflight.
+ * @param sourceAuth Runtime that mints installation tokens.
+ * @param onLog Diagnostic sink.
+ * @returns Installation scope per lower-case organization.
+ */
+async function readInstallationScopes(
+  preflight: GitHubSourcePreflightReport,
+  sourceAuth: GitHubSourceAuthRuntime,
+  onLog: ((message: string) => void) | undefined
+): Promise<Map<string, AppInstallationScope>> {
+  const targets = new Map<string, GitHubRepositoryTarget>();
+  // Prefer a repository the App could read: its token is known to work.
+  const ordered = preflight.results.toSorted((left, right) => Number(right.credentialMode === 'app') - Number(left.credentialMode === 'app'));
+  for (const result of ordered) {
+    const installed = result.credentialMode === 'app' || result.errorCode === 'GH_APP_AUTH_REQUEST_FAILED';
+    const key = result.target?.owner.toLowerCase();
+    if (installed && result.target !== undefined && key !== undefined && !targets.has(key)) {
+      targets.set(key, result.target);
+    }
+  }
+  const scopes = new Map<string, AppInstallationScope>();
+  await Promise.all([...targets].map(async ([key, target]) => {
+    try {
+      const installation = await sourceAuth.clientFor(target, 'app-authenticated')
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- GitHub API field names
+        .getJson<{ total_count?: unknown; repository_selection?: unknown }>('/installation/repositories?per_page=1');
+      const selection = installation.repository_selection;
+      if ((selection === 'all' || selection === 'selected') && typeof installation.total_count === 'number') {
+        scopes.set(key, { repositorySelection: selection, repositoryCount: installation.total_count });
+      }
+    } catch {
+      onLog?.(`[app coverage] could not read the installation of ${target.owner}`);
+    }
+  }));
+  return scopes;
 }
 
 function isAuthenticationFailure(error: unknown): boolean {

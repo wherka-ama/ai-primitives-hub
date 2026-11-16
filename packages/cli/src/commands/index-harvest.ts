@@ -17,8 +17,10 @@ import {
 import {
   ActiveHubStore,
   AppStoragePrimitiveIndexStore,
+  checkHubAppCoverage,
   harvestHub as defaultHarvestHub,
   GitHubSourcePreflightError,
+  type HubAppCoverageReport,
   type HubHarvestPipelineOptions,
   type HubHarvestPipelineResult,
   HubStore,
@@ -123,6 +125,31 @@ const buildHarvestError = (cause: unknown): RegistryError => {
   });
 };
 
+/**
+ * Render the App coverage report as text: totals, then one line per
+ * installation change to request and per source that cannot be read.
+ * @param report App coverage report.
+ * @returns Text output.
+ */
+export const renderAppCoverage = (report: HubAppCoverageReport): string => {
+  const { totals } = report;
+  const lines = [
+    `App coverage for ${report.hubId}: ${report.complete ? 'complete' : 'incomplete'} `
+    + `(sources=${String(totals.sources)} public=${String(totals.public)} app=${String(totals.app)} `
+    + `uncovered=${String(totals.uncovered)} failed=${String(totals.failed)})`
+  ];
+  for (const request of report.scopeRequest) {
+    lines.push(`${request.action} ${request.organization}: ${request.repositories.join(', ')}`);
+  }
+  for (const source of report.sources.filter((entry) => entry.access === 'uncovered' || entry.access === 'failed')) {
+    lines.push(`  ${source.access} ${source.sourceId} ${source.repository ?? '-'} ${source.reason ?? source.errorCode ?? ''}`.trimEnd());
+  }
+  for (const warning of report.warnings) {
+    lines.push(`warning: ${warning}`);
+  }
+  return `${lines.join('\n')}\n`;
+};
+
 const isHubRefMissing = (noHubConfig: boolean, hubConfigFile: string | undefined, hubRepo: string | undefined): boolean =>
   !noHubConfig && !hubConfigFile && (!hubRepo || hubRepo.length === 0);
 
@@ -157,6 +184,11 @@ export class IndexHarvestCommand extends Command {
         --reuse-embeddings-from
                              Earlier index file whose embeddings are reused for
                              unchanged primitives (same model and encoding rules)
+        --app-coverage       Diagnostic mode: only check which sources the GitHub
+                             App can read (no harvest, no index). Groups the
+                             others by organization into the installation
+                             changes to request (install the App, or add
+                             repositories). Needs GitHub App source-aware auth
         --github-app-id      GitHub App ID for automatic source-aware setup
         --github-app-key-file
                              PEM path for automatic source-aware setup
@@ -168,6 +200,8 @@ export class IndexHarvestCommand extends Command {
         ai-primitives-hub index harvest --hub-config-file hub-config.yml
         ai-primitives-hub index harvest --hub-config-file hub-config.yml --content-state released
         ai-primitives-hub index harvest --no-hub-config --extra-source 'local:/path/to/bundles'
+        ai-primitives-hub index harvest --hub-config-file hub-config.yml --content-state released \\
+          --app-coverage --github-app-id 123456 --github-app-key-file app.pem -o json
     `
   });
 
@@ -193,6 +227,7 @@ export class IndexHarvestCommand extends Command {
   public embedStrategy = Option.String('--embed-strategy');
   public vectorEncoding = Option.String('--vector-encoding');
   public reuseEmbeddingsFrom = Option.String('--reuse-embeddings-from');
+  public appCoverage = Option.Boolean('--app-coverage', false);
   public githubAppId = Option.String('--github-app-id');
   public githubAppClientId = Option.String('--github-app-client-id');
   public githubAppKeyFile = Option.String('--github-app-key-file');
@@ -255,6 +290,13 @@ export class IndexHarvestCommand extends Command {
       }));
     }
 
+    if (this.appCoverage && (this.embed || this.dryRun === true || this.force === true)) {
+      return failWith(ctx, fmt, 'index.harvest', new RegistryError({
+        code: 'USAGE.INVALID_FLAG',
+        message: 'index harvest: --app-coverage does not harvest, so it cannot be combined with --embed, --dry-run or --force'
+      }));
+    }
+
     const explicitToken = this.tokenEnv === undefined
       ? undefined
       : ctx.env[this.tokenEnv];
@@ -304,6 +346,21 @@ export class IndexHarvestCommand extends Command {
         ? undefined
         : Number.parseInt(this.githubAppSetupTimeoutMs, 10)
     };
+
+    if (this.appCoverage) {
+      let report: HubAppCoverageReport;
+      try {
+        report = await checkHubAppCoverage(pipelineOpts, ctx.env);
+      } catch (cause) {
+        return failWith(ctx, fmt, 'index.harvest', buildHarvestError(cause));
+      }
+      formatOutput({
+        ctx, command: 'index.harvest', output: fmt, status: 'ok',
+        data: report,
+        textRenderer: renderAppCoverage
+      });
+      return 0;
+    }
 
     const runner = defaultHarvestHub;
     let result: HubHarvestPipelineResult;

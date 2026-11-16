@@ -21,6 +21,7 @@ import {
   computeGitBlobSha,
 } from '../../src/harvest/blob-cache';
 import {
+  checkHubAppCoverage,
   harvestHub,
   HubHarvester,
 } from '../../src/harvest/hub-harvester';
@@ -789,6 +790,74 @@ items:
         state: 'failed',
         message: expect.stringContaining('GH_APP_AUTH_CONFIG_MISSING')
       })]);
+    });
+
+    it('reports App coverage with installation scopes and the scope request, without harvesting', async () => {
+      const configFile = path.join(tmp, 'coverage-config.yml');
+      fs.writeFileSync(configFile, [
+        'sources:',
+        ...[['granted', 'org/granted'], ['hidden', 'org/hidden'], ['elsewhere', 'missing-org/repo']].flatMap(([id, repository]) => [
+          `  - id: ${id}`,
+          '    type: github',
+          `    url: https://github.com/${repository}`
+        ]),
+        'profiles: []',
+        ''
+      ].join('\n'));
+      const executor: ProcessExecutor = {
+        execFile: (file, args, options) => {
+          if (args.includes('setup') && (args[args.indexOf('--patterns') + 1] ?? '').includes('missing-org')) {
+            return Promise.reject(new Error('no installation found for org missing-org'));
+          }
+          return new RecordingAppProcessExecutor().execFile(file, args, options);
+        }
+      };
+      const requested: string[] = [];
+      const http: HttpClient = {
+        fetch: (request) => {
+          const { pathname } = new URL(request.url);
+          requested.push(pathname);
+          const app = request.headers?.Authorization === 'token installation-token';
+          const ok = (body: unknown): HttpResponse => ({ statusCode: 200, body: new TextEncoder().encode(JSON.stringify(body)), finalUrl: request.url, headers: {} });
+          if (pathname === '/installation/repositories') {
+            return Promise.resolve(ok({ total_count: 1, repository_selection: 'selected', repositories: [] }));
+          }
+          if (app && pathname.startsWith('/repos/org/granted')) {
+            return Promise.resolve(ok(pathname.endsWith('/releases') ? [] : { private: true }));
+          }
+          return Promise.resolve({ statusCode: 404, body: new TextEncoder().encode('{}'), finalUrl: request.url, headers: {} });
+        }
+      };
+
+      const report = await checkHubAppCoverage({
+        hubConfigFile: configFile,
+        hubId: 'test-hub',
+        contentState: 'released',
+        githubAppId: '123',
+        githubAppKeyFile: '/tmp/app-key.pem',
+        processExecutor: executor,
+        httpClient: http
+      }, { GH_TOKEN: 'generic-token' });
+
+      expect(report).toMatchObject({
+        hubId: 'test-hub',
+        contentState: 'released',
+        app: { appId: '123' },
+        complete: false,
+        totals: { sources: 3, public: 0, app: 1, uncovered: 2, failed: 0 },
+        scopeRequest: [
+          { organization: 'missing-org', action: 'install-app', repositories: ['repo'] },
+          { organization: 'org', action: 'add-repositories', repositories: ['hidden'] }
+        ]
+      });
+      expect(report.organizations.find((organization) => organization.organization === 'org'))
+        .toMatchObject({ installed: true, repositorySelection: 'selected', grantedRepositoryCount: 1 });
+      expect(requested.filter((pathname) => pathname.includes('/trees/') || pathname.includes('/assets/'))).toEqual([]);
+    });
+
+    it('requires GitHub App source authentication for the App coverage check', async () => {
+      await expect(checkHubAppCoverage({ noHubConfig: true }, { GH_TOKEN: 'generic-token' }))
+        .rejects.toThrow('App coverage needs GitHub App source authentication');
     });
 
     it('rejects an invalid unresolved-source policy from the environment', async () => {

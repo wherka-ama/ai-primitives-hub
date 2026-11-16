@@ -39,6 +39,9 @@ import {
   preflightGitHubSources,
 } from './github-source-preflight';
 
+/** Parallel `gh app-auth setup` probes when routes are set up one by one. */
+const SETUP_PROBE_CONCURRENCY = 4;
+
 export const GITHUB_APP_AUTH_ENABLED = 'AI_PRIMITIVES_HUB_GH_APP_AUTH_ENABLED';
 export const GITHUB_PUBLIC_AUTH_MODE = 'AI_PRIMITIVES_HUB_GH_PUBLIC_AUTH_MODE';
 export const GITHUB_APP_ID = 'AI_PRIMITIVES_HUB_GH_APP_AUTH_APP_ID';
@@ -306,16 +309,22 @@ export async function createGitHubSourceAuthSession(
       // `gh app-auth setup` is all-or-nothing. Probe each route in a scratch
       // config, then configure the shared config once with the usable routes,
       // so the App keeps a single configuration entry.
-      const available: string[] = [];
-      const unavailable: string[] = [];
-      for (const [index, route] of routes.entries()) {
-        try {
-          await setup([route], path.join(tempDirectory, `probe-${index}.yml`));
-          available.push(route);
-        } catch {
-          unavailable.push(route);
+      const usable: boolean[] = Array.from({ length: routes.length }, () => false);
+      let next = 0;
+      const probeNext = async (): Promise<void> => {
+        while (next < routes.length) {
+          const index = next++;
+          try {
+            await setup([routes[index]], path.join(tempDirectory, `probe-${String(index)}.yml`));
+            usable[index] = true;
+          } catch {
+            usable[index] = false;
+          }
         }
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(SETUP_PROBE_CONCURRENCY, routes.length) }, probeNext));
+      const available = routes.filter((_route, index) => usable[index]);
+      const unavailable = routes.filter((_route, index) => !usable[index]);
       if (available.length > 0) {
         await setup(available, configPath);
       }
